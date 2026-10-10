@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- `bun run demo` (`bayloob --demo`): a scripted ~70 s tour of the features for screenshots and video —
+  four agents (shop, api, blog, docs), to-do progress, a permission card, a rule, a red look-alike
+  card, a collision, receipts, a ⚔ challenge report and a copied error. Cards wait 6 s for a click,
+  then decide by themselves. It runs as a separate instance (port 7790, its own token and data under
+  the temp dir with real demo git repos), so the real Bayloob and its data are never touched.
 - Settings → Watch clipboard (off by default): copying a stack trace (Python, JS/TS, PHP, Go, Java)
   shows "Error copied — fix it?" in the pill with **Fix in <agent>** (prompt window pre-filled
   "Fix this error:" + the trace) or **New session…**. Checked once a second, at most 20 KB, what's on

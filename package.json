@@ -14,6 +14,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --no-sandbox",
+    "demo": "electron . --no-sandbox --demo",
     "install-hooks": "bun scripts/install-hooks.js",
     "test-events": "bun scripts/simulate.js",
     "dist:deb": "electron-builder --linux deb",

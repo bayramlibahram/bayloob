@@ -1,5 +1,11 @@
 // Bayloob's entry point: run a CLI flag and exit, or start the app.
 const { app } = require("electron");
+// --demo runs a separate, scripted instance: its port, token and data folder must be set before anything
+// else loads (the server reads its port on load)
+const DEMO = process.argv.includes("--demo");
+if (DEMO) {
+  require("./app/demo").prepareDemo(app);
+}
 const { HOOKS_DIR, EXTENSION_DIR } = require("./app/paths");
 const { runCli } = require("./app/cli");
 const { BayloobApp } = require("./app/bayloob-app");
@@ -19,6 +25,7 @@ function startApp(argv) {
   }
   new BayloobApp().start({
     open: argv.includes("--new-session") ? "launcher" : argv.includes("--panel") ? "panel" : null,
+    demo: DEMO,
   });
 }
 

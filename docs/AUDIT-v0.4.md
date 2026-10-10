@@ -41,7 +41,7 @@ Status: **done** = works as specified · **partial** = exists, gaps listed · **
 | Storage | Electron `userData` = `~/.config/Bayloob/`: `settings.json`, `permissions.json` (decisions, rules, antibodies), `blocked-time.json` (30 days), `recent-projects.json`. Writes are plain `writeFileSync` (not atomic). No per-session history on disk (in memory, last 8 lines) |
 | Mascot | Novi raster packs (default) or SVG (setting) |
 | Tests | 19 files in `test/`, 68 passing (`node --test`); Biome clean |
-| Simulation | `scripts/simulate.js` sends fake events to a running app; no per-feature scenarios, no `--demo` mode |
+| Simulation | `scripts/simulate.js` scenarios (states, auth, multi, immune); `bun run demo` (`--demo`) plays the whole tour in an isolated instance (added after the audit) |
 
 ## Agent CLIs on this machine
 

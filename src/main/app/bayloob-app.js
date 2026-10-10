@@ -145,7 +145,9 @@ class BayloobApp {
   #outputTimer = null;
 
   // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
-  start({ open = null } = {}) {
+  // demo: run the scripted tour (bayloob --demo) once the windows are up
+  start({ open = null, demo = false } = {}) {
+    this.demo = demo;
     this.#registerIpc();
     app.on("second-instance", (_e, argv) => this.#openFromArgs(argv));
     app.whenReady().then(() => this.#onReady(open));
@@ -236,6 +238,13 @@ class BayloobApp {
     });
     this.server.listen();
     this.#watchClipboard();
+    if (this.demo) {
+      const { DemoScenario } = require("./demo");
+      setTimeout(
+        () => new DemoScenario(this).run().catch(e => console.error("demo:", e.message)),
+        3000
+      );
+    }
     setInterval(() => this.#reconcile(), RECONCILE_MS).unref();
     this.health = new HookHealth({ installer: this.hooks, store: this.server.store });
     this.#checkHealth();
@@ -753,7 +762,8 @@ class BayloobApp {
   // Drop sessions whose tmux session ended (agent exited, or killed outside Bayloob)
   async #reconcile() {
     const tracked = this.server.store.launchedNames();
-    if (!tracked.length) {
+    // The demo's challenger has no real tmux session behind it
+    if (!tracked.length || this.demo) {
       return;
     }
     const alive = new Set(await this.launcher.alive());
