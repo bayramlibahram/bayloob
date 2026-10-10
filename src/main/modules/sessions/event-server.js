@@ -3,6 +3,8 @@
 //   node src/main/modules/sessions/event-server.js
 const http = require("node:http");
 const { loadOrCreateToken, tokenMatches } = require("./api-token");
+const { readOnly } = require("../permissions/command-signature");
+const { parseFindings } = require("../agents/challenge-report");
 const { SessionStore } = require("./session-store");
 
 const PORT = Number(process.env.BAYLOOB_PORT || 7777);
@@ -12,6 +14,10 @@ const DETAIL_MAX = 4000; // the card scrolls; beyond this the command can only b
 // Tools that ask the user something rather than asking for permission: answered in the terminal, never allowed/denied here
 const QUESTION_TOOLS = new Set(["AskUserQuestion"]);
 const SUMMARY_MAX = 160;
+const REPORT_MAX = 20_000; // a challenger's full final answer, for its findings
+const DENIED_BY_USER = "User denied this from Bayloob";
+const DENIED_READ_ONLY =
+  "This session is a read-only reviewer (Bayloob ⚔ challenge): report problems, don't change files";
 const ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", `127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 
 // Hook event name -> mascot state
@@ -109,7 +115,12 @@ function encodeAnswers(answers) {
 // `updatedInput` replaces the tool's input when allowing — used to hand AskUserQuestion its answers
 // PermissionRequest and PreToolUse hooks answer in different shapes. Questions use PreToolUse, the
 // documented way to hand AskUserQuestion its answers; everything else uses PermissionRequest.
-function decisionBody(decision, updatedInput = null, event = "PermissionRequest") {
+function decisionBody(
+  decision,
+  updatedInput = null,
+  event = "PermissionRequest",
+  reason = DENIED_BY_USER
+) {
   if (decision === "terminal") {
     return ""; // empty reply → the agent shows its normal prompt
   }
@@ -119,14 +130,14 @@ function decisionBody(decision, updatedInput = null, event = "PermissionRequest"
       out.updatedInput = updatedInput;
     }
     if (decision === "deny") {
-      out.permissionDecisionReason = "User denied this from Bayloob";
+      out.permissionDecisionReason = reason;
     }
     return JSON.stringify({ hookSpecificOutput: out });
   }
   const behavior =
     decision === "allow"
       ? { behavior: "allow", ...(updatedInput ? { updatedInput } : {}) }
-      : { behavior: "deny", message: "User denied this from Bayloob" };
+      : { behavior: "deny", message: reason };
   return JSON.stringify({
     hookSpecificOutput: { hookEventName: "PermissionRequest", decision: behavior },
   });
@@ -293,6 +304,12 @@ class EventServer {
     const input = ev.tool_input || {};
     const cwd = ev.cwd || query.get("cwd") || "";
     const detail = permDetail(tool, input);
+    // A ⚔ challenger reviews, it doesn't change anything: whatever isn't read-only is refused, no card
+    // (on top of the agent's own read-only/plan mode — two locks)
+    const role = this.store.roleOf(id, query.get("tmux"));
+    if (role === "challenger" && !QUESTION_TOOLS.has(tool) && !readOnly(tool, input, cwd)) {
+      return res.end(decisionBody("deny", null, event, DENIED_READ_ONLY));
+    }
     const known =
       QUESTION_TOOLS.has(tool) || !this.immune ? null : this.immune.assess(tool, input, cwd);
     // A rule the user made for exactly this simple command here: allow without a card. Never when part
@@ -352,8 +369,13 @@ class EventServer {
 
     const patch = { state, tool: state === "working" ? ev.tool_name || null : null };
     if (state === "done") {
-      patch.summary =
-        short(ev.last_assistant_message || ev["last-assistant-message"], SUMMARY_MAX) || null;
+      const last = ev.last_assistant_message || ev["last-assistant-message"];
+      patch.summary = short(last, SUMMARY_MAX) || null;
+      // A challenger's whole answer is kept: its findings are parsed from it
+      if (this.store.get(id)?.role === "challenger") {
+        patch.report = String(last || "").slice(0, REPORT_MAX) || null;
+        patch.findings = parseFindings(patch.report);
+      }
     }
     if (ev.hook_event_name === "UserPromptSubmit") {
       patch.summary = null;

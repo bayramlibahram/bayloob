@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- ⚔ Challenge report: when a challenger finishes, its done card lists every `file:line` it found with
+  the problem; a click opens the file at that line (Settings editor, else VS Code `code -g`, else the
+  default app). Only files inside the project can be opened.
+- A challenger is read-only twice over: besides the agent's own plan/read-only mode, Bayloob refuses
+  any of its permission requests that isn't read-only (reads, `git diff/log/show`, `grep`…), without a
+  card and with a reason the agent sees.
 - Replies and prompts reach agents outside tmux too: the text is copied, the terminal comes forward,
   and Bayloob says "paste with Ctrl+Shift+V" (done card, panel, prompt dialog, Ask to run tests).
   `PromptDelivery` decides: tmux → typed in (queued while busy), anything else → clipboard.

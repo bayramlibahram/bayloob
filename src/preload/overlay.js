@@ -30,4 +30,5 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onRuleAllowed: cb => ipcRenderer.on("rule-allowed", (_e, info) => cb(info)),
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
   challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),
+  openFinding: (sessionId, file, line) => ipcRenderer.invoke("open-finding", sessionId, file, line),
 });
