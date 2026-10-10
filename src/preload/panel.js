@@ -17,6 +17,11 @@ contextBridge.exposeInMainWorld("panelAPI", {
   console: sessionId => ipcRenderer.invoke("panel:console", sessionId),
   queue: sessionId => ipcRenderer.invoke("panel:queue", sessionId),
   unqueue: (sessionId, index) => ipcRenderer.invoke("launcher:unqueue", sessionId, index),
+  // Inbox: the same decisions the pill's cards make
+  decide: (permId, decision) => ipcRenderer.send("decide", permId, decision),
+  alwaysAllow: permId => ipcRenderer.send("always-allow", permId),
+  answer: (permId, answers) => ipcRenderer.send("answer", permId, answers),
+  answerMenu: (sessionId, index) => ipcRenderer.invoke("answer-menu", sessionId, index),
   launchable: () => ipcRenderer.invoke("panel:launchable"),
   focus: sessionId => ipcRenderer.invoke("focus", sessionId),
   openWorkspace: sessionId => ipcRenderer.invoke("panel:open-workspace", sessionId),

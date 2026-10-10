@@ -31,7 +31,7 @@
   ::-webkit-scrollbar-thumb { background: rgb(var(--ink) / .12); border-radius: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
 
-  .panel { margin: 10px; border-radius: 18px; background: var(--glass); border: 1px solid var(--line);
+  .panel { position: relative; margin: 10px; border-radius: 18px; background: var(--glass); border: 1px solid var(--line);
     box-shadow: 0 18px 50px rgb(var(--shade) / calc(.5 * var(--shade-k))); overflow: hidden; animation: drop .2s cubic-bezier(.2,.9,.3,1.1); }
   @keyframes drop { from { opacity: 0; transform: translateY(-8px); } }
 
@@ -64,6 +64,51 @@
   .nav.on { background: rgba(139,92,255,.14); color: var(--text); }
   .nav span { flex: 1; }
   .nav em { font-style: normal; font-size: 11px; color: var(--muted); }
+  .nav em.hot { color: #fff; background: var(--waiting); padding: 0 6px; border-radius: 999px; font-weight: 700; }
+  .nav.bottom { margin-top: auto; }
+  .side hr { border: 0; height: 1px; background: var(--line); margin: 6px 8px; }
+  /* Agents: one heading per project */
+  .group { display: flex; gap: 6px; padding: 10px 10px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .group:first-child { padding-top: 2px; }
+  .row .who span.why { color: var(--c); }
+  /* Inbox card in the agent's detail: approve / deny / answer, like the pill's card */
+  .icard { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 11px 12px; border-radius: 12px;
+    background: color-mix(in srgb, var(--waiting) 8%, transparent); border: 1px solid color-mix(in srgb, var(--waiting) 32%, transparent); }
+  .icard.ask { background: color-mix(in srgb, var(--thinking) 8%, transparent); border-color: color-mix(in srgb, var(--thinking) 32%, transparent); }
+  .icard .ih { font-size: 12.5px; color: var(--soft); }
+  .icard .ih b { color: var(--text); }
+  .icard .chip { align-self: flex-start; padding: 2px 8px; border-radius: 6px; background: rgb(var(--ink) / .07); font: 600 11.5px ui-monospace, monospace; }
+  .icard pre { max-height: 130px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: rgb(var(--ink) / .05);
+    font: 11.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; color: var(--softer); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+  .icard .warn { font-size: 12px; color: var(--working); }
+  .icard .hint { font-size: 11.5px; color: var(--muted); }
+  .icard .hint.err { color: var(--waiting); }
+  .icard .q { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+  .icard .q small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .icard .opts { display: flex; flex-wrap: wrap; gap: 5px; }
+  .icard .opt { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12px; color: var(--soft); text-align: left; }
+  .icard .opt:hover { background: rgb(var(--ink) / .08); }
+  .icard .opt.on { border-color: rgba(139,92,255,.6); background: rgba(139,92,255,.18); color: var(--text); }
+  .icard .acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .icard .btn { padding: 6px 12px; }
+  .icard .btn.allow { background: var(--done); color: var(--on-done); border-color: transparent; }
+  .icard .btn.deny { color: var(--waiting); }
+  /* Ctrl+K: jump to a section or an agent, or run an action */
+  .pal { position: absolute; left: 50%; top: 62px; width: 520px; max-width: calc(100% - 40px); transform: translateX(-50%); z-index: 20;
+    display: flex; flex-direction: column; border-radius: 14px; background: var(--glass); border: 1px solid var(--line);
+    box-shadow: 0 18px 50px rgb(var(--shade) / calc(.55 * var(--shade-k))); overflow: hidden; animation: cin .12s ease-out; }
+  .pal[hidden] { display: none; }
+  .pal .pin { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .pal .pin input { flex: 1; min-width: 0; color: var(--text); font-size: 14px; }
+  .pal .pin kbd { font: 11px ui-monospace, monospace; padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line); }
+  .pal .plist { max-height: 300px; overflow-y: auto; padding: 5px; display: flex; flex-direction: column; }
+  .pal .plist button { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 9px; text-align: left; }
+  .pal .plist button.on { background: rgba(139,92,255,.16); }
+  .pal .plist button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pal .plist button small { color: var(--muted); font-size: 11.5px; }
+  .pal .plist .none { padding: 14px; color: var(--muted); text-align: center; }
+  .pal .plist .ic { width: 22px; height: 22px; }
+  .pal .plist .ic.glyph { border-radius: 6px; }
 
   .main > * { min-height: 0; } /* let the columns scroll instead of growing past the panel */
   .listcol { display: flex; flex-direction: column; min-width: 0; padding: 12px 10px 10px; }
@@ -312,6 +357,12 @@
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Open workspace
       </button>
     </footer>
+
+    <div class="pal" id="pal" hidden role="dialog" aria-label="Go to">
+      <label class="pin"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="palText" spellcheck="false" autocomplete="off" placeholder="Go to a section or an agent, or run an action…"><kbd>Esc</kbd></label>
+      <div class="plist" id="palList" role="listbox"></div>
+    </div>
   </div>
 
 <script src="../shared/ui-common.js"></script>
@@ -341,8 +392,22 @@
     connected: 'Connected', noEvents: 'Waiting for agents', noHooks: 'Hooks not installed',
     connectedTip: at => at ? `Hooks installed · last event ${timeAgo(at)}` : 'Hooks installed · no events yet',
     noHooksTip: 'Open Settings to install the Claude Code hooks',
-    sections: { overview: 'Overview', agents: 'AI agents', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
-    listTitle: { overview: 'Running apps', agents: 'AI agents', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
+    sections: { inbox: 'Inbox', agents: 'Agents', tasks: 'Tasks', overview: 'Overview', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
+    listTitle: { inbox: 'Needs you', agents: 'Agents', tasks: 'Tasks', overview: 'Running apps', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
+    settingsNav: 'Settings',
+    // Why an agent is in the Inbox (shown under its name)
+    why: { perm: 'Approve a command', question: 'Has a question', menu: 'Asks in terminal', conflict: 'File clash', finished: 'Finished' },
+    permAsks: (agent, project) => `<b>${agent}</b> wants to run · ${project}`, asksYou: (agent, project) => `<b>${agent}</b> asks you · ${project}`,
+    asksTerminal: (agent, project) => `<b>${agent}</b> asks in its terminal · ${project}`,
+    allow: 'Allow', deny: 'Deny', inTerminal: 'Terminal', inTerminalTip: 'Answer it in the agent’s terminal instead', always: 'Always allow',
+    alwaysTip: key => `Allow “${key}” in this folder from now on, without asking`, sendAnswer: 'Send answer', pickAll: 'Pick an answer to every question',
+    pickMany: 'pick any', termDefault: '(default)', openTerminal2: 'Open terminal',
+    hiddenPart: n => `${n} more characters aren’t shown, so it can only be approved in the terminal`,
+    readFirst: 'Scroll to the end of the command first', antibody: cmd => `You denied something like this before: ${cmd}`,
+    cooling: s => `Read it first — Allow unlocks in ${s}s`,
+    palNoMatch: 'Nothing matches', palGo: 'Go to', palAgent: 'Agent', palAction: 'Action',
+    palAsk: 'Ask Bayloob — start a new session', palLaunch: 'Launch an app', palSettings: 'Open Settings',
+    palTerminal: name => `Open ${name}’s terminal`, palWorkspace: name => `Open ${name}’s folder`,
     launchTitle: 'Launch app', searchApps: 'Search apps…', searchInstalled: 'Search installed apps…',
     status: { active: 'Active', running: 'Running', healthy: 'Healthy', unhealthy: 'Unhealthy', stopped: 'Stopped',
       idle: 'Idle', thinking: 'Thinking', working: 'Working', waiting: 'Needs approval', done: 'Done' },
@@ -354,14 +419,17 @@
     noActivity: 'No activity yet', noActivityHint: 'Windows opened, focus changes and new tabs show up here',
     noMatchHint: 'Try another word, or clear the search (Esc)',
     countTip: {
+      inbox: n => `${n} waiting for you`, tasks: n => `${n} tasks`,
       overview: n => `${n} running apps and agents`, agents: n => `${n} agent sessions`, browsers: n => `${n} browsers running`,
       ides: n => `${n} IDEs running`, applications: n => `${n} other apps running`, system: n => `${n} system tools`,
     },
     emptyIn: {
+      inbox: 'All clear', tasks: 'No tasks yet',
       overview: 'Nothing running yet', agents: 'No agents running', browsers: 'No browser is open', ides: 'No IDE is open',
       applications: 'No other apps running', system: 'No system tools found',
     },
     emptyHint: {
+      inbox: 'Approvals, questions and finished turns land here', tasks: 'Multi-step tasks (plan → build → test → review) will show up here',
       overview: 'Start an agent with Ask Bayloob below', agents: 'Ask Bayloob below starts one — or run claude / codex in a terminal',
       browsers: 'Firefox windows and tab counts appear here', ides: 'VS Code, JetBrains IDEs… and their projects appear here',
       applications: 'Terminals, Files and other apps appear here', system: 'Docker shows up here when it is installed and running',
@@ -388,6 +456,7 @@
   const emptyHtml = (icon, line, hint, size = '') =>
     `<div class="empty ${size}"><span class="ei">${icon || ''}</span><span><b>${line}</b><small>${hint}</small></span></div>`;
   const HISTORY_MAX = 30;
+  const COOL_MS = 3000; // like the pill: Allow waits this long on a request that resembles a denied one, or after rapid approvals
   // Prompt shortcuts: "/" in the agent's prompt box; the text goes into the box, to edit or send
   const SLASH = [
     { cmd: '/test', label: 'Run the tests and fix failures', text: "Run the project's tests and fix any failures." },
@@ -426,7 +495,15 @@
   const ACTIVE = new Set(['thinking', 'working', 'waiting']);
   const SECTION_OF = { browser: 'browsers', ide: 'ides', terminal: 'applications', files: 'applications', app: 'applications', system: 'system' };
   const I = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24"${extra}>${d}</svg>`;
+  // The side navigation: what needs you and your agents first, then the machine
+  const NAV = [['inbox', 'agents', 'tasks'], ['overview', 'browsers', 'ides', 'applications', 'system']];
+  const INBOX_RANK = { perm: 5, question: 5, menu: 4, conflict: 3, finished: 2 }; // most urgent first
+  const WHY_COLOR = { perm: 'var(--waiting)', question: 'var(--thinking)', menu: 'var(--thinking)', conflict: 'var(--waiting)', finished: 'var(--done)' };
   const ICONS = {
+    inbox: I('<path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>'),
+    tasks: I('<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>'),
+    gear: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
+    spark: I('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
     overview: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/>'),
     agents: I('<circle cx="12" cy="10" r="6"/><path d="M9 10h.01M15 10h.01M8 20c1.2-1.5 2.5-2 4-2s2.8.5 4 2"/>'),
     browsers: I('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/>'),
@@ -493,6 +570,15 @@
     #slashAt = 0;
     #queueAt = 0;
     #consoleLoading = new Set();
+    #answers = new Map();   // question perm id -> Map(question -> Set(labels))
+    #permRead = new Set();  // perm ids whose command was scrolled to its end
+    #permShown = new Map(); // perm id -> when the panel first showed it (the cooling pause counts from there)
+    #permScroll = new Map(); // perm id -> scroll of its command box (survives re-renders)
+    #coolTimer = null;
+    #pressing = false;      // a mouse button is held on the details: re-rendering now would swallow the click
+    #renderLater = false;
+    #palAt = 0;
+    #palCmds = [];
     #prevStates = new Map(); // session id -> state at the previous update
     finished = [];         // ids of agents that just finished, newest first (the banner shows the first)
     sayFor = null;         // session the prompt box is for (its text is cleared when the selection changes)
@@ -504,7 +590,8 @@
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
         saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
-        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue') };
+        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
+        pal: $('pal'), palText: $('palText'), palList: $('palList') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
@@ -521,6 +608,10 @@
         .sort((a, b) => b.updatedAt - a.updatedAt).map(s => s.id);
       this.collisions = state.collisions || {};
       this.status = state.status || null;
+      // Opens on the Inbox when something waits for you, otherwise on the agents
+      this.section = this.#items('inbox').length ? 'inbox' : 'agents';
+      this.selected = null;
+      this.#closePal();
       this.launchMode = false;
       this.query = '';
       this.el.search.value = '';
@@ -563,7 +654,7 @@
       this.launchMode = false;
       this.query = '';
       this.el.search.value = '';
-      if (this.section !== 'agents' && this.section !== 'overview') { this.section = 'agents'; }
+      if (!['inbox', 'agents', 'overview'].includes(this.section)) { this.section = 'agents'; }
       this.selected = `agent:${id}`;
       this.render();
       this.el.sayText.focus();
@@ -579,9 +670,36 @@
     #items(section = this.section) {
       const agents = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt).map(agentItem);
       const apps = (this.apps || []).map(appItem);
-      if (section === 'agents') { return agents; }
+      if (section === 'inbox') { return this.#inbox(); }
+      if (section === 'tasks') { return []; } // the workflow engine fills this in
+      if (section === 'agents') { return this.#byProject(agents); }
       if (section === 'overview') { return [...apps, ...agents]; }
       return apps.filter(i => SECTION_OF[i.category] === section);
+    }
+
+    // Why an agent needs you right now, or null
+    #why(s) {
+      if (s.perm) { return s.perm.kind === 'question' ? 'question' : 'perm'; }
+      if (s.menu) { return 'menu'; }
+      if (this.collisions?.[s.id]?.level === 'conflict') { return 'conflict'; }
+      return this.finished.includes(s.id) ? 'finished' : null;
+    }
+
+    // The Inbox: agents that wait on you, most urgent first; the reason replaces the subtitle
+    #inbox() {
+      return this.sessions.map(s => ({ s, why: this.#why(s) })).filter(x => x.why)
+        .sort((a, b) => INBOX_RANK[b.why] - INBOX_RANK[a.why] || b.s.updatedAt - a.s.updatedAt)
+        .map(({ s, why }) => ({ ...agentItem(s), why, subtitle: `${T.why[why]} · ${projectPath(s)}` }));
+    }
+
+    // Agents one project after another (the project with the most urgent agent first), urgency inside each
+    #byProject(agents) {
+      const groups = new Map();
+      for (const a of agents) {
+        const k = a.data.cwd || a.data.project || '';
+        groups.set(k, [...(groups.get(k) || []), a]);
+      }
+      return [...groups.values()].flat();
     }
 
     #visible() {
@@ -621,10 +739,13 @@
     }
 
     #renderSide() {
-      this.el.side.innerHTML = Object.entries(T.sections).map(([key, label]) => {
+      const nav = key => {
         const n = this.#items(key).length;
-        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}">${ICONS[key]}<span>${label}</span>${n ? `<em title="${esc(T.countTip[key](n))}">${n}</em>` : ''}</button>`;
-      }).join('');
+        const em = n ? `<em class="${key === 'inbox' ? 'hot' : ''}" title="${esc(T.countTip[key](n))}">${n}</em>` : '';
+        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}">${ICONS[key]}<span>${T.sections[key]}</span>${em}</button>`;
+      };
+      this.el.side.innerHTML = NAV.map(group => group.map(nav).join('')).join('<hr>')
+        + `<button class="nav bottom" data-settings>${ICONS.gear}<span>${T.settingsNav}</span></button>`;
     }
 
     #renderList() {
@@ -632,7 +753,7 @@
       this.el.search.placeholder = this.launchMode ? T.searchInstalled : T.searchApps;
       this.el.launch.classList.toggle('on', this.launchMode);
       if (this.launchMode) { return this.#renderLaunchable(); }
-      if (this.apps === null && this.section !== 'agents') { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
+      if (this.apps === null && !['inbox', 'agents', 'tasks'].includes(this.section)) { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
       const items = this.#visible();
       if (!items.length) {
         this.el.rows.innerHTML = this.query
@@ -641,10 +762,16 @@
         return;
       }
       const sel = this.current?.key;
-      this.el.rows.innerHTML = items.map(i => `
+      // Agents: a heading over each project's sessions
+      const groupOf = i => this.section === 'agents' ? i.data.cwd || i.data.project || '' : null;
+      const sizes = new Map();
+      for (const i of items) { sizes.set(groupOf(i), (sizes.get(groupOf(i)) || 0) + 1); }
+      this.el.rows.innerHTML = items.map((i, n) => `
+        ${groupOf(i) !== null && (n === 0 || groupOf(items[n - 1]) !== groupOf(i))
+          ? `<div class="group" title="${esc(i.data.cwd || '')}">${esc(i.data.project || projectPath(i.data))}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
         <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
           ${iconHtml(i)}
-          <div class="who"><b>${esc(i.name)}</b><span>${esc(i.subtitle || '')}</span></div>
+          <div class="who"><b>${esc(i.name)}</b><span title="${esc(i.subtitle || '')}"${i.why ? ` class="why" style="--c:${WHY_COLOR[i.why]}"` : ''}>${esc(i.subtitle || '')}</span></div>
           ${i.kind === 'agent' ? this.#clashBadge(i.data) : ''}
           ${stateHtml(i.status)}
           <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
@@ -682,6 +809,8 @@
     }
 
     #renderDetail() {
+      // Updates arrive several times a second: swapping the buttons between press and release loses the click
+      if (this.#pressing) { this.#renderLater = true; return; }
       const item = this.launchMode ? null : this.current;
       if (!item) { this.el.detail.innerHTML = ''; return; }
       const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span>${T.kind[item.category] || ''}</span></div>${stateHtml(item.status)}</div>`;
@@ -693,6 +822,133 @@
       this.el.detail.innerHTML = head + body;
       const con = this.el.detail.querySelector('[data-console]');
       if (con) { con.scrollTop = atBottom ? con.scrollHeight : top; }
+      this.#syncPerm();
+    }
+
+    // ---------- inbox cards: approve, deny, answer — the pill's cards, same rules ----------
+
+    #inboxCard(s) {
+      const who = [esc(Agent.displayName(s.agent)), esc(s.project)];
+      if (s.perm?.kind === 'question') {
+        const picked = this.#answers.get(s.perm.id) || new Map();
+        const qs = s.perm.questions || [];
+        const complete = qs.length > 0 && qs.every(q => picked.get(q.question)?.size);
+        return `<div class="icard ask" data-perm="${esc(s.perm.id)}">
+          <div class="ih">${T.asksYou(...who)}</div>
+          ${qs.map((q, qi) => `<div class="q">${q.header ? `<small>${esc(q.header)}</small>` : ''}<span>${esc(q.question)}${q.multiSelect ? ` <small>(${T.pickMany})</small>` : ''}</span>
+            <div class="opts">${q.options.map((o, oi) => `<button type="button" class="opt${picked.get(q.question)?.has(o.label) ? ' on' : ''}"
+              data-pick="${qi}:${oi}" title="${esc(o.description)}">${esc(o.label)}</button>`).join('')}</div></div>`).join('')}
+          <div class="acts"><button type="button" class="btn" data-decide="terminal" title="${T.inTerminalTip}">${T.inTerminal}</button>
+            <button type="button" class="btn allow" data-answer ${complete ? '' : `disabled title="${T.pickAll}"`}>${T.sendAnswer}</button></div>
+        </div>`;
+      }
+      if (s.perm) {
+        const { id, tool, detail, hidden } = s.perm;
+        const im = s.perm.immune || {};
+        if (!this.#permShown.has(id)) { this.#permShown.set(id, Date.now()); }
+        return `<div class="icard" data-perm="${esc(id)}">
+          <div class="ih">${T.permAsks(...who)}</div>
+          <span class="chip">${esc(tool)}</span>
+          ${detail ? `<pre data-permtext>${esc(detail)}</pre>` : ''}
+          ${im.antibody ? `<div class="warn">⚠ ${esc(T.antibody(im.antibody.command))}</div>` : ''}
+          <div class="hint" data-permhint>${hidden ? T.hiddenPart(hidden) : ''}</div>
+          <div class="acts">
+            <button type="button" class="btn deny" data-decide="deny">${T.deny}</button>
+            <button type="button" class="btn" data-decide="terminal" title="${T.inTerminalTip}">${T.inTerminal}</button>
+            ${im.suggest && !im.antibody ? `<button type="button" class="btn" data-always title="${esc(T.alwaysTip(im.suggest.key))}">${T.always}</button>` : ''}
+            <button type="button" class="btn allow" data-decide="allow" ${hidden ? `disabled data-hidden title="${esc(T.hiddenPart(hidden))}"` : 'disabled'}>${T.allow}</button>
+          </div>
+        </div>`;
+      }
+      if (s.menu) {
+        const m = s.menu;
+        return `<div class="icard ask">
+          <div class="ih">${T.asksTerminal(...who)}</div>
+          <div class="q"><span>${esc(m.question)}</span>
+            <div class="opts">${m.options.map((label, i) => `<button type="button" class="opt" data-menu="${i}" title="${esc(label)}">${esc(label)}${i === m.selected ? ` <small>${T.termDefault}</small>` : ''}</button>`).join('')}</div></div>
+          <div class="hint" data-menuhint></div>
+        </div>`;
+      }
+      return '';
+    }
+
+    // Allow unlocks once the whole command was seen (scrolled to its end) and after the cooling pause
+    // the immune system asks for — never when part of it is hidden (that one is for the terminal only)
+    #syncPerm() {
+      const card = this.el.detail.querySelector('.icard[data-perm]:not(.ask)');
+      const allow = card?.querySelector('[data-decide=allow]');
+      if (!allow || allow.dataset.hidden !== undefined) { return; }
+      const id = card.dataset.perm;
+      const box = card.querySelector('[data-permtext]');
+      if (box) {
+        box.scrollTop = this.#permScroll.get(id) || 0;
+        if (box.scrollHeight <= box.clientHeight + 2 || box.scrollTop + box.clientHeight >= box.scrollHeight - 2) { this.#permRead.add(id); }
+      } else {
+        this.#permRead.add(id);
+      }
+      const read = this.#permRead.has(id);
+      const im = this.sessions.find(s => s.perm?.id === id)?.perm.immune || {};
+      const wait = im.slowDown || im.antibody ? COOL_MS - (Date.now() - (this.#permShown.get(id) || 0)) : 0;
+      allow.disabled = !read || wait > 0;
+      allow.title = !read ? T.readFirst : '';
+      const hint = card.querySelector('[data-permhint]');
+      hint.textContent = !read ? T.readFirst : wait > 0 ? T.cooling(Math.ceil(wait / 1000)) : '';
+      if (wait > 0) {
+        clearTimeout(this.#coolTimer);
+        this.#coolTimer = setTimeout(() => this.#syncPerm(), Math.min(wait, 250));
+      }
+    }
+
+    // A click inside an inbox card; true when it was handled
+    async #inboxAct(s, target) {
+      const b = target.closest('button');
+      if (!b || b.disabled || !b.closest('.icard')) { return false; }
+      const permId = s.perm?.id;
+      if (b.dataset.pick) {
+        const [qi, oi] = b.dataset.pick.split(':').map(Number);
+        const q = s.perm?.questions?.[qi];
+        const label = q?.options?.[oi]?.label;
+        if (!label) { return true; }
+        if (!this.#answers.has(permId)) { this.#answers.set(permId, new Map()); }
+        const picked = this.#answers.get(permId);
+        const set = q.multiSelect ? new Set(picked.get(q.question)) : new Set();
+        if (q.multiSelect && set.has(label)) { set.delete(label); } else { set.add(label); }
+        picked.set(q.question, set);
+        this.#renderDetail();
+        return true;
+      }
+      if (b.dataset.answer !== undefined) {
+        const picked = this.#answers.get(permId);
+        if (picked) {
+          b.disabled = true;
+          this.api?.answer(permId, Object.fromEntries([...picked].map(([q, set]) => [q, [...set]])));
+          this.#answers.delete(permId);
+        }
+        return true;
+      }
+      if (b.dataset.decide) {
+        b.disabled = true;
+        this.api?.decide(permId, b.dataset.decide);
+        if (b.dataset.decide === 'terminal') { this.api?.focus(s.id); }
+        return true;
+      }
+      if (b.dataset.always !== undefined) {
+        b.disabled = true;
+        this.api?.alwaysAllow(permId);
+        return true;
+      }
+      if (b.dataset.menu) {
+        const opts = [...this.el.detail.querySelectorAll('[data-menu]')];
+        for (const x of opts) { x.disabled = true; }
+        const r = await this.api?.answerMenu(s.id, Number(b.dataset.menu));
+        if (r?.ok === false) {
+          const hint = this.el.detail.querySelector('[data-menuhint]');
+          if (hint) { hint.textContent = r.error; hint.classList.add('err'); }
+          for (const x of opts) { x.disabled = false; }
+        }
+        return true;
+      }
+      return false;
     }
 
     #history(list) {
@@ -781,6 +1037,7 @@
         : `<div class="doing"><b title="${esc(doing.title)}">${esc(doing.title)}</b><span title="${esc(doing.detail)}">${esc(doing.detail || projectPath(s))}</span></div>
            <ul class="timeline">${history.map((h, i) => `<li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>`;
       return `
+        ${this.#inboxCard(s)}
         ${this.collisions?.[s.id] ? `<div class="clashbox ${this.collisions[s.id].level}">⚠ ${esc(this.#clashText(this.collisions[s.id]))}<small>${T.clashFix}</small></div>` : ''}
         ${body}
         <div class="buttons"><button class="wide" data-act="terminal">${ICON_TERM}${T.openTerminal}</button></div>`;
@@ -1116,14 +1373,100 @@
       this.render();
     }
 
+    #goSection(key, selected = null) {
+      this.section = key;
+      this.launchMode = false;
+      this.selected = selected;
+      this.query = '';
+      this.el.search.value = '';
+      this.render();
+    }
+
+    // ---------- Ctrl+K: jump to a section or an agent, or run an action ----------
+
+    #openPal() {
+      this.el.pal.hidden = false;
+      this.el.palText.value = '';
+      this.#palAt = 0;
+      this.#renderPal();
+      this.el.palText.focus();
+    }
+
+    #closePal() { this.el.pal.hidden = true; }
+
+    #palCommands() {
+      const cur = this.current?.kind === 'agent' ? this.current.data : null;
+      const curName = cur && Agent.displayName(cur.agent);
+      return [
+        ...NAV.flat().map(k => ({ icon: ICONS[k], label: T.sections[k], meta: T.palGo, run: () => this.#goSection(k) })),
+        ...[...this.sessions].sort((a, b) => b.updatedAt - a.updatedAt).map(s => ({
+          icon: iconHtml(agentItem(s)), label: `${Agent.displayName(s.agent)} · ${s.project}`, meta: T.status[s.state] || T.palAgent,
+          run: () => this.#goSection('agents', `agent:${s.id}`),
+        })),
+        { icon: ICONS.spark, label: T.palAsk, meta: T.palAction, run: () => this.el.askText.focus() },
+        { icon: ICONS.plus, label: T.palLaunch, meta: T.palAction, run: () => { if (!this.launchMode) { this.#toggleLaunch(); } } },
+        ...(cur ? [{ icon: ICON_TERM, label: T.palTerminal(curName), meta: T.palAction, run: () => this.api?.focus(cur.id) }] : []),
+        ...(cur?.cwd ? [{ icon: FOLDER, label: T.palWorkspace(curName), meta: T.palAction, run: () => this.api?.openWorkspace(cur.id) }] : []),
+        { icon: ICONS.gear, label: T.palSettings, meta: T.palAction, run: () => this.api?.openSettings() },
+      ];
+    }
+
+    // Every word typed must appear in the label
+    #renderPal() {
+      const words = this.el.palText.value.toLowerCase().split(/\s+/).filter(Boolean);
+      this.#palCmds = this.#palCommands().filter(c => words.every(w => c.label.toLowerCase().includes(w)));
+      this.#palAt = Math.max(0, Math.min(this.#palAt, this.#palCmds.length - 1));
+      this.el.palList.innerHTML = this.#palCmds.length
+        ? this.#palCmds.map((c, i) => `<button type="button" role="option" aria-selected="${i === this.#palAt}" class="${i === this.#palAt ? 'on' : ''}" data-pal="${i}">
+            ${c.icon}<span>${esc(c.label)}</span><small>${esc(c.meta)}</small></button>`).join('')
+        : `<div class="none">${T.palNoMatch}</div>`;
+      this.el.palList.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+    }
+
+    #runPal(i) {
+      const c = this.#palCmds[i];
+      this.#closePal();
+      c?.run();
+    }
+
     #bind() {
       this.el.side.addEventListener('click', e => {
+        if (e.target.closest('[data-settings]')) { return this.api?.openSettings(); }
         const b = e.target.closest('[data-section]');
         if (!b) { return; }
-        this.section = b.dataset.section;
-        this.launchMode = false;
-        this.selected = null;
-        this.render();
+        this.#goSection(b.dataset.section);
+      });
+      // Clicks in the details: no re-render between press and release; inbox cards keep their command scroll
+      this.el.detail.addEventListener('pointerdown', () => { this.#pressing = true; });
+      window.addEventListener('pointerup', () => {
+        if (!this.#pressing) { return; }
+        this.#pressing = false;
+        // after the click handlers ran
+        if (this.#renderLater) { this.#renderLater = false; setTimeout(() => this.#renderDetail()); }
+      });
+      this.el.detail.addEventListener('scroll', e => {
+        const box = e.target;
+        if (!box.matches?.('[data-permtext]')) { return; }
+        const id = box.closest('[data-perm]').dataset.perm;
+        this.#permScroll.set(id, box.scrollTop);
+        if (!this.#permRead.has(id) && box.scrollTop + box.clientHeight >= box.scrollHeight - 2) { this.#permRead.add(id); this.#syncPerm(); }
+      }, true);
+      this.el.palText.addEventListener('input', () => { this.#palAt = 0; this.#renderPal(); });
+      this.el.palText.addEventListener('keydown', e => {
+        const n = this.#palCmds.length;
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && n) {
+          e.preventDefault();
+          this.#palAt = (this.#palAt + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+          this.#renderPal();
+        } else if (e.key === 'Enter') { e.preventDefault(); this.#runPal(this.#palAt); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.#closePal(); }
+      });
+      this.el.palList.addEventListener('click', e => {
+        const b = e.target.closest('[data-pal]');
+        if (b) { this.#runPal(Number(b.dataset.pal)); }
+      });
+      document.addEventListener('mousedown', e => {
+        if (!this.el.pal.hidden && !e.target.closest('#pal')) { this.#closePal(); }
       });
       this.el.rows.addEventListener('click', e => {
         const launch = e.target.closest('[data-launch]');
@@ -1141,9 +1484,10 @@
         if (act === 'menu') { item.kind === 'agent' ? this.api?.sessionMenu(item.id) : this.api?.appMenu(item.id); }
         this.render();
       });
-      this.el.detail.addEventListener('click', e => {
+      this.el.detail.addEventListener('click', async e => {
         const item = this.current;
         if (!item) { return; }
+        if (item.kind === 'agent' && await this.#inboxAct(item.data, e.target)) { return; }
         const win = e.target.closest('[data-window]');
         if (win) { return this.#run(this.api?.focusApp(item.id, win.dataset.window)); }
         if (e.target.closest('[data-docker-cancel]')) { this.dockerAsk = null; return this.#renderDetail(); }
@@ -1241,6 +1585,12 @@
         }
       });
       document.addEventListener('keydown', e => {
+        // Ctrl+K anywhere, even while typing: the command palette
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          return this.el.pal.hidden ? this.#openPal() : this.#closePal();
+        }
+        if (e.target.closest?.('#pal')) { return; }
         // Typing in a prompt box: only Escape is ours (leave the box / cancel the agent pick)
         if (e.target.closest?.('#say, #ask')) {
           if (e.key === 'Escape') {

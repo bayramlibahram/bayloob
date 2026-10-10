@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- Workspace panel navigation: **Inbox** (agents waiting on you — approvals, questions, terminal-only
+  questions, file clashes, finished turns — with a red count), **Agents** grouped by project, **Tasks**
+  (empty until workflows land), then the machine sections and Settings. Opens on the Inbox when it has
+  something, otherwise on Agents. Approvals and questions are answered right in the agent's details with
+  the pill's rules (hidden parts → terminal only, scroll to the end, the cooling pause).
+- `Ctrl+K` in the panel: jump to a section or an agent, Ask Bayloob, launch an app, open the selected
+  agent's terminal or folder, Settings.
 - The agent's prompt box in the panel: `/` opens shortcuts (`/test`, `/review`, `/explain`, `/continue`)
   that fill in editable text; ↑ / ↓ in an empty box bring back earlier prompts to that agent; prompts
   waiting for a busy agent are listed under the box, each removable.

@@ -98,7 +98,7 @@ Proposal:
 | 1 | Quick fixes: P6 footer, P7 docker, P8 reasons, P9 empty states, P10 counts, P1 popups | S–M |
 | 2 | Transcript adapters (Claude, Codex) + console read-only (§3.1–3.2) | L |
 | 3 | Prompt box per agent with slash templates, history, queue (§3.3) — **done** | M |
-| 4 | IA: Inbox + Agents + Tasks sections, `Ctrl+K` (§2) — after approval of the navigation | M |
+| 4 | IA: Inbox + Agents + Tasks sections, `Ctrl+K` (§2) — **done** (navigation approved 2026-10-10) | M |
 | 5 | Workflow engine + Quick task / Bug fix end to end, demo in a temp repo (§4) | L |
 | 6 | Tasks board / detail + Lead-and-workers (mother) template (§4, task 28) | L |
 | 7 | Privacy mode, keyboard, mirror (ANSI→HTML) (§3.4, §5) | M |
