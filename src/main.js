@@ -22,6 +22,7 @@ const SCRIPTS_DIR = app.isPackaged
 const DECISIONS = new Set(['allow', 'deny', 'terminal']);
 const SHORTCUT = process.env.BAYLOOB_SHORTCUT ?? 'CommandOrControl+Alt+Space';
 const RECONCILE_MS = 5000;
+const MASCOT = process.env.BAYLOOB_MASCOT === 'svg' ? 'svg' : 'novi';
 
 // Which agent CLIs are installed, checked once through the login shell (same PATH the agents get)
 function detectAgents() {
@@ -35,7 +36,7 @@ function detectAgents() {
 
 /** Wires the event server, launcher, music watcher and terminal focuser to the windows and tray. */
 class BayloobApp {
-  overlay = new OverlayWindow();
+  overlay = new OverlayWindow({ mascot: MASCOT });
   launcherWindow = new LauncherWindow();
   server = new EventServer();
   notifier = new Notifier();
@@ -92,7 +93,8 @@ class BayloobApp {
 
   async openLauncher(preset = null) {
     const installed = await this.installed;
-    const agents = Object.fromEntries(Object.entries(AGENTS).map(([k, a]) => [k, { name: a.name, installed: installed.has(a.bin) }]));
+    const agents = Object.fromEntries(Object.entries(AGENTS).map(([k, a]) =>
+      [k, { name: a.name, installed: installed.has(a.bin), color: MASCOT === 'svg' ? a.svgColor : a.color }]));
     this.launcherWindow.show({ mode: 'new', agents, recent: this.recent.list(), preset, home: os.homedir() });
   }
 

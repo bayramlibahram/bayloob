@@ -95,17 +95,20 @@ and Bayloob brings the right window to the front, even the right tmux pane.
 | Any X11 / XWayland window (xterm, VS Code, Cursor, Tilix, Konsole…) | `_NET_ACTIVE_WINDOW` via python3 + libX11 |
 | GNOME Terminal / Ptyxis on native Wayland | ✗ Wayland doesn't let other apps raise windows |
 
-### 🎨 One mascot, many agents
+### 🎨 One manager, many agents
 
-Same shape, different colors, so you can tell your agents apart from across the room:
+The big mascot in the pill is **Bayloob itself, the manager**. It's always violet and always shows
+the most urgent thing across all your sessions: if any agent needs approval, the manager's lid pops
+open. Your agents are its **subs**. They're listed under it, each in its own color, so you can tell
+them apart from across the room:
 
-| Agent | Color |
+| Who | Color |
 |---|---|
-| Claude Code | Baynovix violet |
+| Bayloob (manager) | Baynovix violet |
+| Claude Code | Coral |
 | Codex | Teal |
-| Gemini CLI | Sky blue |
-| Cursor | Silver |
-| Anything else | Amber |
+| Gemini CLI | Blue |
+| Cursor, and anything else | Silver |
 
 ### 💃 It dances
 
@@ -115,17 +118,31 @@ Play something in Spotify, a browser tab or VLC while your agents are idle, and 
 mascot starts to dance. The pill shows the song, and the session list gets ⏮ ⏯ ⏭ controls.
 Works with any MPRIS player over `gdbus`. Not in the mood? `BAYLOOB_NO_MUSIC=1 bayloob`.
 
-## The mascot's moods
+## The mascot
+
+The mascot is a layered 3D-style character (body, lid, visor and eyes) animated by
+[`src/novi.js`](src/novi.js), a small engine with no dependencies. Every state has its own little story:
 
 | What the agent did | State | What the mascot does |
 |---|---|---|
-| `SessionStart`, idle `Notification` | idle | breathes, blinks |
-| `UserPromptSubmit`, `PostToolUse` | thinking · blue | eyes scan across the visor |
-| `PreToolUse` | working · orange | lid bobs, eyes focus |
-| `PermissionRequest` | waiting · red | lid pops open, big eyes, a little shake |
-| `Stop`, Codex `agent-turn-complete` | done · green | `^ ^` eyes and a happy hop |
-| music playing, nothing to do | dance | sways, notes float up |
+| `SessionStart`, idle `Notification` | idle | blinks, glances around, breathes now and then. After 5 minutes it falls asleep (`z`) |
+| `UserPromptSubmit`, `PostToolUse` | thinking · blue visor | eyes "read" left and right, it floats |
+| `PreToolUse` | working · amber visor | the lid chomps, eyes focus |
+| `PermissionRequest` | waiting · red visor | the lid pops open, a `!` appears, red ripples, an impatient knock |
+| `Stop`, Codex `agent-turn-complete` | done · green visor | the lid flips, confetti, `^ ^` eyes and a happy jump |
+| music playing, nothing to do | dance | sways to the beat, notes float off |
 | `SessionEnd` | — | leaves the list |
+
+In the pill the mascot is only 34 px, so it runs in **compact mode**: particles stay small and inside
+the pill (the `!` appears beside it, not above). Calm states never run an endless animation, so the
+overlay costs about 3% CPU when nothing is happening.
+
+The session list shows a still image of each agent's mascot, so a long list stays cheap.
+
+**Prefer the original flat mascot?** Run `BAYLOOB_MASCOT=svg bayloob`.
+
+**Adding a color:** each pack in `src/packs/<color>/` holds 5 states × 4 layers (256×256 PNG) and a
+`layers.json`. After adding or re-cutting one, run `bun scripts/build-pack-meta.js`.
 
 ## Getting started
 
@@ -198,7 +215,10 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 | `src/focus.js` | `TerminalFocuser` | Raises the right terminal: kitty / WezTerm / tmux / X11 |
 | `src/music.js` | `MusicWatcher` | What's playing over MPRIS, play / pause / next / prev |
 | `src/cli.js` | — | `--install-hooks`, `--autostart`, `--no-autostart` |
-| `src/index.html` | `OverlayView`, `Mascot` | The SVG mascot, cards and session list |
+| `src/index.html` | `OverlayView`, `NoviMascotView`, `SvgMascotView` | The pill: mascot, cards and session list |
+| `src/novi.js` | `Novi` | Animation engine for the layered raster mascot |
+| `src/packs/` | — | Mascot color packs (5 states × 4 layers each) and the generated `meta.js` |
+| `scripts/build-pack-meta.js` | — | Bundles every pack's `layers.json` into `src/packs/meta.js` |
 | `scripts/bayloob-hook` | — | The hook. Waits for your answer only on `PermissionRequest` |
 | `scripts/hook.js` | — | Same hook in Node, for Windows (permission requests included) |
 | `scripts/install-hooks.js` | `HookInstaller` | Safely merges hooks into `~/.claude/settings.json` |
@@ -221,6 +241,7 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 | `BAYLOOB_PORT` | `7777` | Local port for the server and the hooks |
 | `BAYLOOB_PERM_TIMEOUT` | `280` | Seconds before a permission request goes back to the terminal |
 | `BAYLOOB_NO_MUSIC` | unset | Set to `1` to turn off music detection |
+| `BAYLOOB_MASCOT` | `novi` | `svg` switches back to the original flat mascot |
 | `BAYLOOB_SHORTCUT` | `Ctrl+Alt+Space` | Global shortcut for the launcher (Electron accelerator syntax); empty turns it off |
 | `BAYLOOB_TERMINAL` | auto-detected | Terminal used for launched sessions, e.g. `kitty` or `gnome-terminal --` (the command is appended) |
 

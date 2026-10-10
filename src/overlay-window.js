@@ -8,6 +8,11 @@ const WIDTH = 440, HEIGHT = 560; // window size (the visible pill is smaller, se
 class OverlayWindow {
   win = null;
 
+  // mascot: 'novi' (raster, default) or 'svg' (the original vector mascot)
+  constructor({ mascot = 'novi' } = {}) {
+    this.mascot = mascot;
+  }
+
   create() {
     const { bounds } = screen.getPrimaryDisplay();
     this.win = new BrowserWindow({
@@ -39,7 +44,7 @@ class OverlayWindow {
       // macOS/Windows: transparent areas pass clicks through while mouse moves still reach the renderer
       this.win.setIgnoreMouseEvents(true, { forward: true });
     }
-    this.win.loadFile(path.join(__dirname, 'index.html'));
+    this.win.loadFile(path.join(__dirname, 'index.html'), { query: { mascot: this.mascot } });
     return this;
   }
 

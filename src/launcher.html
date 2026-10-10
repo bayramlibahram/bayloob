@@ -94,7 +94,7 @@
   </form>
 
 <script>
-  const COLORS = { claude: '#a24bf7', codex: '#3fd3b6', gemini: '#6a9ef8' };
+  const FALLBACK_COLOR = '#ffb547';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const tilde = (p, home) => home && p.startsWith(home) ? '~' + p.slice(home.length) : p;
 
@@ -143,7 +143,7 @@
 
     #renderAgents() {
       this.el.agents.innerHTML = Object.entries(this.state.agents).map(([key, a]) => `
-        <button type="button" class="agent" data-agent="${key}" style="--c:${COLORS[key]}" aria-pressed="${key === this.agent}"
+        <button type="button" class="agent" data-agent="${key}" style="--c:${a.color || FALLBACK_COLOR}" aria-pressed="${key === this.agent}"
           ${a.installed ? '' : 'disabled title="Not found on PATH"'}><i></i>${esc(a.name)}${a.installed ? '' : ' <small>not installed</small>'}</button>`).join('');
     }
 
@@ -151,7 +151,7 @@
       const { recent, home } = this.state;
       this.el.recent.innerHTML = recent.map(r => `
         <button type="button" data-cwd="${esc(r.cwd)}" data-agent="${esc(r.agent)}" class="${tilde(r.cwd, home) === this.el.cwd.value ? 'on' : ''}">
-          <i style="--c:${COLORS[r.agent] || '#ffb547'}"></i><b>${esc(r.name)}</b><span>${esc(tilde(r.cwd, home))}</span></button>`).join('');
+          <i style="--c:${this.state.agents[r.agent]?.color || FALLBACK_COLOR}"></i><b>${esc(r.name)}</b><span>${esc(tilde(r.cwd, home))}</span></button>`).join('');
     }
 
     #message(text, isError = false) {
