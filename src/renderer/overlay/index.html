@@ -37,6 +37,7 @@
     overflow: hidden;
     transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
   }
+  .pill.multi { width: 420px; } /* room for the agent stack next to the name */
   .pill.open, .pill.has-card { width: 480px; border-radius: 0 0 26px 26px; }
   .bar { position: relative; cursor: pointer; display: flex; align-items: center; gap: 10px; height: 58px; padding: 4px 14px 0 7px; }
   /* the manager mascot sits on its own tile, like an app icon docked to the bar */
@@ -66,6 +67,10 @@
   .progress { position: absolute; left: 62px; right: 14px; bottom: 3px; height: 3px; border-radius: 2px;
     background: rgb(var(--ink) / .07); overflow: hidden; display: none; }
   .progress.on { display: block; }
+  .progress.on.labelled { right: 62px; }
+  .plabel { position: absolute; right: 14px; bottom: 0; font-size: 10.5px; font-weight: 600; line-height: 1;
+    color: var(--brand-soft); font-variant-numeric: tabular-nums; display: none; }
+  .plabel.on { display: block; }
   .progress i { display: block; height: 100%; width: var(--p, 0%); border-radius: inherit;
     background: linear-gradient(90deg, var(--brand), var(--brand-soft)); transition: width .5s cubic-bezier(.2,.9,.3,1); }
   .label .note { color: var(--brand-soft); }
@@ -101,6 +106,13 @@
   .pill.deaf .mascot { filter: grayscale(1) brightness(.75); }
   .label .deaf-note { color: var(--working); }
   .count { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* several agents: their Novis stacked like avatars, each ringed in its state colour */
+  .stack { display: flex; align-items: center; }
+  .stack .mini { width: 27px; height: 27px; padding: 2px; border-radius: 8px; background: var(--glass);
+    box-shadow: 0 0 0 1.5px var(--ring), 0 1px 3px rgb(var(--shade) / calc(.4 * var(--shade-k))); }
+  .stack .mini + .mini { margin-left: -6px; }
+  .stack .mini .thumb { filter: none; }
+  .stack em { margin-left: 5px; font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--muted); }
 
   /* ---------- Mascot (based on the Baynovix logo) ---------- */
   .mascot { position: relative; width: 38px; height: 38px; flex: none; --ring: var(--accent); }
@@ -250,6 +262,7 @@
       <div class="count" id="count"></div>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
       <div class="progress" id="progress"><i></i></div>
+      <span class="plabel" id="plabel"></span>
     </div>
     <div class="card" id="card"></div>
     <div class="list" id="list"></div>
@@ -290,6 +303,7 @@
     waiting: 'waiting',
     conflictTip: (who, files) => `Also edited by ${who}: ${files}. Move new work to a worktree from the panel`,
     sharedTip: who => `${who} is working in the same folder; their uncommitted changes can affect each other`,
+    progressShort: (d, t) => `${d} of ${t}`,
     progress: (d, t) => `${d} of ${t} to-dos done`,
     receipt: { passed: '✓ Tests passed', failed: '✗ Tests failed', untested: '⚠ Code changed, no tests run' },
     askTests: 'Ask to run tests',
@@ -303,6 +317,7 @@
 
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const COOL_MS = 3000;
+  const STACK_MAX = 3; // agent tiles in the pill before "+N"
   const REMIND_MS = 60_000; // an unanswered permission card gets a reminder sound this often
   const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
   const RECEIPT_MARK = { passed: ' ✓', failed: ' ✗', untested: ' ⚠' };
@@ -433,7 +448,7 @@
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), progress: $('progress'), card: $('card'), list: $('list') };
+      this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), progress: $('progress'), plabel: $('plabel'), card: $('card'), list: $('list') };
       // The manager falls asleep after a long idle and wakes on the next change: a soft sound for each
       this.mascot = new MascotView(this.el.mascot, { onSleep: asleep => asleep ? this.sounds.play('sleep') : this.sounds.playIfQuiet('wake') });
       this.#bindEvents();
@@ -517,7 +532,7 @@
     open() { this.el.pill.classList.add('open'); }
 
     render() {
-      const top = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt)[0];
+      const top = this.#byPriority()[0];
       const state = top ? top.state : 'idle';
       const dancing = this.music?.playing && (state === 'idle' || state === 'done');
       document.documentElement.style.setProperty('--accent', COLORS[state]);
@@ -530,8 +545,9 @@
       this.el.label.title = deaf ? T.deafTip : '';
       this.#renderStatus(top, state, deaf);
       const n = this.sessions.length;
-      this.el.count.textContent = n > 1 ? n : '';
-      this.el.count.title = n > 1 ? T.sessions(n) : '';
+      this.el.count.innerHTML = n > 1 ? this.#stackHtml() : '';
+      this.el.pill.classList.toggle('multi', n > 1);
+      this.el.count.title = n > 1 ? this.#byPriority().map(s => `${Agent.displayName(s.agent)} · ${s.project} — ${T.state[s.state]}`).join('\n') : '';
 
       this.#expireToast();
       const perms = this.sessions.filter(s => s.perm).sort((a, b) => Number(a.perm.id) - Number(b.perm.id));
@@ -546,6 +562,17 @@
     }
 
     // Chip next to the name ("••• Thinking") and the to-do progress of the agent the pill shows
+    #byPriority() {
+      return [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt);
+    }
+
+    // Up to STACK_MAX agent tiles, most urgent first, then "+N"
+    #stackHtml() {
+      const all = this.#byPriority();
+      const tiles = all.slice(0, STACK_MAX).map(s => `<i class="mini" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</i>`).join('');
+      return `<span class="stack">${tiles}${all.length > STACK_MAX ? `<em>+${all.length - STACK_MAX}</em>` : ''}</span>`;
+    }
+
     #renderStatus(top, state, deaf) {
       const on = !!top && state !== 'idle' && !deaf;
       const text = top?.perm?.kind === 'question' ? T.asksYou : T.state[state];
@@ -556,6 +583,10 @@
       this.el.progress.classList.toggle('on', !!p);
       this.el.progress.style.setProperty('--p', p ? `${Math.round((p.done / p.total) * 100)}%` : '0%');
       this.el.progress.title = p ? T.progress(p.done, p.total) : '';
+      this.el.progress.classList.toggle('labelled', !!p);
+      this.el.plabel.classList.toggle('on', !!p);
+      this.el.plabel.textContent = p ? T.progressShort(p.done, p.total) : '';
+      this.el.plabel.title = this.el.progress.title;
     }
 
     #deafHtml() {
