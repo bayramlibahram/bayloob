@@ -149,3 +149,24 @@ test("a server without a token accepts nothing", async t => {
   t.after(() => stop(server));
   assert.equal((await request("/state")).status, 403);
 });
+
+test("a request a rule allows gets no card, and the app is told about it", async t => {
+  const { ImmuneSystem } = require("../src/main/modules/permissions/immune-system");
+  const server = new EventServer({ token: TOKEN }).listen();
+  await new Promise(r => server.http.once("listening", r));
+  t.after(() => stop(server));
+  server.immune = new ImmuneSystem();
+  server.immune.addRule("Bash", { command: "npm test" }, "/w/shop");
+  const told = [];
+  server.onRuleAllow = info => told.push(info);
+  const r = await request("/perm?agent=claude", {
+    hook_event_name: "PermissionRequest",
+    session_id: "r1",
+    cwd: "/w/shop",
+    tool_name: "Bash",
+    tool_input: { command: "npm test" },
+  });
+  assert.match(r.body, /"behavior":"allow"/);
+  assert.equal(server.store.get("claude:r1").perm, null);
+  assert.deepEqual(told, [{ sessionId: "claude:r1", key: "npm test", command: "npm test" }]);
+});

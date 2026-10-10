@@ -13,9 +13,9 @@ Status: **done** = works as specified · **partial** = exists, gaps listed · **
 | F4 | Agent colors | partial | `src/main/modules/agents/agents.js:5`; packs `src/assets/packs/{purple,coral,teal,blue,silver}` | **Grok** not in the registry (silver pack exists, CLI not installed → flags unverifiable); no "amber = other" fallback |
 | F5 | Ask Bayloob | done | `src/renderer/launcher/index.html:237` (Task → Agent → Confirm), `agents/session-launcher.js:64` (tmux, argv not shell), `infrastructure/system/git.js:45` (worktree) | tmux prefix is `bl-`, worktree `<repo>-<agent>-MMDD-HHMM` on `bayloob/<name>` (spec: `bayloob-<id>`) — naming only |
 | F6 | Permission cards | done | `overlay/index.html:591`; questions answered in-card (AskUserQuestion) | — |
-| F7 | Combo | partial | `permissions/command-signature.js:164` (`ruleable`), `sessions/event-server.js:209`, Settings `settings/index.html:172` | Rule-matched allow is silent (no "Allowed by rule" toast) |
-| F8 | Antibody | partial | `overlay/index.html:272`, `permissions/immune-system.js` | Allow stays the primary button (spec: Deny primary on antibody cards); denied memory not listed/removable in Settings |
-| F9 | Tripwire | partial | `overlay/index.html:302` (`COOL_MS`), `immune-system.js:52` | Rule is "last 3 approvals each < 1 s" (spec: 3 approvals within 1 s); no lock icon |
+| F7 | Combo | done | `permissions/command-signature.js` (`ruleable`), `event-server.js` (`onRuleAllow`), Settings | — |
+| F8 | Antibody | done | `immune-system.js` (`antibodies`, `forget`, 30-day expiry), `command-signature.js` (`normalizeFlags`) | — |
+| F9 | Tripwire | done | `immune-system.js` (each < 1 s or 3 within 1 s), 🔒 on Allow | — |
 | F10 | Wait-time meter | done | `sessions/blocked-clock.js:14`, `ui-common.js:115`, reminder `overlay/index.html:303` | Mascot fades via saturation (spec: opacity → .55) — cosmetic |
 | F11 | Delivery receipt | done | `sessions/receipt.js:23`, `overlay/index.html:292` | Claude Code only (reads its transcript); Codex/Gemini: no receipt — limitation |
 | F12 | ⚔ Challenge | partial | `agents/challenge.js:13`, read-only flags `agents/agents.js:10` | No "Challenge report" card (parse `path:line`, open in editor); no policy auto-deny for the challenger session (defense in depth); Gemini has no read-only flag |

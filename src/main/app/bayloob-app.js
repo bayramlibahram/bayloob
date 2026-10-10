@@ -147,6 +147,12 @@ class BayloobApp {
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
     this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
+    // A rule allowed something without a card: say so briefly, so nothing passes unseen
+    this.server.onRuleAllow = info =>
+      this.overlay.send("rule-allowed", {
+        ...info,
+        project: this.server.store.get(info.sessionId)?.project || "",
+      });
     // The hooks read the same file (default <config>/Bayloob/token, or BAYLOOB_TOKEN_FILE)
     this.server.token = loadOrCreateToken(
       process.env.BAYLOOB_TOKEN_FILE || path.join(data, "token")
@@ -296,6 +302,7 @@ class BayloobApp {
       detectedTerminal: new TerminalLauncher("").detected, // what auto-detect would pick
       hooks: this.hooks.status(),
       rules: this.server.immune?.rules() || [],
+      denials: this.server.immune?.antibodies() || [],
     });
   }
 
@@ -810,6 +817,10 @@ class BayloobApp {
         }
       })
     );
+    ipcMain.handle("settings:forget-denial", (_e, id) => {
+      this.server.immune?.forget(String(id));
+      return this.server.immune?.antibodies() || [];
+    });
     ipcMain.handle("settings:revoke-rule", (_e, ruleId) => {
       this.server.immune?.revoke(String(ruleId));
       return this.server.immune?.rules() || [];

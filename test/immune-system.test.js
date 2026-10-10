@@ -46,13 +46,19 @@ test("a denial becomes an antibody that flags similar requests", () => {
 });
 
 test("three approvals under a second each trip the wire", () => {
-  const im = new ImmuneSystem();
-  im.record({ ...bash("ls"), decision: "allow", latencyMs: 300 });
-  im.record({ ...bash("ls"), decision: "allow", latencyMs: 400 });
+  // 2 s apart, so only the per-card speed counts here (not the burst rule)
+  let t = 1_000_000;
+  const im = new ImmuneSystem({ now: () => t });
+  const allow = latencyMs => {
+    t += 2000;
+    im.record({ ...bash("ls"), decision: "allow", latencyMs });
+  };
+  allow(300);
+  allow(400);
   assert.equal(im.assess("Bash", { command: "ls" }, cwd).slowDown, false);
-  im.record({ ...bash("ls"), decision: "allow", latencyMs: 500 });
+  allow(500);
   assert.equal(im.assess("Bash", { command: "ls" }, cwd).slowDown, true);
-  im.record({ ...bash("ls"), decision: "allow", latencyMs: 3000 });
+  allow(3000);
   assert.equal(im.assess("Bash", { command: "ls" }, cwd).slowDown, false);
 });
 
@@ -65,4 +71,36 @@ test("rules and antibodies survive a restart", () => {
   assert.ok(b.assess("Bash", { command: "git status" }, cwd).rule);
   assert.ok(b.assess("Bash", { command: "git push --force" }, cwd).antibody);
   fs.rmSync(path.dirname(file), { recursive: true });
+});
+
+test("three approvals within a second trip the wire too, however long each card was shown", () => {
+  let t = 1_000_000;
+  const im = new ImmuneSystem({ now: () => t });
+  for (const dt of [0, 300, 300]) {
+    t += dt;
+    im.record({ ...bash("ls"), decision: "allow", latencyMs: 8000 });
+  }
+  assert.equal(im.assess("Bash", { command: "ls" }, cwd).slowDown, true);
+  t += 5000;
+  im.record({ ...bash("ls"), decision: "allow", latencyMs: 8000 });
+  assert.equal(im.assess("Bash", { command: "ls" }, cwd).slowDown, false);
+});
+
+test("denials are listed newest first, can be forgotten, and expire after 30 days", () => {
+  let t = 1_000_000;
+  const im = new ImmuneSystem({ now: () => t });
+  im.record({ ...bash("git push --force"), decision: "deny" });
+  t += 1000;
+  im.record({ ...bash("rm -rf ./dist"), decision: "deny" });
+  const list = im.antibodies();
+  assert.deepEqual(
+    list.map(a => a.command),
+    ["rm -rf ./dist", "git push --force"]
+  );
+  im.forget(list[0].id);
+  assert.equal(im.assess("Bash", { command: "rm -rf ./build" }, cwd).antibody, null);
+  assert.ok(im.assess("Bash", { command: "git push --force" }, cwd).antibody);
+  t += 31 * 24 * 60 * 60 * 1000;
+  assert.equal(im.assess("Bash", { command: "git push --force" }, cwd).antibody, null);
+  assert.equal(im.antibodies().length, 0);
 });

@@ -139,6 +139,7 @@ class EventServer {
   lastEventAt = null;
   immune = null; // ImmuneSystem: remembered decisions, rules and antibodies (optional)
   observers = []; // (sessionId, event) => void, called for every hook event before the store updates
+  onRuleAllow = null; // ({ sessionId, key, command }) => void: a standing rule allowed a request without a card
 
   // token: the shared secret every request must carry (X-Bayloob-Token header or ?t=); without one, nothing is accepted
   constructor({ port = PORT, store = new SessionStore(), token = null } = {}) {
@@ -299,6 +300,7 @@ class EventServer {
     if (known?.rule && !detail.hidden) {
       this.immune.noteHit(known.rule.id);
       this.store.upsert(id, agent, ev, query, { state: "working", tool });
+      this.onRuleAllow?.({ sessionId: id, key: known.rule.key, command: detail.detail || tool });
       return res.end(decisionBody("allow", null, event));
     }
     const permId = String(++this.#permSeq);

@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onProgress: cb => ipcRenderer.on("progress", (_e, progress) => cb(progress)),
   onCollisions: cb => ipcRenderer.on("collisions", (_e, collisions) => cb(collisions)),
   onSoundConfig: cb => ipcRenderer.on("sound-config", (_e, config) => cb(config)),
+  onRuleAllowed: cb => ipcRenderer.on("rule-allowed", (_e, info) => cb(info)),
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
   challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),
 });

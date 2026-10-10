@@ -84,6 +84,12 @@
     background: linear-gradient(180deg, color-mix(in srgb, var(--working) 8%, transparent), var(--card)); }
   .row .role { color: var(--waiting); }
   .card.perm.antibody { border-color: color-mix(in srgb, var(--waiting) 55%, transparent); }
+  /* resembling something you denied: Deny becomes the obvious button, Allow steps back */
+  .card.perm.antibody .btn.deny { background: var(--waiting); color: #fff; }
+  .card.perm.antibody .btn.allow { background: transparent; color: var(--done); box-shadow: inset 0 0 0 1.5px currentColor; }
+  .btn .lock { width: 13px; height: 13px; margin: -2px 5px 0 -2px; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 2.2; }
+  .label .ruled { color: var(--done); cursor: pointer; }
+  .label .ruled code { font: 600 12px ui-monospace, monospace; }
   .immune.warn { margin-top: 8px; font-size: 12.5px; color: var(--waiting); }
   .immune code { font: 500 11.5px ui-monospace, monospace; }
   .reply { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 4px 4px 4px 12px; border-radius: 12px;
@@ -303,6 +309,7 @@
     waiting: 'waiting',
     conflictTip: (who, files) => `Also edited by ${who}: ${files}. Move new work to a worktree from the panel`,
     sharedTip: who => `${who} is working in the same folder; their uncommitted changes can affect each other`,
+    ruled: key => `✓ <code>${key}</code> · allowed by rule`, ruleTip: 'Click to see or remove rules in Settings',
     progressShort: (d, t) => `${d} of ${t}`,
     progress: (d, t) => `${d} of ${t} to-dos done`,
     receipt: { passed: '✓ Tests passed', failed: '✗ Tests failed', untested: '⚠ Code changed, no tests run' },
@@ -317,6 +324,8 @@
 
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const COOL_MS = 3000;
+  const RULE_NOTE_MS = 4000;
+  const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const STACK_MAX = 3; // agent tiles in the pill before "+N"
   const REMIND_MS = 60_000; // an unanswered permission card gets a reminder sound this often
   const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
@@ -441,6 +450,7 @@
     sounds = new SoundPlayer();
     #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
     #permSince = new Map(); // permId -> when it appeared or was last reminded about
+    #ruleTimer = null;
     #reply = { sid: null, text: '', confirm: false, focused: false, error: '' }; // the done card's reply box
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
@@ -574,7 +584,9 @@
     }
 
     #renderStatus(top, state, deaf) {
-      const on = !!top && state !== 'idle' && !deaf;
+      // While "allowed by rule" shows, the label needs the room: the chip steps aside
+      const ruled = this.ruleNote && Date.now() < this.ruleNote.until;
+      const on = !!top && state !== 'idle' && !deaf && !ruled;
       const text = top?.perm?.kind === 'question' ? T.asksYou : T.state[state];
       this.el.status.classList.toggle('on', on);
       this.el.status.classList.toggle('busy', state === 'thinking' || state === 'working');
@@ -594,7 +606,19 @@
       return `<b>Bayloob</b> <span class="deaf-note" data-act="settings">⚠ can’t hear · ${T.deaf[kind] || kind}</span>`;
     }
 
+    // "Allowed by rule" shows for a few seconds in place of the label; clicking it opens Settings (the rules)
+    setRuleAllowed(info) {
+      this.ruleNote = { ...info, until: Date.now() + RULE_NOTE_MS };
+      this.render();
+      clearTimeout(this.#ruleTimer);
+      this.#ruleTimer = setTimeout(() => this.render(), RULE_NOTE_MS + 50);
+    }
+
     #labelHtml(top, state) {
+      if (this.ruleNote && Date.now() < this.ruleNote.until) {
+        const r = this.ruleNote;
+        return `<b>${esc(r.project)}</b> <span class="ruled" data-act="settings" title="${esc(`${r.command}\n${T.ruleTip}`)}">${T.ruled(esc(r.key))}</span>`;
+      }
       if (top?.perm?.kind === 'question') { return `<b>${esc(top.project)}</b>`; }
       // The state itself is in the status chip; the label keeps the project and the tool in use
       if (top && state !== 'idle') {
@@ -719,6 +743,12 @@
       const wait = im.slowDown || im.antibody ? COOL_MS - (Date.now() - (this.#permShown.get(id) || 0)) : 0;
       allow.disabled = !read || wait > 0;
       allow.title = !read ? T.allowUnread : wait > 0 ? T.coolTip : '';
+      // 🔒 on Allow while it waits (only touched when it changes, so the button doesn't flicker)
+      const locked = wait > 0 ? '1' : '';
+      if (allow.dataset.locked !== locked) {
+        allow.dataset.locked = locked;
+        allow.innerHTML = locked ? `${LOCK}${T.allow}` : T.allow;
+      }
       if (hint) { hint.textContent = !read ? T.scrollToAllow : wait > 0 ? T.cooling(Math.ceil(wait / 1000)) : ''; }
       if (wait > 0) {
         clearTimeout(this.#coolTimer);
@@ -1018,6 +1048,7 @@
     window.bayloobAPI.onProgress?.(p => view.setProgress(p));
     window.bayloobAPI.onCollisions?.(c => view.setCollisions(c));
     window.bayloobAPI.onSoundConfig?.(c => view.setSoundConfig(c));
+    window.bayloobAPI.onRuleAllowed?.(r => view.setRuleAllowed(r));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };
