@@ -60,6 +60,7 @@
   .msg { flex: 1; font-size: 12px; color: var(--muted); }
   .msg.error { color: var(--error); }
   .msg.ok { color: var(--ok); }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -91,6 +92,7 @@
     </div>
 
     <div class="hooks" id="hooks"></div>
+    <div class="hooks" id="extension" hidden></div>
 
     <div class="foot">
       <div class="msg" id="msg"></div>
@@ -105,12 +107,16 @@
     hooksPartial: n => `Claude Code hooks are only partly installed (${n} of 9 events)`,
     hooksMissing: 'Claude Code hooks are not installed',
     install: 'Install hooks', installing: 'Installing…', installed: 'Hooks installed',
+    extOk: 'GNOME extension is running (window focus on Wayland)',
+    extOff: 'GNOME extension is not enabled — needed to focus windows on Wayland',
+    extRelogin: 'GNOME extension installed — log out and back in once to load it',
+    enable: 'Enable', enabling: 'Enabling…',
     autoTerminal: name => name ? `Auto-detect (${name})` : 'Auto-detect',
     lockedEnv: keys => `Set by environment variable: ${keys.join(', ')}`,
     saved: 'Saved', hint: 'Ctrl+Enter to save',
   };
 
-  /** The settings form. `state` = { values, locked, detectedTerminal, hooks } from the main process. */
+  /** The settings form. `state` = { values, locked, detectedTerminal, hooks, extension } from the main process. */
   class SettingsView {
     state = null;
     mascot = 'novi';
@@ -120,7 +126,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), mascot: $('mascot'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
-        music: $('music'), hooks: $('hooks'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), hooks: $('hooks'), extension: $('extension'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -138,6 +144,7 @@
       this.#renderMascot();
       this.#renderMusic();
       this.#renderHooks();
+      this.#renderExtension();
       this.#message(locked.length ? T.lockedEnv(locked) : T.hint);
       this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
       this.el.shortcut.focus();
@@ -160,6 +167,20 @@
       const color = ok || override ? 'var(--ok)' : partial ? '#ffb547' : 'var(--error)';
       this.el.hooks.innerHTML = `<span class="dot" style="--c:${color}"></span><span>${text}</span>` +
         (ok || override ? '' : `<button type="button" class="btn" id="install">${T.install}</button>`);
+    }
+
+    // Only on GNOME: the extension that lets Bayloob list and focus native Wayland windows
+    #renderExtension(result) {
+      const ext = this.state.extension || {};
+      const box = this.el.extension;
+      box.hidden = !ext.gnome;
+      if (!ext.gnome) return;
+      const relogin = result?.needsRelogin || (ext.installed && !ext.state);
+      const ok = !result && ext.state === 'ACTIVE' || result && !result.needsRelogin;
+      const text = ok ? T.extOk : relogin ? T.extRelogin : T.extOff;
+      const color = ok ? 'var(--ok)' : relogin ? '#ffb547' : 'var(--error)';
+      box.innerHTML = `<span class="dot" style="--c:${color}"></span><span>${text}</span>` +
+        (ok || relogin ? '' : `<button type="button" class="btn" id="enableExt">${T.enable}</button>`);
     }
 
     #message(text, kind = '') {
@@ -186,6 +207,15 @@
         if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
       });
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
+      this.el.extension.addEventListener('click', async e => {
+        const b = e.target.closest('#enableExt');
+        if (!b) return;
+        b.disabled = true;
+        b.textContent = T.enabling;
+        const res = await this.api?.installExtension();
+        if (res?.ok) this.#renderExtension(res);
+        else { b.disabled = false; b.textContent = T.enable; this.#message(res?.error || 'Could not enable the extension', 'error'); }
+      });
       this.el.hooks.addEventListener('click', async e => {
         const b = e.target.closest('#install');
         if (!b) return;

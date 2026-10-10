@@ -23,6 +23,12 @@ fi
 # Fallback if the AppArmor profile fails to load: the SUID sandbox
 chmod 4755 '/opt/Bayloob/chrome-sandbox' || true
 
+# GNOME Shell extension for window listing/focus on Wayland; each user enables it once
+# (Bayloob settings, or: gnome-extensions enable bayloob@baynovix.com)
+EXT_DIR='/usr/share/gnome-shell/extensions/bayloob@baynovix.com'
+mkdir -p "$EXT_DIR"
+cp -f /opt/Bayloob/resources/gnome-extension/* "$EXT_DIR"/ 2>/dev/null || true
+
 if hash update-desktop-database 2>/dev/null; then
   update-desktop-database /usr/share/applications || true
 fi

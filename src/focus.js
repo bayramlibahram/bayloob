@@ -1,8 +1,10 @@
 // "Open terminal": bring the agent's terminal window to the front.
-// No extra dependencies: use the terminal's own CLI when it has one, otherwise X11 (python3 + libX11).
+// No extra dependencies: the terminal's own CLI when it has one, then the Bayloob GNOME extension
+// (native Wayland windows), then X11 (python3 + libX11).
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { WindowService } = require('./windows');
 
 const run = (cmd, args) => new Promise(resolve => {
   execFile(cmd, args, { timeout: 3000 }, (err, stdout) => resolve({ ok: !err, out: String(stdout || '') }));
@@ -22,10 +24,11 @@ function pidChain(pid) {
   return chain;
 }
 
-/** Tries each strategy in order (kitty → WezTerm → tmux → X11) until one raises the window. */
+/** Tries each strategy in order (kitty → WezTerm → tmux → GNOME extension → X11) until one raises the window. */
 class TerminalFocuser {
-  constructor(scriptsDir) {
+  constructor(scriptsDir, windows = new WindowService()) {
     this.x11Script = path.join(scriptsDir, 'x11-focus.py');
+    this.windows = windows;
   }
 
   async focus(session) {
@@ -48,8 +51,16 @@ class TerminalFocuser {
       await run('tmux', ['select-window', '-t', t.tmux]);
       await run('tmux', ['select-pane', '-t', t.tmux]);
     }
-    // 4) X11 / XWayland: WINDOWID or the window of one of the ancestor processes
-    if (process.platform === 'linux' && await this.#x11(t, tried)) return { ok: true, via: 'x11' };
+    if (process.platform === 'linux') {
+      const pids = await this.#ancestorPids(t);
+      // 4) GNOME extension: works for native Wayland windows too (Ptyxis, GNOME Terminal, …)
+      if (pids.length && await this.windows.available()) {
+        tried.push('gnome-extension');
+        if (await this.windows.activateByPids(pids, session.project)) return { ok: true, via: 'gnome-extension' };
+      }
+      // 5) X11 / XWayland: WINDOWID or the window of one of the ancestor processes
+      if (await this.#x11(t, pids, tried)) return { ok: true, via: 'x11' };
+    }
 
     return { ok: false, tried };
   }
@@ -59,16 +70,23 @@ class TerminalFocuser {
     return (await run('kitty', ['@', ...to, 'focus-window', '--match', `id:${t.kitty}`])).ok;
   }
 
-  async #x11(t, tried) {
-    if (t.winid) {
-      tried.push('x11-windowid');
-      if ((await run('python3', [this.x11Script, '--window', t.winid])).ok) return true;
-    }
-    const pids = t.pid ? pidChain(t.pid) : [];
-    // Inside tmux the ancestor chain ends at the tmux server, so add the chains of tmux clients too
+  // The agent's ancestors (agent → shell → terminal…). The hook's own shell is often gone by now, so start
+  // from the agent PID the server resolved. Inside tmux the chain ends at the tmux server, so add the
+  // chains of tmux clients too.
+  async #ancestorPids(t) {
+    const pids = pidChain(t.agentPid || t.pid || 0);
+    if (!pids.length && t.pid) pids.push(...pidChain(t.pid));
     if (t.tmux) {
       const clients = await run('tmux', ['list-clients', '-F', '#{client_pid}']);
       for (const p of clients.out.split('\n').filter(Boolean)) pids.push(...pidChain(p));
+    }
+    return pids;
+  }
+
+  async #x11(t, pids, tried) {
+    if (t.winid) {
+      tried.push('x11-windowid');
+      if ((await run('python3', [this.x11Script, '--window', t.winid])).ok) return true;
     }
     if (!pids.length) return false;
     tried.push('x11-pid');
