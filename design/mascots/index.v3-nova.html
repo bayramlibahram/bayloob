@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bayloob</title>
+<style>
+  :root {
+    --glass: rgba(14, 14, 18, 0.92);
+    --line: rgba(255,255,255,0.08);
+    --text: #f2f2f5;
+    --muted: #8b8b96;
+    --idle: #8b8b96;
+    --thinking: #6aa8ff;
+    --working: #ffb547;
+    --waiting: #ff5d6c;
+    --done: #4fd59a;
+    --accent: var(--idle);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; height: 100%;
+    font: 500 12px/1.3 -apple-system, "Segoe UI", system-ui, sans-serif; color: var(--text);
+    user-select: none; -webkit-font-smoothing: antialiased; }
+  body { display: flex; justify-content: center; align-items: flex-start; }
+
+  /* ---------- Pill (the part attached to the notch) ---------- */
+  .pill {
+    margin-top: 0;
+    width: 250px; min-height: 44px;
+    background: var(--glass);
+    border-radius: 0 0 20px 20px;
+    border: 1px solid var(--line); border-top: none;
+    box-shadow: 0 8px 28px rgba(0,0,0,.35);
+    overflow: hidden;
+    transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
+  }
+  .pill.open { width: 360px; border-radius: 0 0 24px 24px; }
+  .bar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 4px 14px 0 10px; }
+  .label { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .label b { font-weight: 600; }
+  .label span { color: var(--muted); }
+  .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Mascot: Nova (Baynovix brand palette) ---------- */
+  .bayloob { position: relative; width: 34px; height: 34px; flex: none; --spark: var(--accent); }
+  .bayloob[data-s=idle] { --spark: #c9a4ff; }
+  .bayloob .nova { position: absolute; inset: 0; transform-origin: 50% 100%; }
+  .bayloob .body { position: absolute; left: 4px; right: 4px; top: 6px; bottom: 2px; border-radius: 11px;
+    background: radial-gradient(130% 110% at 30% 20%, #c98bff 0%, #B049F9 18%, #7926E8 45%, #601ADA 70%, #310E61 100%);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,.45), inset 0 -3px 5px rgba(20,4,50,.55),
+      0 0 10px color-mix(in srgb, var(--spark) 45%, transparent), 0 2px 6px rgba(0,0,0,.5);
+    transition: box-shadow .3s; }
+  .bayloob .shine { position: absolute; left: 8px; top: 8px; width: 9px; height: 4px; border-radius: 50%;
+    background: rgba(255,255,255,.35); transform: rotate(-20deg); filter: blur(.4px); }
+  .bayloob .eye { position: absolute; top: 15px; width: 4px; height: 8px; border-radius: 3px; background: #fff;
+    box-shadow: 0 0 4px rgba(230,210,255,.9); transition: height .2s, top .2s, width .2s; }
+  .bayloob .eye.l { left: 11px; } .bayloob .eye.r { right: 11px; }
+  .bayloob .mouth { position: absolute; left: 50%; top: 24px; width: 6px; height: 3px; margin-left: -3px;
+    border: 1.5px solid #fff; border-top: 0; border-radius: 0 0 4px 4px; opacity: 0; transition: opacity .2s; }
+  .bayloob .orbit { position: absolute; inset: -1px; transform: rotate(42deg); }
+  .bayloob .spark { position: absolute; left: 50%; top: 0; width: 9px; height: 9px; margin-left: -4.5px;
+    background: var(--spark); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    filter: drop-shadow(0 0 3px var(--spark)); transition: background .3s; }
+
+  /* idle: breathing, blinking, the star twinkles */
+  .bayloob[data-s=idle] .body { animation: breathe 3.2s ease-in-out infinite; }
+  .bayloob[data-s=idle] .eye { animation: blink 4.5s infinite; }
+  .bayloob[data-s=idle] .spark { animation: twinkle 2.4s ease-in-out infinite; }
+  /* thinking: eyes look around, the star spins slowly */
+  .bayloob[data-s=thinking] .eye { animation: look 2.2s ease-in-out infinite; }
+  .bayloob[data-s=thinking] .orbit { animation: orbit 2.4s linear infinite; }
+  /* working: focused eyes, hopping, the star spins fast */
+  .bayloob[data-s=working] .eye { height: 4px; top: 17px; width: 5px; }
+  .bayloob[data-s=working] .eye.l { left: 10px; } .bayloob[data-s=working] .eye.r { right: 10px; }
+  .bayloob[data-s=working] .nova { animation: hop .5s ease-in-out infinite; }
+  .bayloob[data-s=working] .orbit { animation: orbit .8s linear infinite; }
+  /* waiting: big eyes, the star blinks overhead, shaking */
+  .bayloob[data-s=waiting] .eye { height: 10px; width: 5px; top: 14px; }
+  .bayloob[data-s=waiting] .orbit { transform: rotate(0deg); }
+  .bayloob[data-s=waiting] .spark { animation: pulse .5s steps(2) infinite; }
+  .bayloob[data-s=waiting] .nova { animation: shake .4s ease-in-out infinite; }
+  /* done: smiles, the star bursts and grows, one jump */
+  .bayloob[data-s=done] .eye { height: 3px; top: 17px; width: 5px; }
+  .bayloob[data-s=done] .eye.l { left: 10px; } .bayloob[data-s=done] .eye.r { right: 10px; }
+  .bayloob[data-s=done] .mouth { opacity: 1; }
+  .bayloob[data-s=done] .nova { animation: joy .7s cubic-bezier(.3,1.6,.5,1) 1; }
+  .bayloob[data-s=done] .spark { animation: burst .8s ease-out 1; }
+
+  @keyframes breathe { 50% { transform: scale(1.04, .96); } }
+  @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+  @keyframes look { 0%,100% { transform: translateX(-2px); } 50% { transform: translateX(2px); } }
+  @keyframes twinkle { 50% { transform: scale(.55) rotate(45deg); opacity: .6; } }
+  @keyframes orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes pulse { 50% { opacity: .2; } }
+  @keyframes hop { 50% { transform: translateY(-2px) scale(.97,1.03); } }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-1.5px); } 75% { transform: translateX(1.5px); } }
+  @keyframes joy { 0% { transform: translateY(0); } 40% { transform: translateY(-5px) scale(.95,1.06); } 100% { transform: translateY(0); } }
+  @keyframes burst { 0% { transform: scale(.5) rotate(0); } 50% { transform: scale(1.6) rotate(90deg); } 100% { transform: scale(1) rotate(90deg); } }
+
+  /* ---------- Session list (opens on hover) ---------- */
+  .list { max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .25s; padding: 0 12px; }
+  .pill.open .list { max-height: 200px; opacity: 1; padding-bottom: 10px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-top: 1px solid var(--line); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .agent { color: var(--muted); font-size: 11px; }
+  .row .st { font-size: 11px; }
+  .empty { color: var(--muted); padding: 8px 4px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+  <div class="pill" id="pill">
+    <div class="bar">
+      <div class="bayloob" id="bayloob" data-s="idle">
+        <div class="nova">
+          <div class="body"></div><div class="shine"></div>
+          <div class="eye l"></div><div class="eye r"></div>
+          <div class="mouth"></div>
+        </div>
+        <div class="orbit"><div class="spark"></div></div>
+      </div>
+      <div class="label" id="label"><b>Bayloob</b> <span>waiting…</span></div>
+      <div class="count" id="count"></div>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+
+<script>
+  const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+  const TEXT = { idle: 'idle', thinking: 'thinking', working: 'working', waiting: 'needs approval', done: 'done' };
+  // The most important state wins
+  const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
+
+  const $ = id => document.getElementById(id);
+  const pill = $('pill'), bayloob = $('bayloob');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function render(list) {
+    const top = [...list].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt)[0];
+    const state = top ? top.state : 'idle';
+    if (bayloob.dataset.s !== state) bayloob.dataset.s = state;   // restarts the animation on change
+    document.documentElement.style.setProperty('--accent', COLORS[state]);
+
+    $('label').innerHTML = top
+      ? `<b>${esc(top.project)}</b> <span>${TEXT[state]}${top.tool ? ' · ' + esc(top.tool) : ''}</span>`
+      : `<b>Bayloob</b> <span>sessiya yoxdur</span>`;
+    $('count').textContent = list.length > 1 ? list.length : '';
+
+    $('list').innerHTML = list.length
+      ? list.map(s => `<div class="row">
+          <span class="dot" style="background:${COLORS[s.state]}"></span>
+          <span class="name">${esc(s.project)} <span class="agent">${esc(s.agent)}</span></span>
+          <span class="st" style="color:${COLORS[s.state]}">${TEXT[s.state]}</span></div>`).join('')
+      : '<div class="empty">No active agent sessions</div>';
+  }
+
+  pill.addEventListener('mouseenter', () => { pill.classList.add('open'); window.bayloobAPI?.setMouseOver(true); });
+  pill.addEventListener('mouseleave', () => { pill.classList.remove('open'); window.bayloobAPI?.setMouseOver(false); });
+
+  if (window.bayloobAPI) {
+    window.bayloobAPI.onSessions(render);
+    render([]);
+  } else {
+    // Opened in a browser: demo mode cycles through the states
+    const demo = ['idle', 'thinking', 'working', 'waiting', 'done']; let i = 0;
+    const tick = () => {
+      const st = demo[i++ % demo.length];
+      render([
+        { id: 'a', agent: 'claude', project: 'ngogrant', state: st, tool: st === 'working' ? 'Edit' : null, updatedAt: Date.now() },
+        { id: 'b', agent: 'codex', project: 'qhtaz-api', state: 'idle', updatedAt: 0 },
+      ]);
+    };
+    tick(); setInterval(tick, 2500);
+    pill.classList.add('open');
+  }
+</script>
+</body>
+</html>
