@@ -46,6 +46,9 @@
   .label b { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
   .label span { color: var(--muted); }
   /* status chip: "••• Thinking" in the state's colour; the dots pulse while the agent is busy */
+  .clash { margin-left: 6px; font-size: 13px; cursor: help; }
+  .clash.conflict { color: var(--waiting); }
+  .clash.shared { color: var(--working); }
   .status { flex: none; display: none; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 9px; border-radius: 13px;
     font-size: 12.5px; font-weight: 600; color: color-mix(in srgb, var(--accent) 80%, white);
     background: color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -270,6 +273,8 @@
     tokensTip: t => `Tokens: ${t.input.toLocaleString()} in · ${t.output.toLocaleString()} out · ${t.cacheWrite.toLocaleString()} cache write\n+ ${t.cacheRead.toLocaleString()} read from cache (not counted)`,
     queuedTip: n => `${n} prompt${n === 1 ? '' : 's'} waiting — sent when the agent finishes`,
     waiting: 'waiting',
+    conflictTip: (who, files) => `Also edited by ${who}: ${files}. Move new work to a worktree from the panel`,
+    sharedTip: who => `${who} is working in the same folder; their uncommitted changes can affect each other`,
     progress: (d, t) => `${d} of ${t} to-dos done`,
     receipt: { passed: '✓ Tests passed', failed: '✗ Tests failed', untested: '⚠ Code changed, no tests run' },
     askTests: 'Ask to run tests',
@@ -394,6 +399,7 @@
     waits = {};            // session id -> when it started waiting on a card
     receipts = {};         // session id -> { status, command? } of its last finished turn
     progress = {};         // session id -> { done, total } of its own to-do list
+    collisions = {};       // session id -> { with, files, level: 'conflict' | 'shared' } (collision radar)
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #permShown = new Map();  // permId -> when its card first appeared (for the Allow cooldown)
@@ -433,6 +439,19 @@
     setReceipts(receipts) { this.receipts = receipts || {}; this.render(); }
 
     setProgress(progress) { this.progress = progress || {}; this.render(); }
+
+    setCollisions(collisions) { this.collisions = collisions || {}; this.render(); }
+
+    // ⚠ another agent works in the same tree: red when they edited the same file, yellow otherwise
+    #collisionHtml(id) {
+      const c = this.collisions[id];
+      if (!c) { return ''; }
+      const others = c.with.map(o => this.sessions.find(x => x.id === o)).filter(Boolean)
+        .map(o => `${Agent.displayName(o.agent)} (${o.project})`).join(', ');
+      const files = c.files.map(f => f.split('/').pop()).join(', ');
+      const tip = c.level === 'conflict' ? T.conflictTip(others, files) : T.sharedTip(others);
+      return `<span class="clash ${c.level}" title="${esc(tip)}">⚠</span>`;
+    }
 
     setBlocked(info) { this.waits = info?.waits || {}; this.render(); this.#tickWaits(); }
 
@@ -490,7 +509,7 @@
       if (top?.perm?.kind === 'question') { return `<b>${esc(top.project)}</b>`; }
       // The state itself is in the status chip; the label keeps the project and the tool in use
       if (top && state !== 'idle') {
-        return `<b>${esc(top.project)}</b>${top.tool && state === 'working' ? ` <span>· ${esc(top.tool)}</span>` : ''}`;
+        return `<b>${esc(top.project)}</b>${this.#collisionHtml(top.id)}${top.tool && state === 'working' ? ` <span>· ${esc(top.tool)}</span>` : ''}`;
       }
       if (this.music?.title) {
         return `<span class="note">♪</span> <b>${esc(this.music.title)}</b> <span>· ${esc(this.music.artist)}</span>`;
@@ -661,6 +680,7 @@
           <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
           ${this.queues[s.id] ? `<span class="queue" title="${T.queuedTip(this.queues[s.id])}">⏳${this.queues[s.id]}</span>` : ''}
           ${this.#diffHtml(s.id)}
+          ${this.#collisionHtml(s.id)}
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}${s.state === 'done' && this.receipts[s.id] ? (RECEIPT_MARK[this.receipts[s.id].status] || '') : ''}</span>
           ${this.#rowControls(s)}</div>`).join('');
     }
@@ -821,6 +841,7 @@
     window.bayloobAPI.onBlocked?.(info => view.setBlocked(info));
     window.bayloobAPI.onReceipts?.(r => view.setReceipts(r));
     window.bayloobAPI.onProgress?.(p => view.setProgress(p));
+    window.bayloobAPI.onCollisions?.(c => view.setCollisions(c));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

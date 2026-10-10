@@ -48,6 +48,7 @@
   .project { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
   .project svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; }
   .project input { flex: 1; }
+  #where .chip { margin-left: auto; flex: none; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--field);
     border: 1px solid var(--line); font-size: 12px; color: #c9c7d4; }
@@ -137,6 +138,8 @@
     queueBtn: 'Queue', hintQueue: 'Agent is busy — Enter adds this to its queue',
     queuedCap: n => `Waiting for this agent · ${n}`, unqueue: 'Remove from the queue',
     noPrompt: 'No prompt: the agent starts and waits for you',
+    worktree: '⑂ In a new worktree',
+    worktreeTip: 'Run it in a fresh git worktree next to the project, on its own bayloob/… branch, so it never edits the same files as another agent',
     pickProject: 'Pick a project folder first',
     notInstalled: 'not installed', starting: 'Starting…', in: 'in',
     promptPlaceholder: 'What should be done?', followUp: 'Type a follow-up for the agent…',
@@ -182,6 +185,7 @@
         this.agent = state.preset?.agent || last?.agent || this.agent;
         if (!state.agents[this.agent]?.installed) { this.agent = this.installed[0] || this.agent; }
         this.el.cwd.value = tilde(state.preset?.cwd || last?.cwd || '', state.home);
+        this.worktree = !!state.preset?.worktree;
         this.#renderRecent();
       }
       this.#go('prompt');
@@ -212,7 +216,7 @@
         const text = this.el.prompt.value.trim();
         this.el.quote.textContent = text || T.noPrompt;
         this.el.quote.classList.toggle('empty', !text);
-        this.el.where.innerHTML = `${FOLDER}<span>${T.in} <b style="color:var(--text)">${esc(this.el.cwd.value.trim())}</b></span>`;
+        this.#renderWhere();
         this.#renderAgents();
         this.#message(T.hintAgent(Object.keys(this.state.agents).length));
         this.el.submit.focus();
@@ -272,11 +276,18 @@
       this.busy = true;
       this.el.submit.disabled = true;
       this.#message(T.starting);
-      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.el.prompt.value.trim() });
+      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.el.prompt.value.trim(), worktree: !!this.worktree });
       this.busy = false;
       this.el.submit.disabled = false;
       if (res?.ok) { this.api.close(); }
       else { this.#message(res?.error || T.wrong, true); }
+    }
+
+    // Where the agent will run, and the switch that gives it its own git worktree (a copy of the repo on a
+    // new branch) so it can't step on another agent's files
+    #renderWhere() {
+      this.el.where.innerHTML = `${FOLDER}<span>${T.in} <b style="color:var(--text)">${esc(this.el.cwd.value.trim())}</b></span>
+        <button type="button" class="chip${this.worktree ? ' on' : ''}" id="worktree" aria-pressed="${!!this.worktree}" title="${T.worktreeTip}">${T.worktree}</button>`;
     }
 
     // Prompts already waiting for this agent, each removable
@@ -330,6 +341,11 @@
       this.el.browse.addEventListener('click', async () => {
         const dir = await this.api.pickFolder(this.el.cwd.value);
         if (dir) { this.el.cwd.value = tilde(dir, this.state.home); this.#renderRecent(); this.el.prompt.focus(); }
+      });
+      this.el.where.addEventListener('click', e => {
+        if (!e.target.closest('#worktree')) { return; }
+        this.worktree = !this.worktree;
+        this.#renderWhere();
       });
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
