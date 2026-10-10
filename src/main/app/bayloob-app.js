@@ -36,6 +36,8 @@ const { TerminalFocuser } = require("../infrastructure/desktop/terminal-focuser"
 const { WindowService } = require("../infrastructure/desktop/window.service");
 const { Git } = require("../infrastructure/system/git");
 const { AgentDiscovery } = require("../infrastructure/system/agent-discovery");
+const { MenuWatcher } = require("../modules/agents/terminal-menu");
+const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
 const { LauncherWindow } = require("../windows/launcher-window");
 const { OverlayWindow } = require("../windows/overlay-window");
@@ -49,6 +51,7 @@ const RECONCILE_MS = 5000;
 const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the agents
 const OUTPUT_MS = 2000; // refresh of the last-output lines while the pill's list is open
 const SOUNDS_DIR = path.join(ASSETS_DIR, "sounds");
+const MENU_MS = 2000; // how often idle tmux panes are checked for a terminal-only question
 const DISCOVER_MS = 15_000; // how often running agents are looked for (new ones, idle ones, ended ones)
 const BLOCKED_MS = 5000; // how often waiting time is credited
 const PRESENCE_MS = 15_000; // how often the screen lock is checked
@@ -112,6 +115,14 @@ class BayloobApp {
   output = new SessionOutput();
   git = new Git();
   discovery = new AgentDiscovery();
+  // Questions agents ask only in their terminal (folder trust, update offers…), read from tmux panes
+  menus = new MenuWatcher({
+    capture: capturePane,
+    sendKey: (pane, key) =>
+      new Promise(resolve =>
+        execFile("tmux", ["send-keys", "-t", pane, key], { timeout: 2000 }, () => resolve())
+      ),
+  });
   radar = new CollisionRadar({ resolveRoot: cwd => this.git.toplevel(cwd) });
   #collisions = {}; // session id -> { with, files, level, conflictWith }
   #radarTimer = null;
@@ -246,6 +257,7 @@ class BayloobApp {
       this.#discover();
       setInterval(() => this.#discover(), DISCOVER_MS).unref();
     }
+    setInterval(() => this.#scanMenus(), MENU_MS).unref();
     if (this.demo) {
       const { DemoScenario } = require("./demo");
       setTimeout(
@@ -768,6 +780,20 @@ class BayloobApp {
   }
 
   // Drop sessions whose tmux session ended (agent exited, or killed outside Bayloob)
+  async #scanMenus() {
+    const store = this.server.store;
+    const sessions = store.list();
+    const found = await this.menus.scan(sessions).catch(() => ({}));
+    let changed = false;
+    for (const s of sessions) {
+      // Not looked at (busy, hook card, not tmux) → no terminal menu either
+      changed = store.setMenu(s.id, found[s.id] ?? null) || changed;
+    }
+    if (changed) {
+      store.changed();
+    }
+  }
+
   #discover() {
     try {
       if (this.server.store.adopt(this.discovery.find())) {
@@ -855,6 +881,15 @@ class BayloobApp {
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
     ipcMain.on("open-settings", () => this.openSettings());
+    // The user picked an option of a terminal-only question in the pill
+    ipcMain.handle("answer-menu", async (_e, sessionId, index) => {
+      const s = session(sessionId);
+      const r = await this.menus.answer(s, Number(index));
+      if (s && this.server.store.setMenu(s.id, r.menu ?? null)) {
+        this.server.store.changed();
+      }
+      return r;
+    });
     ipcMain.handle("open-finding", (_e, sessionId, file, line) =>
       this.openFinding(session(sessionId), String(file), Number(line))
     );

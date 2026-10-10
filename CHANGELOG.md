@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- Questions an agent asks only in its terminal — before its hooks run, like the folder-trust question
+  on first start or Codex's update offer — appear as a card in the pill for agents in tmux. Each option
+  is its own button: Bayloob moves the terminal's cursor to it and confirms (never a bare Enter, since
+  the terminal's default can be the risky choice, e.g. Codex's "Update now" runs a script).
+
 ### Fixed
 - Agents that were already running when Bayloob started — or sitting idle, so no hook had fired — now
   show up at once (and every 15 s): Claude Code from `~/.claude/sessions/<pid>.json` (its hooks' own

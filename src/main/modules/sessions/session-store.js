@@ -231,6 +231,16 @@ class SessionStore extends EventEmitter {
     return [...new Set([...this.#launched.values()].map(l => l.name))];
   }
 
+  /** A menu read from the session's terminal (MenuWatcher), or null; returns whether it changed. */
+  setMenu(id, menu) {
+    const s = this.#sessions.get(id);
+    if (!s || JSON.stringify(s.menu || null) === JSON.stringify(menu || null)) {
+      return false;
+    }
+    s.menu = menu || null;
+    return true;
+  }
+
   touch(id) {
     const s = this.#sessions.get(id);
     if (s) {

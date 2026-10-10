@@ -126,4 +126,9 @@ class SessionOutput {
   }
 }
 
-module.exports = { SessionOutput, lastFromTranscript, lastFromPane };
+module.exports = {
+  capturePane,
+  SessionOutput,
+  lastFromTranscript,
+  lastFromPane,
+};

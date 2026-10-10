@@ -92,6 +92,17 @@
   .label .ruled code { font: 600 12px ui-monospace, monospace; }
   .immune.warn { margin-top: 8px; font-size: 12.5px; color: var(--waiting); }
   .immune code { font: 500 11.5px ui-monospace, monospace; }
+  .card.menu { border-color: color-mix(in srgb, var(--thinking) 45%, transparent); }
+  .card.menu .mq { color: var(--text); font-weight: 600; margin-bottom: 10px;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .card.menu .mopts { display: flex; flex-direction: column; gap: 6px; }
+  .card.menu .opt { text-align: left; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: rgb(var(--ink) / .04); color: var(--text); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card.menu .opt:hover { background: rgb(var(--ink) / .09); border-color: color-mix(in srgb, var(--thinking) 45%, transparent); }
+  .card.menu .opt em { font-style: normal; color: var(--muted); font-size: 11px; }
+  .card.menu .opt:disabled { opacity: .5; }
+  .card.menu .hint { color: var(--muted); }
+  .card.menu .hint.err { color: var(--waiting); }
   .card.errcopy { border-color: color-mix(in srgb, var(--working) 45%, transparent); }
   .card.errcopy .code { max-height: 3.2em; overflow: hidden; }
   .findings { margin-top: 10px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--waiting) 35%, transparent); overflow: hidden; }
@@ -328,6 +339,8 @@
     replyTo: agent => `Reply to ${agent}…`, replySend: '✓ Send', replySendTip: 'Enter, then Enter again to send',
     replyConfirm: agent => `Enter again sends it to ${agent} · Esc to edit`, replyDialog: 'Open in the prompt window',
     replyFailed: 'Could not send',
+    asksInTerminal: 'asks in the terminal', termDefault: '(terminal default)',
+    menuHint: 'Bayloob picks the option you click in the terminal for you',
     errorCopied: 'Error copied — fix it?', lines: n => `${n} line${n === 1 ? '' : 's'}`,
     fixIn: (agent, project) => `Fix in ${agent} · ${project}`, fixNew: 'New session…',
     findings: n => `⚔ Challenge report · ${n} finding${n === 1 ? '' : 's'}`, noFindings: '⚔ No problems found',
@@ -581,7 +594,9 @@
       this.#expireToast();
       const perms = this.sessions.filter(s => s.perm).sort((a, b) => Number(a.perm.id) - Number(b.perm.id));
       if (this.errorNote && Date.now() > this.errorNote.until && !this.hovering) { this.errorNote = null; }
+      const menus = this.sessions.filter(s => s.menu);
       const card = perms.length ? this.#permCard(perms[0], perms.length - 1)
+        : menus.length ? this.#menuCard(menus[0])
         : this.toast ? this.#doneCard() : this.errorNote ? this.#errorCard() : null;
       this.el.card.className = card ? `card ${card.kind}` : 'card';
       this.el.card.innerHTML = card ? card.html : '';
@@ -686,6 +701,21 @@
           <button class="btn" data-act="fix-err" data-sid="">${T.fixNew}</button>
           ${fix}
         </div>` };
+    }
+
+    // A question the agent asks only in its terminal (folder trust, an update offer…). Every option is a
+    // button of its own — there is no "press Enter" here, because the terminal's default may be the risky one
+    #menuCard(s) {
+      const m = s.menu;
+      const sid = esc(s.id);
+      const opts = m.options.map((label, i) => `<button class="opt" data-act="menu" data-sid="${sid}" data-i="${i}" title="${esc(label)}">
+          ${esc(label)}${i === m.selected ? ` <em>${T.termDefault}</em>` : ''}</button>`).join('');
+      return { kind: 'menu', html: `
+        ${this.#cardHead(s, T.asksInTerminal)}
+        <div class="mq" title="${esc(m.question)}">${esc(m.question)}</div>
+        <div class="mopts">${opts}</div>
+        <div class="hint" data-mhint="${sid}">${T.menuHint}</div>
+        <div class="actions"><button class="btn" data-act="focus" data-sid="${sid}">${T.openTerminal}</button></div>` };
     }
 
     #cardHead(s, verb) {
@@ -991,6 +1021,14 @@
         const r = await this.api?.challenge(b.dataset.sid);
         if (r?.ok === false && this.toast) { this.toast.hint = r.error; }
         this.render();
+      } else if (act === 'menu') {
+        for (const x of this.el.card.querySelectorAll('[data-act=menu]')) { x.disabled = true; }
+        const r = await this.api?.answerMenu(b.dataset.sid, Number(b.dataset.i));
+        if (r?.ok === false) {
+          const hint = this.el.card.querySelector('[data-mhint]');
+          if (hint) { hint.textContent = r.error; hint.classList.add('err'); }
+          for (const x of this.el.card.querySelectorAll('[data-act=menu]')) { x.disabled = false; }
+        }
       } else if (act === 'fix-err') {
         this.errorNote = null;
         this.api?.fixError(b.dataset.sid || null);

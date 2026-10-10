@@ -33,4 +33,5 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
   challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),
   openFinding: (sessionId, file, line) => ipcRenderer.invoke("open-finding", sessionId, file, line),
+  answerMenu: (sessionId, index) => ipcRenderer.invoke("answer-menu", sessionId, index),
 });
