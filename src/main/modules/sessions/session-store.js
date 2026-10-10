@@ -12,7 +12,9 @@ const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const TERM_KEYS = ["term", "winid", "kitty", "kittysock", "wez", "tmux", "pid"];
 
 // The hook reports its parent PID, which is usually a short-lived `sh -c` started by the agent.
-// Resolve it to the agent process itself while that shell still exists (Linux /proc; elsewhere: as is).
+// Resolve it to the agent process itself while that shell still exists (Linux /proc). null when it can't
+// be checked (the shell already gone, no /proc): a guessed pid could be a dead shell, and a session would
+// then look ended (removeDead).
 const SHELLS = new Set(["sh", "bash", "dash", "zsh", "fish"]);
 function agentPidOf(pid) {
   try {
@@ -21,7 +23,7 @@ function agentPidOf(pid) {
     const ppid = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1];
     return SHELLS.has(comm) ? ppid : String(pid);
   } catch {
-    return String(pid);
+    return null;
   }
 }
 
@@ -50,7 +52,11 @@ class SessionStore extends EventEmitter {
       TERM_KEYS.filter(k => query.get(k)).map(k => [k, query.get(k)])
     );
     if (fresh.pid) {
-      fresh.agentPid = agentPidOf(fresh.pid);
+      // Keep a pid verified earlier when this event's can't be checked
+      const agentPid = agentPidOf(fresh.pid) || old?.term?.agentPid;
+      if (agentPid) {
+        fresh.agentPid = agentPid;
+      }
     }
     const term = Object.keys(fresh).length ? fresh : old?.term || {};
     const launch = this.#launched.get(term.tmux);
@@ -88,6 +94,22 @@ class SessionStore extends EventEmitter {
     return session;
   }
 
+  /**
+   * Removes sessions whose agent process has ended (the hooks may never say so — Codex sends no
+   * SessionEnd, a killed agent sends nothing). Bayloob-launched ones go with their tmux session instead.
+   */
+  removeDead(isAlive) {
+    let removed = false;
+    for (const [id, s] of this.#sessions) {
+      const pid = Number(s.term?.agentPid || (s.discovered ? s.term?.pid : 0));
+      if (!s.managed && !s.perm && pid > 0 && !isAlive(pid)) {
+        this.#sessions.delete(id);
+        removed = true;
+      }
+    }
+    return removed;
+  }
+
   #discoveredTwin(id, agent, term) {
     for (const s of this.#sessions.values()) {
       const samePane = term.tmux && s.term?.tmux === term.tmux;
@@ -113,6 +135,24 @@ class SessionStore extends EventEmitter {
       const known = this.#sessions.get(id);
       if (known) {
         known.aliveAt = now;
+        // The agent says it's idle, later than our last event, while we think it's busy: its turn ended
+        // without a Stop hook (e.g. interrupted with Esc). Without this, prompts would queue forever.
+        const busy = known.state === "thinking" || known.state === "working";
+        if (
+          busy &&
+          a.state === "idle" &&
+          !known.perm &&
+          a.statusAt &&
+          a.statusAt > known.updatedAt
+        ) {
+          Object.assign(known, { state: "idle", tool: null, updatedAt: now });
+          known.activity = {
+            title: "Stopped",
+            detail: "The turn ended without a Stop event",
+            at: now,
+          };
+          changed = true;
+        }
         continue;
       }
       this.#sessions.set(id, {

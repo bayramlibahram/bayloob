@@ -9,6 +9,14 @@
   the terminal's default can be the risky choice, e.g. Codex's "Update now" runs a script).
 
 ### Fixed
+- A prompt to an agent whose turn ended without a Stop hook (interrupted with Esc) no longer waits in
+  the queue forever: Claude Code's own session status (`idle`, newer than Bayloob's last event) sets
+  the session idle, and the queue goes out.
+- Sessions whose agent process has ended are removed (Codex sends no SessionEnd; a killed agent sends
+  nothing). Only pids Bayloob could verify are judged — never a guessed one.
+- Prompts are never typed into a plain shell: if the agent has exited and its tmux pane shows bash/zsh,
+  Bayloob refuses with a clear message; an empty pane id is refused too (tmux would pick the current
+  pane).
 - Agents that were already running when Bayloob started — or sitting idle, so no hook had fired — now
   show up at once (and every 15 s): Claude Code from `~/.claude/sessions/<pid>.json` (its hooks' own
   session id; the process start time guards against reused pids), Codex from its open rollout file.

@@ -147,3 +147,44 @@ test("when the hooks speak under another id for the same pane, the found session
   );
   assert.equal(store.get("codex:thread-9").discovered, undefined);
 });
+
+test("a busy session whose agent reports idle later is set idle (an interrupted turn sends no Stop)", () => {
+  const store = new SessionStore();
+  store.upsert("claude:c-1", "claude", { cwd: "/w/shop" }, new URLSearchParams(), {
+    state: "working",
+  });
+  const s = store.get("claude:c-1");
+  const idle = {
+    agent: "claude",
+    sessionId: "c-1",
+    pid: 101,
+    cwd: "/w/shop",
+    state: "idle",
+    term: { pid: "101" },
+  };
+  // Agent's status is older than our last event: keep "working"
+  assert.equal(store.adopt([{ ...idle, statusAt: s.updatedAt - 5000 }]), false);
+  assert.equal(s.state, "working");
+  // Newer: the turn ended
+  assert.equal(store.adopt([{ ...idle, statusAt: s.updatedAt + 1000 }]), true);
+  assert.equal(s.state, "idle");
+  assert.equal(s.activity.title, "Stopped");
+});
+
+test("sessions whose agent process ended are removed; unverified or managed ones are kept", () => {
+  const store = new SessionStore();
+  store.upsert("codex:t-1", "codex", { cwd: "/w/api" }, new URLSearchParams(), { state: "done" });
+  store.get("codex:t-1").term = { pid: "500", agentPid: "500" };
+  store.upsert("claude:u-1", "claude", { cwd: "/w/x" }, new URLSearchParams(), { state: "idle" });
+  store.get("claude:u-1").term = { pid: "600" }; // never verified: no agentPid → never judged dead
+  store.trackLaunch({ name: "bl-x", paneId: "%3", agent: "claude", cwd: "/w/y" });
+  const alive = pid => pid !== 500 && pid !== 600;
+  assert.equal(store.removeDead(alive), true);
+  assert.deepEqual(
+    store
+      .list()
+      .map(s => s.id)
+      .sort(),
+    ["claude:tmux:bl-x", "claude:u-1"]
+  );
+});

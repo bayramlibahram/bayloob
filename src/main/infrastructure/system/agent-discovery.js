@@ -17,7 +17,9 @@ const TERM_ENV = {
   WINDOWID: "winid",
   TERM_PROGRAM: "term",
 };
-const CLAUDE_STATES = { busy: "thinking", idle: "idle" }; // anything else → idle
+// Claude Code's own status for the session (busy / idle / waiting); also how Bayloob notices a turn that
+// ended without a Stop hook (an interrupted turn doesn't send one)
+const CLAUDE_STATES = { busy: "thinking", idle: "idle", waiting: "idle" };
 
 const read = file => {
   try {
@@ -118,6 +120,7 @@ class AgentDiscovery {
         pid: s.pid,
         cwd: s.cwd || link(path.join(this.proc, String(s.pid), "cwd")) || "",
         state: CLAUDE_STATES[s.status] || "idle",
+        statusAt: Number(s.statusUpdatedAt || s.updatedAt) || null,
         transcript: this.#claudeTranscript(s.sessionId),
         term: this.#term(s.pid),
       });

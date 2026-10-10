@@ -8,6 +8,7 @@ const { agentCommand } = require("./agents");
 const { TerminalLauncher } = require("../../infrastructure/system/terminal-launcher");
 
 const PREFIX = "bl-";
+const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash", "ksh", "tcsh", "csh"]);
 
 const tmux = args =>
   new Promise((resolve, reject) => {
@@ -101,6 +102,17 @@ class SessionLauncher {
     const body = String(text).replace(/\r/g, "").trim();
     if (!body) {
       return;
+    }
+    // An empty or odd target would make tmux pick the current pane — someone else's terminal
+    if (!/^%\d+$/.test(String(paneId))) {
+      throw new Error("No tmux pane for this session");
+    }
+    // If the agent has exited, the pane runs a plain shell: typing there would run the prompt as a command
+    const running = (
+      await tmux(["display-message", "-p", "-t", paneId, "#{pane_current_command}"])
+    ).trim();
+    if (SHELLS.has(running)) {
+      throw new Error("The agent isn't running in that terminal any more");
     }
     if (body.includes("\n")) {
       const buffer = `bayloob-${Date.now()}`;

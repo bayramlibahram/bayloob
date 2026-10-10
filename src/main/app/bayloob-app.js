@@ -52,7 +52,7 @@ const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the age
 const OUTPUT_MS = 2000; // refresh of the last-output lines while the pill's list is open
 const SOUNDS_DIR = path.join(ASSETS_DIR, "sounds");
 const MENU_MS = 2000; // how often idle tmux panes are checked for a terminal-only question
-const DISCOVER_MS = 15_000; // how often running agents are looked for (new ones, idle ones, ended ones)
+const DISCOVER_MS = 5000; // how often running agents are looked for (new ones, idle ones, ended ones)
 const BLOCKED_MS = 5000; // how often waiting time is credited
 const PRESENCE_MS = 15_000; // how often the screen lock is checked
 const SAVE_MS = 60_000; // how often today's waiting total is written to disk
@@ -796,8 +796,11 @@ class BayloobApp {
 
   #discover() {
     try {
-      if (this.server.store.adopt(this.discovery.find())) {
-        this.server.store.changed();
+      const store = this.server.store;
+      const adopted = store.adopt(this.discovery.find());
+      const removed = store.removeDead(pid => fs.existsSync(`/proc/${pid}`));
+      if (adopted || removed) {
+        store.changed();
       }
     } catch (e) {
       console.error("discovery:", e.message);
