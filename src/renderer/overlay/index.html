@@ -218,6 +218,7 @@
     deaf: { 'not-installed': 'no hooks', broken: 'hook missing', unheard: 'agent silent' },
     deafTip: 'Bayloob can’t hear your agents — click to open Settings',
     diffTip: d => `Uncommitted in this repo: ${d.files} file${d.files === 1 ? '' : 's'} changed${d.untracked ? ` (${d.untracked} new)` : ''}`,
+    tokensTip: t => `Tokens: ${t.input.toLocaleString()} in · ${t.output.toLocaleString()} out · ${t.cacheWrite.toLocaleString()} cache write\n+ ${t.cacheRead.toLocaleString()} read from cache (not counted)`,
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
@@ -329,6 +330,7 @@
     health = { ok: true, issues: [] };
     output = {};           // session id -> latest output line (only while the list is open)
     diffs = {};            // session id -> { files, added, deleted, untracked } of its repo
+    tokens = {};           // session id -> { input, output, cacheWrite, cacheRead, total }
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -358,6 +360,8 @@
     setOutput(lines) { this.output = lines || {}; this.render(); }
 
     setDiffs(diffs) { this.diffs = diffs || {}; this.render(); }
+
+    setTokens(tokens) { this.tokens = tokens || {}; this.render(); }
 
     setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
 
@@ -526,7 +530,7 @@
       if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
-          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
+          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
           ${this.#diffHtml(s.id)}
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
           ${this.#rowControls(s)}</div>`).join('');
@@ -541,6 +545,12 @@
         s.managed ? `<button class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
         `<button class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}">${ICON_TERM}</button>`,
       ].join('');
+    }
+
+    // " · 1.35M tok" after the agent's name, with the full breakdown on hover
+    #tokensHtml(id) {
+      const t = this.tokens[id];
+      return t ? ` · <span title="${esc(T.tokensTip(t))}">${formatTokens(t.total)} tok</span>` : '';
     }
 
     // "+42 −7" for the session's repo; nothing when it's clean or not a repo
@@ -654,6 +664,7 @@
     window.bayloobAPI.onHealth?.(h => view.setHealth(h));
     window.bayloobAPI.onOutput?.(lines => view.setOutput(lines));
     window.bayloobAPI.onDiffs?.(diffs => view.setDiffs(diffs));
+    window.bayloobAPI.onTokens?.(tokens => view.setTokens(tokens));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

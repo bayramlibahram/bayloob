@@ -10,6 +10,7 @@ const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt"
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { SessionOutput } = require("../modules/sessions/session-output");
+const { TokenUsage } = require("../modules/sessions/token-usage");
 const { HookHealth } = require("../modules/hooks/hook-health");
 const { HookInstaller } = require("../modules/hooks/hook-installer");
 const { MusicWatcher } = require("../modules/music/music-watcher");
@@ -86,6 +87,7 @@ class BayloobApp {
   #statsTimer = null;
   output = new SessionOutput();
   git = new Git();
+  tokens = new TokenUsage();
   #outputTimer = null;
 
   // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
@@ -421,6 +423,7 @@ class BayloobApp {
       ]);
       this.overlay.send("output", lines);
       this.overlay.send("diffs", diffs);
+      this.overlay.send("tokens", this.tokens.forSessions(sessions));
     };
     run();
     this.#outputTimer = setInterval(run, OUTPUT_MS);
