@@ -1,0 +1,85 @@
+/* Files attached to a prompt (see attachments.js): chips under the box, and the drop highlight */
+.atts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.atts[hidden] {
+  display: none;
+}
+.att {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 3px 3px 3px 9px;
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.06);
+  border: 1px solid rgb(var(--ink) / 0.09);
+  font-size: 12px;
+}
+.att .ai {
+  color: var(--brand-soft, #b69bff);
+  font-size: 11px;
+}
+.att .an {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--soft, #c9c7d4);
+}
+.att small {
+  color: var(--muted, #8b8b96);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.att button {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--muted, #8b8b96);
+  flex: none;
+}
+.att button:hover {
+  background: rgba(255, 93, 108, 0.15);
+  color: #ff5d6c;
+}
+.att.wait {
+  padding-right: 10px;
+  opacity: 0.7;
+}
+.att.wait .an {
+  font-style: italic;
+}
+.attach {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--muted, #8b8b96);
+}
+.attach:hover {
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text, #f2f2f5);
+}
+.attach svg,
+.ghost.attach-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dropping {
+  outline: 2px dashed color-mix(in srgb, var(--brand, #8b5cff) 75%, transparent);
+  outline-offset: 2px;
+  background: rgba(139, 92, 255, 0.08) !important;
+}

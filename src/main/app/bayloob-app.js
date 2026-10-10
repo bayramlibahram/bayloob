@@ -40,6 +40,7 @@ const { SystemStats } = require("../infrastructure/system/system-stats");
 const { AgentConsole } = require("../modules/console/agent-console");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
 const { SpeechEngine } = require("../modules/voice/speech-engine");
+const { UploadStore } = require("../modules/uploads/upload-store");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
@@ -97,6 +98,7 @@ class BayloobApp {
   overlay = new OverlayWindow({ topBar: () => this.windows.panel() });
   launcherWindow = new LauncherWindow();
   panel = new PanelWindow();
+  uploads = new UploadStore();
   settingsWindow = new SettingsWindow();
   server = new EventServer();
   notifier = new Notifier();
@@ -200,6 +202,7 @@ class BayloobApp {
     // Every window's CSS follows prefers-color-scheme, which follows this
     nativeTheme.themeSource = this.settings.get("theme");
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
+    this.uploads.prune();
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
     this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
     // A rule allowed something without a card: say so briefly, so nothing passes unseen
@@ -1046,6 +1049,24 @@ class BayloobApp {
       this.launcherWindow.pickFolder(current ? expandHome(current) : os.homedir())
     );
     ipcMain.on("launcher:close", () => this.launcherWindow.hide());
+
+    // Files attached to a prompt (launcher and panel): copied into the cache, the agent gets their paths
+    const popupOf = sender =>
+      [this.launcherWindow, this.panel].find(p => p.win?.webContents === sender);
+    ipcMain.handle("uploads:pick", async e => {
+      const paths = await popupOf(e.sender)?.pickFiles();
+      return this.uploads.addFiles(paths || []);
+    });
+    ipcMain.handle("uploads:add-paths", (_e, paths) =>
+      this.uploads.addFiles(Array.isArray(paths) ? paths : [])
+    );
+    ipcMain.handle("uploads:add-bytes", (_e, name, bytes) => {
+      try {
+        return { items: [this.uploads.addBytes(String(name || "file"), bytes)], errors: [] };
+      } catch (err) {
+        return { items: [], errors: [`${name}: ${err.message}`] };
+      }
+    });
     ipcMain.handle("launcher:clipboard", () => {
       const text = clipboard.readText();
       return looksLikeError(text) ? errorPrompt(text) : text;

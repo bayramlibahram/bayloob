@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("panelAPI", {
   onShow: cb => ipcRenderer.on("panel:show", (_e, state) => cb(state)),
@@ -33,5 +33,12 @@ contextBridge.exposeInMainWorld("panelAPI", {
   continueInBayloob: sessionId => ipcRenderer.invoke("continue-in-bayloob", sessionId),
   openSettings: () => ipcRenderer.send("panel:open-settings"),
   resize: height => ipcRenderer.send("panel:resize", height),
+  // Attachments: a dropped or pasted file's path (Electron has no File.path any more), and the upload calls
+  uploads: {
+    pathFor: file => webUtils.getPathForFile(file),
+    pick: () => ipcRenderer.invoke("uploads:pick"),
+    addPaths: paths => ipcRenderer.invoke("uploads:add-paths", paths),
+    addBytes: (name, bytes) => ipcRenderer.invoke("uploads:add-bytes", name, bytes),
+  },
   close: () => ipcRenderer.send("panel:close"),
 });

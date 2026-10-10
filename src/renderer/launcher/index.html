@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>Bayloob launcher</title>
 <link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="../shared/attachments.css">
 <style>
   :root {
     --glass: rgba(18, 17, 23, 0.97);
@@ -73,6 +74,7 @@
   .ghost { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 8px; color: var(--soft); font-size: 12px; font-weight: 600; }
   .ghost:hover { background: rgb(var(--ink) / .08); color: var(--text); }
   .ghost svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .composer .atts { padding: 2px 12px 4px; }
   .tools .count { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
   .project { display: flex; flex-direction: column; gap: 8px; }
@@ -171,7 +173,10 @@
       <section class="step" id="stepPrompt">
         <div class="composer">
           <textarea id="prompt" rows="3" placeholder="What should be done?" spellcheck="false"></textarea>
+          <ul class="atts" id="atts" hidden></ul>
           <div class="tools">
+            <button type="button" class="ghost attach-btn" id="attach" title="Attach files — or drop them here, or paste a screenshot (Ctrl+V)" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg>Attach</button>
             <button type="button" class="ghost" id="paste" title="Paste what you copied — an error becomes a fix-it prompt">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Paste clipboard</button>
             <span class="count" id="count"></span>
@@ -214,6 +219,7 @@
   </form>
 
 <script src="../shared/ui-common.js"></script>
+<script src="../shared/attachments.js"></script>
 <script>
   const T = {
     ask: 'Ask Bayloob', askSub: 'Start a new agent session',
@@ -229,7 +235,8 @@
     promptPlaceholder: 'What should be done?', followUp: 'Type a follow-up for the agent…',
     chars: n => `${n} chars`, wrong: 'Something went wrong',
     openIn: 'Open in', rTerminal: 'Terminal',
-    rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rWhen: 'Delivery', rPrompt: 'Prompt', edit: 'Edit',
+    rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rWhen: 'Delivery', rPrompt: 'Prompt', rFiles: 'Files', edit: 'Edit',
+    attaching: 'Wait — the files are still being attached',
     inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
     now: '● sent now',
     paste: '📋 copied · paste with Ctrl+Shift+V (not in tmux)', pasteBtn: 'Copy & open terminal', queued: '⏳ queued — the agent is busy; it goes out when its turn ends',
@@ -255,7 +262,10 @@
       this.el = { form: $('form'), who: $('who'), title: $('title'), subtitle: $('subtitle'), steps: $('steps'), close: $('close'),
         stepPrompt: $('stepPrompt'), stepAgent: $('stepAgent'), stepConfirm: $('stepConfirm'), prompt: $('prompt'), count: $('count'),
         paste: $('paste'), queued: $('queued'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
+        attach: $('attach'), atts: $('atts'),
         quote: $('quote'), agents: $('agents'), worktree: $('worktree'), terms: $('terms'), review: $('review'), msg: $('msg'), back: $('back'), submit: $('submit') };
+      this.att = new Attachments({ api: api.uploads, list: this.el.atts, onChange: () => this.#fit(), onError: t => this.#message(t, true) });
+      this.el.attach.hidden = !this.att.available;
       this.#bind();
     }
 
@@ -263,6 +273,7 @@
     get installed() { return Object.keys(this.state.agents).filter(k => this.state.agents[k].installed); }
     get flow() { return this.isNew ? ['prompt', 'agent', 'confirm'] : ['prompt', 'confirm']; }
     get text() { return this.el.prompt.value.trim(); }
+    get prompt() { return this.att.compose(this.text); } // what the agent gets: the text and the attached files
 
     show(state) {
       this.state = state;
@@ -272,6 +283,7 @@
       this.el.title.textContent = this.isNew ? T.ask : T.send(s.agentName);
       this.el.subtitle.textContent = this.isNew ? T.askSub : s.project;
       this.el.prompt.value = state.prefill || '';
+      this.att.clear();
       this.el.prompt.classList.toggle('code', !!state.prefill && !state.draft);
       this.el.prompt.placeholder = this.isNew ? T.promptPlaceholder : T.followUp;
       this.el.projectBox.hidden = !this.isNew;
@@ -320,8 +332,8 @@
         this.#updateCount();
         this.el.prompt.focus();
       } else if (step === 'agent') {
-        this.el.quote.textContent = this.text || T.noPrompt;
-        this.el.quote.classList.toggle('empty', !this.text);
+        this.el.quote.textContent = this.prompt || T.noPrompt;
+        this.el.quote.classList.toggle('empty', !this.prompt);
         this.#renderAgents();
         this.#renderWorktree();
         this.#renderTerms();
@@ -338,7 +350,8 @@
     #next() {
       if (this.busy) { return; }
       if (this.step === 'prompt') {
-        if (!this.isNew && !this.text) { this.#message(T.writeFirst, true); return this.el.prompt.focus(); }
+        if (this.att.busy) { return this.#message(T.attaching, true); }
+        if (!this.isNew && !this.prompt) { this.#message(T.writeFirst, true); return this.el.prompt.focus(); }
         if (this.isNew && !this.el.cwd.value.trim()) { this.#message(T.pickProject, true); return this.el.cwd.focus(); }
       }
       if (this.step === 'confirm') { return this.isNew ? this.#launch() : this.#send(); }
@@ -408,7 +421,8 @@
         rows.push([T.rWhen, this.#willPaste ? `<span class="badge paste">${T.paste}</span>`
           : this.#willQueue ? `<span class="badge queue">${T.queued}</span>` : `<span class="badge now">${T.now}</span>`]);
       }
-      const text = this.text;
+      if (this.att.count) { rows.push([T.rFiles, this.att.items.map(a => `<code title="${esc(a.path)}">${esc(a.name)}</code>`).join(' ')]); }
+      const text = this.prompt;
       this.el.review.innerHTML = rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('') +
         `<div class="prompt"><span class="label">${T.rPrompt}</span><button type="button" class="ghost edit" data-edit>${T.edit}</button>
           <pre class="${text ? '' : 'empty'}">${esc(text || T.noPrompt)}</pre></div>`;
@@ -464,7 +478,7 @@
 
     async #launch() {
       this.#working(T.starting);
-      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.text, worktree: !!this.worktree, terminal: this.terminal });
+      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.prompt, worktree: !!this.worktree, terminal: this.terminal });
       if (res?.ok && this.terminal) {
         try { localStorage.setItem(TERMINAL_KEY, this.terminal); } catch { /* storage unavailable */ }
       }
@@ -473,7 +487,7 @@
 
     async #send() {
       this.#working(T.sending);
-      const res = await this.api.sendPrompt(this.state.session.id, this.text);
+      const res = await this.api.sendPrompt(this.state.session.id, this.prompt);
       this.#done(res);
     }
 
@@ -497,6 +511,10 @@
       this.el.back.addEventListener('click', () => this.#back());
       this.el.close.addEventListener('click', () => this.api.close());
       this.el.paste.addEventListener('click', () => this.#pasteClipboard());
+      this.el.attach.addEventListener('click', () => this.att.pick());
+      this.att.bindDrop(this.el.prompt.closest('.composer'));
+      this.att.bindPaste(this.el.prompt);
+      Attachments.guardWindow();
       this.el.prompt.addEventListener('input', () => { this.#updateCount(); this.#grow(); });
       this.el.queued.addEventListener('click', async e => {
         const b = e.target.closest('[data-unqueue]');

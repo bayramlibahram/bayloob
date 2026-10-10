@@ -1,4 +1,4 @@
-const { BrowserWindow, screen } = require("electron");
+const { BrowserWindow, dialog, screen } = require("electron");
 const paths = require("../app/paths");
 const { belowTopBar } = require("./overlay-position");
 
@@ -101,6 +101,14 @@ class PopupWindow {
     this.win.setResizable(true); // some window managers ignore setSize on non-resizable windows
     this.win.setSize(width, Math.min(Math.max(Math.round(height), 120), 900));
     this.win.setResizable(false);
+  }
+
+  /** The file chooser (several files); resolves to their paths, or [] when cancelled. */
+  pickFiles() {
+    return this.keepOpenDuring(async win => {
+      const r = await dialog.showOpenDialog(win, { properties: ["openFile", "multiSelections"] });
+      return r.canceled ? [] : r.filePaths;
+    });
   }
 
   /** Runs `fn` (e.g. a native dialog or menu) without the popup closing when focus moves to it. */
