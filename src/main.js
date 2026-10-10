@@ -17,6 +17,8 @@ const { RecentProjects } = require('./recent-projects');
 const { Settings } = require('./settings');
 const { AgentStats } = require('./stats');
 const { TerminalLauncher } = require('./terminal');
+const { WindowService } = require('./windows');
+const { GnomeExtension } = require('./gnome-extension');
 const { TrayMenu } = require('./tray');
 const { HookInstaller } = require('../scripts/install-hooks');
 
@@ -25,6 +27,7 @@ const IS_LINUX = process.platform === 'linux';
 const SCRIPTS_DIR = app.isPackaged
   ? path.join(process.resourcesPath, 'scripts')
   : path.join(__dirname, '..', 'scripts');
+const EXTENSION_DIR = path.join(SCRIPTS_DIR, '..', 'gnome-extension');
 const DECISIONS = new Set(['allow', 'deny', 'terminal']);
 const RECONCILE_MS = 5000;
 const STATS_MS = 2000;           // CPU/memory refresh while the panel is open
@@ -50,7 +53,9 @@ class BayloobApp {
   settingsWindow = new SettingsWindow();
   server = new EventServer();
   notifier = new Notifier();
-  focuser = new TerminalFocuser(SCRIPTS_DIR);
+  windows = new WindowService();
+  extension = new GnomeExtension(EXTENSION_DIR);
+  focuser = new TerminalFocuser(SCRIPTS_DIR, this.windows);
   launcher = new SessionLauncher();
   hooks = new HookInstaller(SCRIPTS_DIR, { log: () => {} });
   stats = new AgentStats();
@@ -147,8 +152,9 @@ class BayloobApp {
     }
   }
 
-  openSettings() {
+  async openSettings() {
     this.settingsWindow.show({
+      extension: await this.extension.status(),
       values: this.settings.all(),
       locked: this.settings.lockedByEnv(),
       detectedTerminal: new TerminalLauncher('').detected, // what auto-detect would pick
@@ -302,19 +308,31 @@ class BayloobApp {
     ipcMain.handle('settings:install-hooks', () => result(() => {
       if (!this.hooks.install()) throw new Error('~/.claude/settings.json is not valid JSON; nothing was changed');
     }));
+    ipcMain.handle('settings:install-extension', async () => {
+      try {
+        const r = await this.extension.install();
+        await this.windows.recheck();
+        return { ok: true, ...r };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    });
     ipcMain.on('settings:close', () => this.settingsWindow.hide());
     ipcMain.on('settings:resize', (_e, height) => this.settingsWindow.fitHeight(Number(height)));
   }
 }
 
+function startApp(argv) {
+  // On Wayland an app can't place its own window or keep it always on top → run under XWayland
+  if (IS_LINUX) app.commandLine.appendSwitch('ozone-platform', 'x11');
+
+  // Only one instance at a time (avoids a port clash). `bayloob --new-session` / `--panel` while running
+  // opens the launcher / the workspace panel in the running instance.
+  if (!app.requestSingleInstanceLock()) return app.exit(0);
+  new BayloobApp().start({ open: argv.includes('--new-session') ? 'launcher' : argv.includes('--panel') ? 'panel' : null });
+}
+
 const argv = process.argv.slice(1);
 const cliExit = runCli(argv, SCRIPTS_DIR);
-if (cliExit !== null) process.exit(cliExit);
-
-// On Wayland an app can't place its own window or keep it always on top → run under XWayland
-if (IS_LINUX) app.commandLine.appendSwitch('ozone-platform', 'x11');
-
-// Only one instance at a time (avoids a port clash). `bayloob --new-session` / `--panel` while running
-// opens the launcher / the workspace panel in the running instance.
-if (!app.requestSingleInstanceLock()) app.exit(0);
-else new BayloobApp().start({ open: argv.includes('--new-session') ? 'launcher' : argv.includes('--panel') ? 'panel' : null });
+if (cliExit === null) startApp(argv);
+else Promise.resolve(cliExit).then(code => process.exit(code));

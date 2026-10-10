@@ -43,6 +43,10 @@
           "hook.js",
           "x11-focus.py"
         ]
+      },
+      {
+        "from": "gnome-extension",
+        "to": "gnome-extension"
       }
     ],
     "directories": {
