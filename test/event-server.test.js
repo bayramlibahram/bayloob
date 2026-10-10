@@ -170,3 +170,43 @@ test("a request a rule allows gets no card, and the app is told about it", async
   assert.equal(server.store.get("claude:r1").perm, null);
   assert.deepEqual(told, [{ sessionId: "claude:r1", key: "npm test", command: "npm test" }]);
 });
+
+test("a challenger's non-read-only requests are refused without a card; its full answer is kept", async t => {
+  const server = new EventServer({ token: TOKEN }).listen();
+  await new Promise(r => server.http.once("listening", r));
+  t.after(() => stop(server));
+  server.store.trackLaunch({
+    name: "bl-shop",
+    paneId: "%9",
+    agent: "codex",
+    cwd: "/w/shop",
+    role: "challenger",
+  });
+  const perm = command =>
+    request("/perm?agent=claude&tmux=%259", {
+      hook_event_name: "PermissionRequest",
+      session_id: "c1",
+      cwd: "/w/shop",
+      tool_name: "Bash",
+      tool_input: { command },
+    });
+  const denied = await perm("git commit -am fix");
+  assert.match(denied.body, /"behavior":"deny"/);
+  assert.match(denied.body, /read-only reviewer/);
+  assert.equal(server.store.get("claude:c1")?.perm ?? null, null);
+  // A read-only command still asks the user (a card), as for any session
+  const pending = perm("git diff");
+  await new Promise(r => setTimeout(r, 50));
+  const card = server.store.get("claude:c1").perm;
+  assert.ok(card);
+  server.decide(card.id, "allow");
+  await pending;
+  const long = `Found:\n${"x".repeat(500)}\nsrc/cart.js:42 — empty cart`;
+  await request("/ev?agent=claude&tmux=%259", {
+    hook_event_name: "Stop",
+    session_id: "c1",
+    last_assistant_message: long,
+  });
+  assert.equal(server.store.get("claude:c1").report, long);
+  assert.ok(server.store.get("claude:c1").summary.length <= 160);
+});

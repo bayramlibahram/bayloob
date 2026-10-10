@@ -142,6 +142,11 @@ class SessionStore extends EventEmitter {
     s.activity = entry;
   }
 
+  /** The role a session was launched with (e.g. "challenger"), even before its first event is stored. */
+  roleOf(id, tmuxPane) {
+    return this.#sessions.get(id)?.role || this.#launched.get(tmuxPane)?.role || null;
+  }
+
   // Forget a stopped tmux session and every agent session that ran in it
   untrackLaunch(name) {
     for (const [pane, l] of this.#launched) {

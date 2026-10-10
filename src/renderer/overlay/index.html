@@ -92,6 +92,15 @@
   .label .ruled code { font: 600 12px ui-monospace, monospace; }
   .immune.warn { margin-top: 8px; font-size: 12.5px; color: var(--waiting); }
   .immune code { font: 500 11.5px ui-monospace, monospace; }
+  .findings { margin-top: 10px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--waiting) 35%, transparent); overflow: hidden; }
+  .findings.none { padding: 8px 12px; color: var(--done); border-color: color-mix(in srgb, var(--done) 35%, transparent); font-size: 12.5px; font-weight: 600; }
+  .findings .fh { padding: 7px 12px; font-size: 12px; font-weight: 700; color: var(--waiting);
+    background: color-mix(in srgb, var(--waiting) 9%, transparent); }
+  .findings .flist { max-height: 168px; overflow-y: auto; }
+  .finding { display: flex; gap: 10px; width: 100%; padding: 7px 12px; text-align: left; border-top: 1px solid var(--line); font-size: 12.5px; }
+  .finding:hover { background: rgb(var(--ink) / .05); }
+  .finding code { flex: none; font: 600 11.5px ui-monospace, monospace; color: var(--brand-soft); }
+  .finding span { color: var(--softer); overflow-wrap: anywhere; }
   .reply { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 4px 4px 4px 12px; border-radius: 12px;
     background: rgb(var(--ink) / .05); border: 1px solid var(--line); }
   .reply:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
@@ -317,6 +326,8 @@
     replyTo: agent => `Reply to ${agent}…`, replySend: '✓ Send', replySendTip: 'Enter, then Enter again to send',
     replyConfirm: agent => `Enter again sends it to ${agent} · Esc to edit`, replyDialog: 'Open in the prompt window',
     replyFailed: 'Could not send',
+    findings: n => `⚔ Challenge report · ${n} finding${n === 1 ? '' : 's'}`, noFindings: '⚔ No problems found',
+    openFinding: 'Open in the editor at this line',
     replyConfirmPaste: 'Enter again copies it and brings the terminal forward — paste with Ctrl+Shift+V',
     copiedPaste: '📋 Copied · paste with Ctrl+Shift+V',
     challenge: '⚔ Challenge', challenger: '⚔ challenger',
@@ -771,6 +782,7 @@
         ${this.#cardHead(s, T.finished)}
         <div class="summary">${esc(s.summary || T.taskDone)}</div>
         ${this.#receiptHtml(s)}
+        ${this.#findingsHtml(s)}
         ${this.#replyHtml(s)}
         ${this.toast.hint ? `<div class="hint">${esc(this.toast.hint)}</div>` : ''}
         <div class="actions">
@@ -792,6 +804,15 @@
           <button type="button" class="ricon" data-act="reply-dialog" data-sid="${esc(s.id)}" title="${T.replyDialog}">↗</button>
           <button type="submit" class="btn primary rsend" title="${T.replySendTip}">${r.confirm ? T.replySend : '→'}</button>
         </form>${hint ? `<div class="rhint">${hint}</div>` : ''}`;
+    }
+
+    // A ⚔ challenger's report: each `file:line` it found, click to open it in the editor
+    #findingsHtml(s) {
+      if (s.role !== 'challenger' || !s.findings) { return ''; }
+      if (!s.findings.length) { return `<div class="findings none">${T.noFindings}</div>`; }
+      const rows = s.findings.map(f => `<button type="button" class="finding" data-act="finding" data-sid="${esc(s.id)}" data-file="${esc(f.file)}" data-line="${f.line}" title="${esc(T.openFinding)}">
+          <code>${esc(f.file)}:${f.line}</code><span>${esc(f.text)}</span></button>`).join('');
+      return `<div class="findings"><div class="fh">${T.findings(s.findings.length)}</div><div class="flist">${rows}</div></div>`;
     }
 
     // The card is re-rendered on every update: put the reply text, focus and caret back
@@ -937,6 +958,9 @@
         const r = await this.api?.challenge(b.dataset.sid);
         if (r?.ok === false && this.toast) { this.toast.hint = r.error; }
         this.render();
+      } else if (act === 'finding') {
+        const r = await this.api?.openFinding(b.dataset.sid, b.dataset.file, Number(b.dataset.line));
+        if (r?.ok === false && this.toast) { this.toast.hint = r.error; this.render(); }
       } else if (act === 'reply-dialog') {
         this.api?.keyboard(false);
         this.api?.openPrompt(b.dataset.sid, this.#reply.sid === b.dataset.sid ? this.#reply.text : '');

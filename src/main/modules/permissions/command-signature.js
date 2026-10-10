@@ -195,6 +195,83 @@ function signature(tool, input = {}, cwd = "") {
   };
 }
 
+// What a read-only session (a ⚔ challenger) may still do: look, never change
+const READ_ONLY_TOOLS = new Set([
+  "Read",
+  "Glob",
+  "Grep",
+  "LS",
+  "NotebookRead",
+  "TodoWrite",
+  "WebSearch",
+  "WebFetch",
+]);
+const READ_ONLY_BINS = new Set([
+  "cat",
+  "head",
+  "tail",
+  "less",
+  "wc",
+  "ls",
+  "tree",
+  "pwd",
+  "echo",
+  "grep",
+  "rg",
+  "ag",
+  "find",
+  "file",
+  "stat",
+  "diff",
+  "which",
+  "sed",
+  "jq",
+]);
+const READ_ONLY_GIT = new Set([
+  "status",
+  "diff",
+  "log",
+  "show",
+  "blame",
+  "ls-files",
+  "grep",
+  "rev-parse",
+  "shortlog",
+  "describe",
+]);
+const WRITING_FLAGS = new Set([
+  "-i",
+  "--in-place",
+  "-delete",
+  "-exec",
+  "-execdir",
+  "-ok",
+  "-okdir",
+  "-fprint",
+  "-fprintf",
+  "-fls",
+]);
+
+/** Whether a request only reads: read tools, or one simple read-only command (no writes, no risky flags). */
+function readOnly(tool, input = {}, cwd = "") {
+  if (READ_ONLY_TOOLS.has(tool)) {
+    return true;
+  }
+  if (tool !== "Bash") {
+    return false;
+  }
+  const sig = signature(tool, input, cwd);
+  if (
+    !sig.parseable ||
+    sig.compound ||
+    sig.risky.length ||
+    sig.flags.some(f => WRITING_FLAGS.has(f.split("=")[0]))
+  ) {
+    return false;
+  }
+  return sig.head === "git" ? READ_ONLY_GIT.has(sig.sub) : READ_ONLY_BINS.has(sig.head);
+}
+
 /** Whether a standing "always allow" rule may be made from this signature: simple, local, harmless-looking. */
 function ruleable(sig) {
   return (
@@ -228,4 +305,12 @@ function similarity(a, b) {
   return Math.min(10, tenths) / 10;
 }
 
-module.exports = { signature, ruleable, similarity, tokenize, classifyPath, normalizeFlags };
+module.exports = {
+  signature,
+  ruleable,
+  similarity,
+  tokenize,
+  classifyPath,
+  normalizeFlags,
+  readOnly,
+};

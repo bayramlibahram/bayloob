@@ -9,6 +9,7 @@ const { AGENTS } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
 const { pickChallenger, challengePrompt } = require("../modules/agents/challenge");
+const { findingPath } = require("../modules/agents/challenge-report");
 const { PromptQueue } = require("../modules/agents/prompt-queue");
 const { PromptDelivery } = require("../modules/agents/prompt-delivery");
 const { RecentProjects } = require("../modules/agents/recent-projects");
@@ -55,6 +56,11 @@ const STATUS_EVERY_TICKS = 5; // re-read the hook status every 5th stats tick
 const expandHome = p => String(p || "").replace(/^~(?=$|\/)/, os.homedir());
 
 // Which agent CLIs are installed, checked once through the login shell (same PATH the agents get)
+// Editors that open a file at a line with `-g file:line`
+const GOTO_EDITORS = new Set(["code", "code-insiders", "codium", "cursor", "windsurf"]);
+const onPath = bin =>
+  (process.env.PATH || "").split(path.delimiter).some(d => d && fs.existsSync(path.join(d, bin)));
+
 function detectAgents() {
   const sh = process.env.SHELL || "/bin/bash";
   const bins = Object.values(AGENTS).map(a => a.bin);
@@ -407,6 +413,36 @@ class BayloobApp {
     return { ok: true };
   }
 
+  /**
+   * Opens a challenger's finding: `file` relative to the session's folder (never outside it) at `line`, in
+   * the editor from Settings — or VS Code when none is set and it's installed — or the default app.
+   */
+  openFinding(session, file, line) {
+    const root = session?.cwd;
+    const abs = findingPath(root, file);
+    if (!abs) {
+      return {
+        ok: false,
+        error: root ? "That file is outside the project" : "This session has no folder",
+      };
+    }
+    if (!fs.existsSync(abs)) {
+      return { ok: false, error: `Not found: ${file}` };
+    }
+    const editor = this.settings.get("editor") || (onPath("code") ? "code" : "");
+    if (!editor) {
+      return shell.openPath(abs).then(err => ({ ok: !err, error: err || undefined }));
+    }
+    const [bin, ...args] = editor.split(/\s+/);
+    const target = GOTO_EDITORS.has(path.basename(bin))
+      ? ["-g", `${abs}:${Math.max(1, line | 0)}`]
+      : [abs];
+    const child = spawn(bin, [...args, ...target], { cwd: root, detached: true, stdio: "ignore" });
+    child.on("error", () => {});
+    child.unref();
+    return { ok: true };
+  }
+
   async sessionMenu(session) {
     if (!session) {
       return;
@@ -747,6 +783,9 @@ class BayloobApp {
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
     ipcMain.on("open-settings", () => this.openSettings());
+    ipcMain.handle("open-finding", (_e, sessionId, file, line) =>
+      this.openFinding(session(sessionId), String(file), Number(line))
+    );
     ipcMain.handle("challenge", (_e, sessionId) =>
       result(() => this.challenge(session(sessionId)))
     );
