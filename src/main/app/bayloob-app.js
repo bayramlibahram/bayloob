@@ -13,6 +13,7 @@ const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { BlockedClock } = require("../modules/sessions/blocked-clock");
 const { receiptFor } = require("../modules/sessions/receipt");
+const { TodoProgress } = require("../modules/sessions/todo-progress");
 const { ImmuneSystem } = require("../modules/permissions/immune-system");
 const { SessionOutput } = require("../modules/sessions/session-output");
 const { TokenUsage } = require("../modules/sessions/token-usage");
@@ -98,6 +99,7 @@ class BayloobApp {
   git = new Git();
   tokens = new TokenUsage();
   queue = new PromptQueue();
+  todos = new TodoProgress();
   #receipts = new Map(); // session id -> receipt of its last finished turn
   #lastStates = new Map(); // session id -> state at the previous change
   presence = new Presence();
@@ -165,6 +167,7 @@ class BayloobApp {
       IS_LINUX ? 400 : 0
     );
 
+    this.server.observers.push((id, ev) => this.todos.observe(id, ev));
     this.server.store.on("change", list => {
       this.notifier.update(list);
       this.overlay.send("sessions", list);
@@ -172,6 +175,7 @@ class BayloobApp {
       this.#sendQueued(list);
       this.#tickBlocked(list);
       this.#updateReceipts(list);
+      this.overlay.send("progress", this.todos.snapshot(list.map(s => s.id)));
     });
     this.server.http.on("error", e => {
       console.error(
