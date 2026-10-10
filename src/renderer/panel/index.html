@@ -81,6 +81,14 @@
   .row .who span { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .state { display: flex; align-items: center; gap: 7px; width: 118px; font-size: 12.5px; color: var(--c); flex: none; }
   .row .square { width: 30px; height: 30px; }
+  .clash { flex: none; font-style: normal; font-size: 15px; color: var(--working); }
+  .clash.conflict { color: var(--waiting); }
+  .clashbox { display: grid; gap: 3px; margin-bottom: 10px; padding: 9px 11px; border-radius: 11px; font-size: 12.5px;
+    color: var(--working); background: color-mix(in srgb, var(--working) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--working) 30%, transparent); }
+  .clashbox.conflict { color: var(--waiting); background: color-mix(in srgb, var(--waiting) 9%, transparent);
+    border-color: color-mix(in srgb, var(--waiting) 35%, transparent); }
+  .clashbox small { color: var(--muted); font-size: 11.5px; }
   .kebab { width: 24px; height: 30px; border-radius: 8px; color: var(--muted); display: grid; place-items: center; flex: none; }
   .kebab:hover { color: var(--text); background: rgba(255,255,255,.07); }
   .empty { color: var(--muted); padding: 30px 10px; text-align: center; line-height: 1.6; }
@@ -178,6 +186,9 @@
 <script>
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
+    clashConflict: (who, files) => `Editing the same files as ${who}: ${files}`,
+    clashShared: who => `Working in the same folder as ${who}; uncommitted changes can break each other's tests`,
+    clashFix: 'Fix: ⋮ → "Move new work to a worktree…"',
     connected: 'Connected', noEvents: 'Waiting for agents', noHooks: 'Hooks not installed',
     connectedTip: at => at ? `Hooks installed · last event ${timeAgo(at)}` : 'Hooks installed · no events yet',
     noHooksTip: 'Open Settings to install the Claude Code hooks',
@@ -279,6 +290,7 @@
 
     show(state) {
       this.sessions = state.sessions || [];
+      this.collisions = state.collisions || {};
       this.status = state.status || null;
       this.launchMode = false;
       this.query = '';
@@ -289,6 +301,7 @@
     setSessions(list) { this.sessions = list; this.render(); }
     setWorkspace(snap) { this.apps = snap.apps; this.extension = snap.extension; this.render(); }
     setBlocked(info) { this.blocked = info; this.#renderMeters(); }
+    setCollisions(map) { this.collisions = map || {}; this.render(); }
     setStats(stats) { this.stats = stats; this.#renderMeters(); }
     setStatus(status) { this.status = status; this.#renderStatus(); }
 
@@ -353,10 +366,27 @@
         <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
           ${iconHtml(i)}
           <div class="who"><b>${esc(i.name)}</b><span>${esc(i.subtitle || '')}</span></div>
+          ${i.kind === 'agent' ? this.#clashBadge(i.data) : ''}
           ${stateHtml(i.status)}
           <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
           <button class="kebab" data-act="menu" title="${T.more}"${i.kind === 'docker' ? ' style="visibility:hidden"' : ''}>${ICONS.dots}</button>
         </div>`).join('');
+    }
+
+    // ⚠ next to an agent that shares its working tree with another busy agent (red: they edited the same file)
+    #clashBadge(s) {
+      const c = this.collisions?.[s.id];
+      if (!c) { return ''; }
+      return `<i class="clash ${c.level}" title="${esc(this.#clashText(c))}">⚠</i>`;
+    }
+
+    #clashText(c) {
+      const others = c.with.map(id => this.sessions.find(x => x.id === id)).filter(Boolean)
+        .map(x => `${Agent.displayName(x.agent)} (${x.project})`).join(', ');
+      const files = c.files.map(f => f.split('/').pop());
+      return c.level === 'conflict'
+        ? T.clashConflict(others, files.slice(0, 3).join(', ') + (files.length > 3 ? ` +${files.length - 3}` : ''))
+        : T.clashShared(others);
     }
 
     #renderLaunchable() {
@@ -446,6 +476,7 @@
       const live = ACTIVE.has(s.state);
       const history = (s.history || []).slice(0, 6);
       return `
+        ${this.collisions?.[s.id] ? `<div class="clashbox ${this.collisions[s.id].level}">⚠ ${esc(this.#clashText(this.collisions[s.id]))}<small>${T.clashFix}</small></div>` : ''}
         <div class="doing"><b title="${esc(doing.title)}">${esc(doing.title)}</b><span title="${esc(doing.detail)}">${esc(doing.detail || projectPath(s))}</span></div>
         <ul class="timeline">${history.map((h, i) => `<li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>
         <div class="buttons"><button class="wide" data-act="terminal">${ICON_TERM}${T.openTerminal}</button></div>`;
@@ -567,6 +598,7 @@
     panelAPI.onStatus(status => view.setStatus(status));
     panelAPI.onWorkspace(snap => view.setWorkspace(snap));
     panelAPI.onBlocked?.(info => view.setBlocked(info));
+    panelAPI.onCollisions?.(map => view.setCollisions(map));
   } else {
     window.__demo = view; // opened in a plain browser: drive it from the console
   }

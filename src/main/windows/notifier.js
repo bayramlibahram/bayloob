@@ -1,4 +1,5 @@
 const { Notification } = require("electron");
+const { AGENTS } = require("../modules/agents/agents");
 
 /** Shows a desktop notification when a session starts waiting for approval or finishes. */
 class Notifier {
@@ -11,6 +12,20 @@ class Notifier {
       }
     }
     this.#prev = new Map(list.map(s => [s.id, s.state]));
+  }
+
+  /** Two agents just edited the same file in the same working tree. */
+  collision(a, b, files) {
+    if (!Notification.isSupported()) {
+      return;
+    }
+    const names = files.map(f => f.split("/").pop());
+    const what =
+      names.length > 1 ? `${names[0]} and ${names.length - 1} more` : names[0] || "the same files";
+    new Notification({
+      title: `${a.project}: two agents are editing ${what}`,
+      body: `${AGENTS[a.agent]?.name || a.agent} and ${AGENTS[b.agent]?.name || b.agent} changed the same file. Move one to a worktree from the panel.`,
+    }).show();
   }
 
   #notify(s, old) {

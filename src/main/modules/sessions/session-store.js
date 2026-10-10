@@ -7,6 +7,8 @@ const { describeActivity } = require("./activity");
 
 const STALE_MS = 15 * 60 * 1000; // drop sessions silent for 15 min
 const HISTORY_MAX = 8;
+const FILES_MAX = 200;
+const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const TERM_KEYS = ["term", "winid", "kitty", "kittysock", "wez", "tmux", "pid"];
 
 // The hook reports its parent PID, which is usually a short-lived `sh -c` started by the agent.
@@ -70,6 +72,7 @@ class SessionStore extends EventEmitter {
       transcript: ev.transcript_path || old?.transcript || null,
       activity: old?.activity || null,
       history: old?.history || [],
+      files: old?.files || [],
       startedAt: old?.startedAt || Date.now(),
       ...patch,
       updatedAt: Date.now(),
@@ -100,14 +103,32 @@ class SessionStore extends EventEmitter {
       role: launch.role || null,
       activity: { title: "Starting…", detail: launch.cwd, at: Date.now() },
       history: [],
+      files: [],
       startedAt: Date.now(),
       updatedAt: Date.now(),
     });
   }
 
+  // Remember a file the session edited (absolute path, most recent last), for the collision radar.
+  // Only PostToolUse counts: the edit happened, rather than being asked for and maybe denied.
+  #trackFile(s, ev) {
+    if (ev.hook_event_name !== "PostToolUse" || !EDIT_TOOLS.has(ev.tool_name)) {
+      return;
+    }
+    const file = ev.tool_input?.file_path || ev.tool_input?.notebook_path;
+    if (!file) {
+      return;
+    }
+    const abs = path.resolve(s.cwd || "/", file);
+    s.files = [...(s.files || []).filter(f => f !== abs), abs].slice(-FILES_MAX);
+  }
+
   // Add an event to the session's activity history (newest first); a repeat of the same line only refreshes its time
   record(id, ev) {
     const s = this.#sessions.get(id);
+    if (s) {
+      this.#trackFile(s, ev);
+    }
     const line = s && describeActivity(ev, s.cwd);
     if (!line) {
       return;

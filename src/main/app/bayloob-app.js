@@ -14,6 +14,7 @@ const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { BlockedClock } = require("../modules/sessions/blocked-clock");
 const { receiptFor } = require("../modules/sessions/receipt");
 const { TodoProgress } = require("../modules/sessions/todo-progress");
+const { CollisionRadar } = require("../modules/sessions/collision-radar");
 const { ImmuneSystem } = require("../modules/permissions/immune-system");
 const { SessionOutput } = require("../modules/sessions/session-output");
 const { TokenUsage } = require("../modules/sessions/token-usage");
@@ -97,6 +98,9 @@ class BayloobApp {
   #statsTimer = null;
   output = new SessionOutput();
   git = new Git();
+  radar = new CollisionRadar({ resolveRoot: cwd => this.git.toplevel(cwd) });
+  #collisions = {}; // session id -> { with, files, level, conflictWith }
+  #radarTimer = null;
   tokens = new TokenUsage();
   queue = new PromptQueue();
   todos = new TodoProgress();
@@ -176,6 +180,7 @@ class BayloobApp {
       this.#tickBlocked(list);
       this.#updateReceipts(list);
       this.overlay.send("progress", this.todos.snapshot(list.map(s => s.id)));
+      this.#scheduleRadar();
     });
     this.server.http.on("error", e => {
       console.error(
@@ -272,7 +277,11 @@ class BayloobApp {
     if (this.panel.visible) {
       return this.panel.hide();
     }
-    await this.panel.show({ sessions: this.server.store.list(), status: this.#status() });
+    await this.panel.show({
+      sessions: this.server.store.list(),
+      status: this.#status(),
+      collisions: this.#collisions,
+    });
     this.#startPanelUpdates();
   }
 
@@ -350,6 +359,11 @@ class BayloobApp {
       { label: "Open terminal", click: () => this.focus(session) },
       { label: "Send a prompt…", enabled: canPrompt, click: () => this.openPromptBox(session) },
       { label: "Open workspace", enabled: !!session.cwd, click: () => this.openWorkspace(session) },
+      {
+        label: "Move new work to a worktree…",
+        visible: !!this.#collisions[session.id],
+        click: () => this.openLauncher({ agent: session.agent, cwd: session.cwd, worktree: true }),
+      },
       {
         label: "Challenge with another agent",
         enabled: !!session.cwd && session.role !== "challenger",
@@ -479,8 +493,54 @@ class BayloobApp {
     this.overlay.send("queues", this.queue.counts());
   }
 
+  // Store changes come in bursts (one per hook event): look for collisions once things settle
+  #scheduleRadar() {
+    clearTimeout(this.#radarTimer);
+    this.#radarTimer = setTimeout(() => this.#scanCollisions().catch(() => {}), 400);
+  }
+
+  async #scanCollisions() {
+    const list = this.server.store.list();
+    const found = await this.radar.scan(list);
+    for (const [a, b] of this.radar.newConflicts(found)) {
+      const [sa, sb] = [this.server.store.get(a), this.server.store.get(b)];
+      if (sa && sb) {
+        this.notifier.collision(sa, sb, found[a].files);
+      }
+    }
+    if (JSON.stringify(found) !== JSON.stringify(this.#collisions)) {
+      this.#collisions = found;
+      this.overlay.send("collisions", found);
+      this.panel.send("panel:collisions", found);
+    }
+  }
+
+  // A short, unused name for a new worktree: <agent>-<MMDD-HHMM>[-n]
+  async #newWorktree(cwd, agent) {
+    const root = await this.git.toplevel(cwd);
+    if (!root) {
+      throw new Error("A worktree needs a git repository; this folder isn't in one");
+    }
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const stamp = `${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+    for (let n = 1; n <= 9; n++) {
+      const name = `${agent}-${stamp}${n > 1 ? `-${n}` : ""}`;
+      try {
+        return await this.git.addWorktree(root, name);
+      } catch (e) {
+        if (!/Already exists|already exists/.test(e.message)) {
+          throw e;
+        }
+      }
+    }
+    throw new Error("Could not find a free worktree name");
+  }
+
   async launch(opts) {
-    const launch = await this.launcher.launch(opts);
+    // worktree: run the agent in a new git worktree of the project instead of the project itself
+    const cwd = opts.worktree ? await this.#newWorktree(opts.cwd, opts.agent) : opts.cwd;
+    const launch = await this.launcher.launch({ ...opts, cwd });
     this.server.store.trackLaunch(launch);
     this.server.store.changed();
     // A challenger isn't the user's choice of agent for the project, so it doesn't go into recents
