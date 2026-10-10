@@ -6,6 +6,17 @@
 // "manager" is Bayloob itself: the main mascot, always purple; agent sessions are its subs.
 // Keep the agent colors in sync with src/agents.js.
 const MANAGER = "manager";
+
+// Light or dark, following prefers-color-scheme — which main points at the System / Light / Dark
+// setting (nativeTheme.themeSource), and which GNOME's own light/dark switch drives under "System"
+if (typeof document !== "undefined") {
+  const light = matchMedia("(prefers-color-scheme: light)");
+  const apply = () => {
+    document.documentElement.dataset.theme = light.matches ? "light" : "dark";
+  };
+  apply();
+  light.addEventListener("change", apply);
+}
 // Mascot packs, relative to a page in renderer/<page>/index.html
 const PACKS_URL = "../../assets/packs";
 const AGENTS = {

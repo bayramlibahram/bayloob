@@ -306,6 +306,7 @@ setting (the field is then shown read-only), which is handy for development and 
 | `BAYLOOB_PERM_TIMEOUT` | `280` | Seconds before a permission request goes back to the terminal |
 | `BAYLOOB_NO_MUSIC` | unset | Set to `1` to turn off music detection |
 | `BAYLOOB_MASCOT` | `novi` | `svg` switches back to the original flat mascot |
+| `BAYLOOB_THEME` | `system` | `light` or `dark`; `system` follows GNOME's light/dark switch |
 | `BAYLOOB_SHORTCUT` | `Ctrl+Alt+Space` | Global shortcut for the launcher (Electron accelerator syntax); empty turns it off |
 | `BAYLOOB_TERMINAL` | auto-detected | Terminal used for launched sessions, e.g. `kitty` or `gnome-terminal --` (the command is appended) |
 | `BAYLOOB_EDITOR` | file manager | Command for "Open workspace", e.g. `code` (the folder is appended) |

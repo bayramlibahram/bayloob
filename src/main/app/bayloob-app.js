@@ -1,4 +1,4 @@
-const { app, clipboard, ipcMain, globalShortcut, Menu, shell } = require("electron");
+const { app, clipboard, ipcMain, globalShortcut, Menu, nativeTheme, shell } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -142,6 +142,8 @@ class BayloobApp {
     const data = app.getPath("userData");
     this.settings = new Settings(path.join(data, "settings.json"));
     this.settings.on("change", keys => this.#applySettings(keys));
+    // Every window's CSS follows prefers-color-scheme, which follows this
+    nativeTheme.themeSource = this.settings.get("theme");
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
     this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
@@ -253,6 +255,9 @@ class BayloobApp {
       this.#registerShortcut();
       this.tray.actions.shortcut = this.settings.get("shortcut");
       this.tray.update(this.recent.list());
+    }
+    if (keys.includes("theme")) {
+      nativeTheme.themeSource = this.settings.get("theme");
     }
     if (keys.includes("sounds") || keys.includes("soundVolume")) {
       this.#sendSoundConfig();

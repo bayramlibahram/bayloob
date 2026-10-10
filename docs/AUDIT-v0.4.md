@@ -26,7 +26,7 @@ Status: **done** = works as specified · **partial** = exists, gaps listed · **
 | F17 | Sounds | partial | `shared/sounds.js:16`, Settings `settings/index.html:238` | Per-sound toggles in Settings (master switch + volume exist) |
 | F18 | Music | done | `music/music-watcher.js:35`, controls `overlay/index.html:831` | — |
 | F19 | Sleep / wake | done | `shared/novi.js:40` (`sleepAfter`, `onSleep`) | — |
-| F20 | Light theme | **missing** | — (dark only, no `data-theme`, no `nativeTheme`) | Everything: tokens per surface, System/Light/Dark setting |
+| F20 | Light theme | done | `renderer/shared/theme.css`, `shared/ui-common.js` (follows prefers-color-scheme), `nativeTheme.themeSource` in `app/bayloob-app.js`, Settings → Theme | — (added after the audit) |
 | F21 | Novi raster mascot | done | `shared/novi.js:29`, packs + `assets/packs/meta.js`; SVG kept as an option (`config/settings.js:8`) | — |
 | F22 | Local API security | done | `sessions/api-token.js`, `sessions/event-server.js` (`#isAuthorized`), both hooks | — (added after the audit) |
 

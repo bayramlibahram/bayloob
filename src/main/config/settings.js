@@ -6,6 +6,7 @@ const { EventEmitter } = require("node:events");
 
 const DEFAULTS = {
   mascot: "novi", // 'novi' (layered raster) or 'svg' (the original flat one)
+  theme: "system", // 'system' (follows GNOME), 'light' or 'dark'
   shortcut: "CommandOrControl+Alt+Space", // global shortcut for the launcher; '' turns it off
   terminal: "", // '' = auto-detect, or e.g. 'kitty' / 'gnome-terminal --'
   editor: "", // '' = open folders in the file manager, or e.g. 'code'
@@ -17,6 +18,7 @@ const DEFAULTS = {
 // How each environment variable maps onto a setting
 const ENV = {
   mascot: () => process.env.BAYLOOB_MASCOT,
+  theme: () => process.env.BAYLOOB_THEME,
   shortcut: () => process.env.BAYLOOB_SHORTCUT,
   terminal: () => process.env.BAYLOOB_TERMINAL,
   editor: () => process.env.BAYLOOB_EDITOR,
@@ -27,6 +29,7 @@ const ENV = {
 
 const VALIDATE = {
   mascot: v => (v === "svg" ? "svg" : "novi"),
+  theme: v => (["light", "dark"].includes(v) ? v : "system"),
   shortcut: v => String(v ?? "").trim(),
   terminal: v => String(v ?? "").trim(),
   editor: v => String(v ?? "").trim(),
