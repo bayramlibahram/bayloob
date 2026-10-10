@@ -7,12 +7,16 @@ const IS_LINUX = process.platform === "linux";
 const IS_GNOME = /gnome/i.test(
   process.env.ORIGINAL_XDG_CURRENT_DESKTOP || process.env.XDG_CURRENT_DESKTOP || ""
 );
-const WIDTH = 540,
+const WIDTH = 600,
   HEIGHT = 720; // window size (the visible pill is smaller, see index.html)
+// Full view: a bigger window for the larger pill; never taller than the screen allows
+const FULL_WIDTH = 920,
+  FULL_HEIGHT = 900;
 
 /** The transparent always-on-top window at the top-center of the screen, just below the top bar. */
 class OverlayWindow {
   win = null;
+  full = false;
 
   // mascot: 'novi' (raster, default) or 'svg' (the original vector mascot)
   // topBar: async () => GNOME's top bar { x, y, width, height, visible } or null (the GNOME extension)
@@ -58,6 +62,15 @@ class OverlayWindow {
       // macOS/Windows: transparent areas pass clicks through while mouse moves still reach the renderer
       this.win.setIgnoreMouseEvents(true, { forward: true });
     }
+    // The microphone (voice prompts) — for this window only, audio only. Other permissions keep Electron's
+    // default (granted), as before this handler existed.
+    this.win.webContents.session.setPermissionRequestHandler((wc, permission, grant, details) => {
+      if (permission !== "media") {
+        return grant(true);
+      }
+      const audioOnly = (details.mediaTypes || []).every(t => t === "audio");
+      grant(wc === this.win?.webContents && audioOnly);
+    });
     this.win.loadFile(paths.page("overlay"), { query: { mascot: this.mascot } });
     // The exact top bar comes from the GNOME extension (async); screens and scaling can change any time
     this.place();
@@ -74,14 +87,30 @@ class OverlayWindow {
     if (!this.win || this.win.isDestroyed()) {
       return;
     }
-    const { x, y } = overlayPosition(screen.getPrimaryDisplay(), panel, {
-      width: WIDTH,
-      gnome: IS_GNOME,
-    });
-    const [cx, cy] = this.win.getPosition();
-    if (cx !== x || cy !== y) {
-      this.win.setPosition(x, y);
+    const display = screen.getPrimaryDisplay();
+    const { width, height } = this.#size(display);
+    const { x, y } = overlayPosition(display, panel, { width, gnome: IS_GNOME });
+    const b = this.win.getBounds();
+    if (b.x !== x || b.y !== y || b.width !== width || b.height !== height) {
+      this.win.setBounds({ x, y, width, height });
     }
+  }
+
+  #size(display) {
+    if (!this.full) {
+      return { width: WIDTH, height: HEIGHT };
+    }
+    const area = display.workArea;
+    return {
+      width: Math.min(FULL_WIDTH, area.width - 40),
+      height: Math.min(FULL_HEIGHT, area.height - 60),
+    };
+  }
+
+  /** Full view on / off: the window grows (or shrinks back) around the pill, still centred below the top bar. */
+  setFull(on) {
+    this.full = !!on;
+    this.place();
   }
 
   /** Switches the mascot style ('novi' | 'svg') by reloading the page. */

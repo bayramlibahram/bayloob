@@ -39,6 +39,7 @@ const { AgentDiscovery } = require("../infrastructure/system/agent-discovery");
 const { SystemStats } = require("../infrastructure/system/system-stats");
 const { AgentConsole } = require("../modules/console/agent-console");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
+const { SpeechEngine } = require("../modules/voice/speech-engine");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
@@ -119,6 +120,7 @@ class BayloobApp {
   output = new SessionOutput();
   git = new Git();
   discovery = new AgentDiscovery();
+  speech = new SpeechEngine(); // voice prompts: local speech-to-text only
   system = new SystemStats(); // whole-machine CPU / memory for the panel's footer
   agentConsole = new AgentConsole(); // turns read from agents' transcripts, for the panel's agent console
   #handoffs = new Map(); // session id -> { agent, cwd, sessionId, pid, at }: waiting to continue in tmux
@@ -959,6 +961,19 @@ class BayloobApp {
       }
     });
     ipcMain.on("overlay-keyboard", (_e, on) => this.overlay.setKeyboard(!!on));
+    ipcMain.on("overlay-full", (_e, on) => this.overlay.setFull(!!on));
+    // Voice prompts: the local engine situation, and turning a recording into text (then the usual confirm)
+    ipcMain.handle("voice-status", () => this.speech.status());
+    ipcMain.handle("voice-transcribe", (_e, audio) => this.speech.transcribe(audio));
+    ipcMain.on("voice-prompt", (_e, sessionId, text) => {
+      const s = sessionId ? session(sessionId) : null;
+      const t = String(text || "").slice(0, 20_000);
+      if (s) {
+        this.openPromptBox(s, t);
+      } else {
+        this.openLauncher(null, t);
+      }
+    });
     ipcMain.on("open-prompt", (_e, sessionId, text) => {
       const s = session(sessionId);
       if (s) {
