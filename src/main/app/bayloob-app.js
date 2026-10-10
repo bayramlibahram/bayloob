@@ -1,8 +1,9 @@
 const { app, clipboard, ipcMain, globalShortcut, Menu, shell } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
+const fs = require("node:fs");
 const path = require("node:path");
-const { HOOKS_DIR, TOOLS_DIR, EXTENSION_DIR } = require("./paths");
+const { HOOKS_DIR, TOOLS_DIR, EXTENSION_DIR, ASSETS_DIR } = require("./paths");
 const { Settings } = require("../config/settings");
 const { AGENTS } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
@@ -42,6 +43,7 @@ const DECISIONS = new Set(["allow", "deny", "terminal"]);
 const RECONCILE_MS = 5000;
 const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the agents
 const OUTPUT_MS = 2000; // refresh of the last-output lines while the pill's list is open
+const SOUNDS_DIR = path.join(ASSETS_DIR, "sounds");
 const BLOCKED_MS = 5000; // how often waiting time is credited
 const PRESENCE_MS = 15_000; // how often the screen lock is checked
 const SAVE_MS = 60_000; // how often today's waiting total is written to disk
@@ -160,6 +162,7 @@ class BayloobApp {
           this.overlay.send("music", this.music?.current ?? null);
           this.overlay.send("sessions", this.server.store.list());
           this.overlay.send("health", this.#lastHealth);
+          this.#sendSoundConfig();
         });
         if (open === "launcher") {
           this.openLauncher();
@@ -246,6 +249,9 @@ class BayloobApp {
       this.tray.actions.shortcut = this.settings.get("shortcut");
       this.tray.update(this.recent.list());
     }
+    if (keys.includes("sounds") || keys.includes("soundVolume")) {
+      this.#sendSoundConfig();
+    }
     if (keys.includes("music")) {
       if (this.settings.get("music")) {
         this.music?.start();
@@ -254,6 +260,22 @@ class BayloobApp {
         this.overlay.send("music", null);
       }
     }
+  }
+
+  // Which UI sounds exist (src/assets/sounds/sounds.json) and how loud, for the overlay's player
+  #sendSoundConfig() {
+    let manifest = {};
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(SOUNDS_DIR, "sounds.json"), "utf8"));
+    } catch {
+      // no sound pack: the overlay stays silent
+    }
+    this.overlay.send("sound-config", {
+      manifest,
+      base: "../../assets/sounds/",
+      enabled: this.settings.get("sounds"),
+      volume: this.settings.get("soundVolume"),
+    });
   }
 
   async openSettings() {

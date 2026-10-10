@@ -10,6 +10,8 @@ const DEFAULTS = {
   terminal: "", // '' = auto-detect, or e.g. 'kitty' / 'gnome-terminal --'
   editor: "", // '' = open folders in the file manager, or e.g. 'code'
   music: true, // watch MPRIS players and dance to music
+  sounds: true, // UI sounds (permission card, done, …)
+  soundVolume: 0.8, // 0..1
 };
 
 // How each environment variable maps onto a setting
@@ -19,6 +21,8 @@ const ENV = {
   terminal: () => process.env.BAYLOOB_TERMINAL,
   editor: () => process.env.BAYLOOB_EDITOR,
   music: () => (process.env.BAYLOOB_NO_MUSIC === "1" ? false : undefined),
+  sounds: () => (process.env.BAYLOOB_SOUNDS === "0" ? false : undefined),
+  soundVolume: () => undefined,
 };
 
 const VALIDATE = {
@@ -27,6 +31,9 @@ const VALIDATE = {
   terminal: v => String(v ?? "").trim(),
   editor: v => String(v ?? "").trim(),
   music: v => v !== false,
+  sounds: v => v !== false,
+  soundVolume: v =>
+    Number.isFinite(Number(v)) ? Math.max(0, Math.min(1, Number(v))) : DEFAULTS.soundVolume,
 };
 
 /** Emits 'change' with the list of changed keys after save(). */
