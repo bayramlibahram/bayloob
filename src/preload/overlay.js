@@ -20,4 +20,6 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onTokens: cb => ipcRenderer.on("tokens", (_e, tokens) => cb(tokens)),
   onQueues: cb => ipcRenderer.on("queues", (_e, counts) => cb(counts)),
   onBlocked: cb => ipcRenderer.on("blocked", (_e, info) => cb(info)),
+  onReceipts: cb => ipcRenderer.on("receipts", (_e, receipts) => cb(receipts)),
+  askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
 });
