@@ -53,11 +53,18 @@ agent behaves exactly as it always has. **Bayloob never blocks your agent.**
 
 ### 🚀 Launch and steer agents from the pill
 
-<img src="docs/screenshots/launcher.png" width="440" alt="New session launcher: pick an agent, a project and a first prompt">
+<p>
+<img src="docs/screenshots/ask.png" width="400" alt="Ask Bayloob: type what should be done and pick a project">
+<img src="docs/screenshots/launcher.png" width="400" alt="Which agent should do this? Claude Code, Codex or Gemini CLI">
+</p>
 
-Start a new agent without opening a terminal first. Pick **Claude Code**, **Codex** or **Gemini CLI**,
-choose a project (recent ones are one click away), optionally type a first prompt, and hit
-**Ctrl+Enter**. The agent starts in its own **tmux** session and opens in your terminal, so it keeps
+Start a new agent without opening a terminal first. Just say what should be done:
+
+1. **Ask Bayloob.** Type the task, pick the project (recent ones are one click away) and press **Enter**.
+2. **Bayloob asks which agent should do it.** Pick **Claude Code**, **Codex** or **Gemini CLI**
+   with **1 / 2 / 3** or the arrow keys and press **Enter**. Agents that aren't installed are greyed out.
+
+The agent starts in its own **tmux** session with your prompt and opens in your terminal, so it keeps
 running even if you close the window.
 
 <img src="docs/screenshots/controls.png" width="440" alt="Session list with send-prompt, stop and open-terminal buttons">
@@ -80,30 +87,49 @@ Three ways to open the launcher:
 > (GNOME Settings → Keyboard → Custom Shortcuts) to `bayloob --new-session` instead. It opens the
 > launcher in the running Bayloob.
 
-### 🗂️ The whole workspace at a glance
+### 🗂️ Workspace control
 
-<img src="docs/screenshots/panel.png" width="760" alt="Workspace overview: sessions, current activity, CPU and memory">
+<img src="docs/screenshots/panel.png" width="760" alt="Workspace control: running apps, Firefox tabs and windows, recent activity">
 
-Click the pill and the **workspace overview** drops down from the top of the screen:
+Click the pill and **workspace control** drops down from the top of the screen. It's your whole desktop
+in one place, not just your agents:
 
-- **Sessions:** every agent with its project, status, an open-terminal button and a **⋮** menu
-  (open terminal, send a prompt, open workspace, stop, hide from list)
-- **Current activity:** what the selected agent is doing right now (*Editing Header.jsx ·
-  src/components*), plus a timeline of its last steps, built from the hook events
-- **CPU and memory** of all watched agents and every process they started (tests, builds, servers)
-- **Connected:** whether the Claude Code hooks are installed and when the last event arrived
-- **New session** and **Open workspace** (your editor, or the file manager)
+| Section | What you get |
+|---|---|
+| **Overview** | Every running app and agent, busiest first |
+| **AI agents** | What each agent is doing right now (*Editing Header.jsx · src/components*), its last steps, send a prompt, stop |
+| **Browsers** | Tabs and windows (Firefox, read locally from its session; titles only, never URLs), **New tab** |
+| **IDEs** | Which project each IDE has open |
+| **Applications** | Terminals (with their sessions), Files and everything else that's running |
+| **System tools** | Docker containers with health, plus start / stop / restart |
 
-Use ↑ ↓ to pick a session, Enter to open its terminal, Esc to close. `bayloob --panel` opens the
-panel from anywhere, which makes a handy system shortcut on Wayland.
+Every app shows its windows (click one to bring it to the front), memory, CPU and **recent activity**
+(windows opened, focus switched, tabs opened, container health changes). **Launch app** searches
+everything installed and starts it. Nothing is hard-coded: apps come from their `.desktop` entries and
+the processes that are running.
+
+<img src="docs/screenshots/panel-agents.png" width="760" alt="AI agents section: what the agent is doing and its timeline">
+
+Use ↑ ↓ to pick, Enter for the main action, Esc to close. `bayloob --panel` opens the panel from
+anywhere, which makes a handy system shortcut on Wayland.
+
+### 🪟 Window control on Wayland
+
+Wayland doesn't let one app see or raise another app's windows. Bayloob ships a tiny GNOME Shell
+extension (`bayloob@baynovix.com`) that does it from inside the shell and offers it over D-Bus.
+With it, **Focus window**, the window lists and **Open terminal** work for native Wayland apps too
+(Firefox, Ptyxis, GNOME Terminal, Files…).
+
+Enable it once from **Settings**, or run `bayloob --install-extension`, then log out and back in.
+Without it, everything else still works and focusing falls back to X11/XWayland windows.
 
 ### ⚙️ Settings
 
 <img src="docs/screenshots/settings.png" width="380" alt="Settings: mascot, launcher shortcut, terminal, editor, music, hooks">
 
 The gear in the panel opens the settings: mascot style, launcher shortcut, terminal, editor and
-music. Changes apply right away, with no restart. If the Claude Code hooks are missing, you can
-install them from here. Settings are saved in `~/.config/Bayloob/settings.json`.
+music. Changes apply right away, with no restart. If the Claude Code hooks or the GNOME extension are
+missing, you can install them from here. Settings are saved in `~/.config/Bayloob/settings.json`.
 
 ### ✅ Know the moment work is done
 
@@ -117,8 +143,8 @@ and Bayloob brings the right window to the front, even the right tmux pane.
 | kitty | `kitty @ focus-window` (needs `allow_remote_control yes`) |
 | WezTerm | `wezterm cli activate-pane` |
 | tmux | selects the pane, then raises the terminal hosting it |
+| Any window on GNOME, native Wayland included (Ptyxis, GNOME Terminal…) | the Bayloob GNOME extension |
 | Any X11 / XWayland window (xterm, VS Code, Cursor, Tilix, Konsole…) | `_NET_ACTIVE_WINDOW` via python3 + libX11 |
-| GNOME Terminal / Ptyxis on native Wayland | ✗ Wayland doesn't let other apps raise windows |
 
 ### 🎨 One manager, many agents
 
@@ -195,6 +221,7 @@ anything, and is safe to run again.
 | `bayloob --install-hooks` | Installs Claude Code hooks and prints the lines for Codex and Gemini |
 | `bayloob --new-session` | Opens the launcher (starts Bayloob first if it isn't running) |
 | `bayloob --panel` | Opens the workspace panel (same) |
+| `bayloob --install-extension` | Installs and enables the GNOME Shell extension for window control |
 | `bayloob --autostart` / `--no-autostart` | Start (or stop starting) Bayloob when you log in |
 | `sudo apt remove bayloob` | Uninstalls. Hooks stay in `settings.json` and do nothing while Bayloob is gone |
 
@@ -244,7 +271,11 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 | `src/settings.js` | `Settings` | Saved settings, with environment variables taking precedence |
 | `src/activity.js` | — | Turns hook events into activity lines ("Editing Header.jsx") |
 | `src/stats.js` | `AgentStats` | CPU and memory of agent process trees, from `/proc` |
-| `src/ui-common.js` | `Agent` | Agent palette and helpers shared by the overlay and the panel |
+| `src/ui-common.js` | `Agent` | Agent palette and helpers shared by the overlay, the panel and the launcher |
+| `src/windows.js` | `WindowService` | Lists and raises windows through the GNOME extension |
+| `src/gnome-extension.js` | `GnomeExtension` | Installs and checks the extension |
+| `src/workspace/` | `WorkspaceService`, `RunningApps`, `AppCatalog`, `ProcessTable`, `FirefoxSession`, `DockerService`, `AppActions` | Running apps, installed apps, Firefox tabs, Docker, and the actions on them |
+| `gnome-extension/` | `BayloobExtension` | GNOME Shell extension: window list / activate over D-Bus |
 | `src/focus.js` | `TerminalFocuser` | Raises the right terminal: kitty / WezTerm / tmux / X11 |
 | `src/music.js` | `MusicWatcher` | What's playing over MPRIS, play / pause / next / prev |
 | `src/cli.js` | — | `--install-hooks`, `--autostart`, `--no-autostart` |
