@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("panelAPI", {
   launchOptions: () => ipcRenderer.invoke("panel:launch-options"),
   launch: opts => ipcRenderer.invoke("launcher:launch", opts),
   sendPrompt: (sessionId, text) => ipcRenderer.invoke("launcher:send-prompt", sessionId, text),
+  continueInBayloob: sessionId => ipcRenderer.invoke("continue-in-bayloob", sessionId),
   openSettings: () => ipcRenderer.send("panel:open-settings"),
   resize: height => ipcRenderer.send("panel:resize", height),
   close: () => ipcRenderer.send("panel:close"),

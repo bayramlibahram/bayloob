@@ -275,6 +275,8 @@
     finishedIn: (agent, project) => `<span class="fhead"><b>${agent}</b> finished · ${project}</span>`, finishedMore: n => `+${n} more`,
     reply: 'Reply', dismissTip: 'Dismiss',
     sent: 'Sent ✓',
+    handoff: '⇄ Continue in Bayloob', handoffTip: 'Move this conversation into tmux, so replies go straight in (you close it in its terminal once)',
+    handoffStarted: 'Close it in its terminal (/exit) — Bayloob continues it in tmux',
     toPaste: '📋 copy & paste', pasteBtn: '✓ Copy & open terminal', copiedPaste: 'Copied ✓ — paste it in the terminal with Ctrl+Shift+V',
     sayPaste: 'Not in tmux: Enter copies it and brings the terminal forward to paste', queued: 'Queued ⏳ — goes out when the agent finishes its turn',
     askHint: 'Pick an agent and folder · Enter starts', startAgent: 'Start', worktree: '⑂ New worktree',
@@ -307,6 +309,7 @@
   const HEALTH_COLOR = { healthy: 'var(--done)', running: 'var(--thinking)', starting: 'var(--working)', unhealthy: 'var(--waiting)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const FINISHED_RECENT_MS = 10 * 60 * 1000;
+  const RESUMABLE = new Set(['claude', 'codex']); // agents Bayloob can continue in tmux (--resume / resume)
   const BUSY = new Set(['thinking', 'working', 'waiting']); // a prompt sent now is queued for the end of the turn
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   const FOLDER = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
@@ -737,7 +740,8 @@
       this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(s.project))}</span>
         <span class="badge ${cls}">${badge}</span>
         <button type="button" class="btn" data-edit>${T.edit}</button>
-        <button type="submit" class="btn on">${btn}</button>`;
+        <button type="submit" class="btn on">${btn}</button>
+        ${paste && RESUMABLE.has(s.agent) ? `<button type="button" class="btn" data-handoff title="${T.handoffTip}">${T.handoff}</button>` : ''}`;
     }
 
     async #send() {
@@ -902,7 +906,13 @@
         const x = e.target.closest('[data-dismiss]');
         if (x) { this.finished = this.finished.filter(id => id !== x.dataset.dismiss); this.#renderFinished(); }
       });
-      this.el.sayConfirm.addEventListener('click', e => {
+      this.el.sayConfirm.addEventListener('click', async e => {
+        if (e.target.closest('[data-handoff]')) {
+          const r = await this.api?.continueInBayloob(this.sayFor);
+          this.#confirmSay(false);
+          this.#sayHint(r?.ok ? T.handoffStarted : r?.error || 'Could not continue it in Bayloob', r?.ok ? 'ok' : 'err');
+          return;
+        }
         if (e.target.closest('[data-edit]')) { this.#confirmSay(false); this.el.sayText.focus(); }
       });
       this.el.askConfirm.addEventListener('click', e => {

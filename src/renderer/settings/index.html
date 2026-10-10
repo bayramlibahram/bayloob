@@ -110,6 +110,11 @@
       <input type="text" id="editor" placeholder="File manager" spellcheck="false">
       <small>"Open workspace" runs it with the folder, e.g. <code>code</code>. Empty opens the file manager.</small>
     </div>
+    <div class="field" id="shellField" hidden>
+      <span class="label">Agents in tmux</span>
+      <button type="button" class="switch" id="shellTmux" role="switch" aria-checked="false" aria-label="Run agents in tmux"></button>
+      <small id="shellNote">Typing <code>claude</code> or <code>codex</code> in any terminal starts it inside tmux, so Bayloob can send replies straight to it.</small>
+    </div>
     <div class="field">
       <span class="label">Watch clipboard</span>
       <button type="button" class="switch" id="watchClipboard" role="switch" aria-checked="false" aria-label="Watch clipboard for errors"></button>
@@ -146,6 +151,8 @@
 <script>
   const T = {
     denialsTitle: 'Denied before (similar requests get a red card)', forget: 'Forget',
+    shellOn: (rc, backup) => `Added to ${rc}${backup ? ` (backup: ${backup})` : ''}. New terminals pick it up; in an open one run: source ${rc}`,
+    shellOff: rc => `Removed from ${rc}. New terminals start agents as before.`,
     soundNames: {
       permission: 'Permission card', 'permission-reminder': 'Reminder (60 s)', allow: 'Allow', deny: 'Deny',
       'to-terminal': 'To terminal', done: 'Agent finished', 'open-terminal': 'Open terminal', prompt: 'Prompt sent',
@@ -177,7 +184,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), mascot: $('mascot'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
-        music: $('music'), watchClipboard: $('watchClipboard'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -201,6 +208,7 @@
       this.#renderTheme();
       this.#renderMusic();
       this.#renderWatch();
+      this.#renderShell();
       this.#renderSounds();
       this.#renderHooks();
       this.#renderExtension();
@@ -238,6 +246,14 @@
       const a = new Audio(`../../assets/sounds/${file}`);
       a.volume = Number(this.el.volume.value) / 100;
       a.play().catch(() => {});
+    }
+
+    // Applied at once (it edits the shell's rc file), not on Save
+    #renderShell(msg) {
+      const sh = this.state.shell || {};
+      this.el.shellField.hidden = !sh.supported;
+      this.el.shellTmux.setAttribute('aria-checked', !!sh.installed);
+      if (msg) { this.el.shellNote.textContent = msg; }
     }
 
     #renderWatch() {
@@ -324,6 +340,17 @@
         if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
       });
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
+      this.el.shellTmux.addEventListener('click', async () => {
+        const on = !this.state.shell.installed;
+        this.el.shellTmux.disabled = true;
+        const r = await this.api?.shellIntegration(on);
+        this.el.shellTmux.disabled = false;
+        if (!r?.ok) { return this.#message(r?.error || 'Could not change the shell setup', 'error'); }
+        this.state.shell.installed = r.installed;
+        this.#renderShell(on
+          ? T.shellOn(this.state.shell.rc, r.backup)
+          : T.shellOff(this.state.shell.rc));
+      });
       this.el.watchClipboard.addEventListener('click', () => { this.watchClipboard = !this.watchClipboard; this.#renderWatch(); });
       this.el.sounds.addEventListener('click', () => { this.sounds = !this.sounds; this.#renderSounds(); });
       this.el.soundMore.addEventListener('click', () => {

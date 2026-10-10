@@ -26,3 +26,13 @@ test("challengers start read-only and are told not to edit", () => {
   assert.deepEqual(agentCommand("claude", "x"), ["claude", "x"]);
   assert.match(challengePrompt("Claude Code"), /Do not modify any files/);
 });
+
+test("resuming a conversation uses each agent's own (checked) command", () => {
+  assert.deepEqual(agentCommand("claude", "", { resume: "abc-1" }), [
+    "claude",
+    "--resume",
+    "abc-1",
+  ]);
+  assert.deepEqual(agentCommand("codex", "ignored", { resume: "x-9" }), ["codex", "resume", "x-9"]);
+  assert.throws(() => agentCommand("gemini", "", { resume: "g" }), /can't continue/);
+});

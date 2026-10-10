@@ -133,6 +133,8 @@
   .card.menu .opt:disabled { opacity: .5; }
   .card.menu .hint { color: var(--muted); }
   .card.menu .hint.err { color: var(--waiting); }
+  .card.handoff { border-color: color-mix(in srgb, var(--brand) 45%, transparent); }
+  .card.handoff code { font: 600 12px ui-monospace, monospace; }
   .card.errcopy { border-color: color-mix(in srgb, var(--working) 45%, transparent); }
   .card.errcopy .code { max-height: 3.2em; overflow: hidden; }
   .findings { margin-top: 10px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--waiting) 35%, transparent); overflow: hidden; }
@@ -375,6 +377,8 @@
     menuHint: 'Bayloob picks the option you click in the terminal for you',
     soundMute: 'Sounds on — click to mute', soundUnmute: 'Sounds off — click to turn on',
     soundLocked: 'Sounds are turned off by BAYLOOB_SOUNDS=0',
+    movingToBayloob: 'moving to Bayloob', cancel: 'Cancel',
+    closeToContinue: agent => `Close ${agent} in its terminal (<code>/exit</code>). Bayloob then continues it in tmux.`,
     errorCopied: 'Error copied — fix it?', lines: n => `${n} line${n === 1 ? '' : 's'}`,
     fixIn: (agent, project) => `Fix in ${agent} · ${project}`, fixNew: 'New session…',
     findings: n => `⚔ Challenge report · ${n} finding${n === 1 ? '' : 's'}`, noFindings: '⚔ No problems found',
@@ -516,13 +520,13 @@
     #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
     #permSince = new Map(); // permId -> when it appeared or was last reminded about
     #ruleTimer = null;
+    #pressing = false;     // a mouse button is down on the pill: hold re-renders until it's released
+    #paintLater = false;
+    #painted = new WeakMap(); // element -> the HTML last put into it
     #soundFeedback = false; // the bar's sound button was just used to switch sound on
     soundOn = true;
     soundLocked = false;
     #errorTimer = null;
-    #pressing = false;     // a mouse button is down on the pill: hold re-renders until it's released
-    #paintLater = false;
-    #painted = new WeakMap(); // element -> the HTML last put into it
     #reply = { sid: null, text: '', confirm: false, focused: false, error: '' }; // the done card's reply box
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
@@ -654,8 +658,10 @@
       const perms = this.sessions.filter(s => s.perm).sort((a, b) => Number(a.perm.id) - Number(b.perm.id));
       if (this.errorNote && Date.now() > this.errorNote.until && !this.hovering) { this.errorNote = null; }
       const menus = this.sessions.filter(s => s.menu);
+      const handoffs = this.sessions.filter(s => s.handoff);
       const card = perms.length ? this.#permCard(perms[0], perms.length - 1)
         : menus.length ? this.#menuCard(menus[0])
+        : handoffs.length ? this.#handoffCard(handoffs[0])
         : this.toast ? this.#doneCard() : this.errorNote ? this.#errorCard() : null;
       this.el.card.className = card ? `card ${card.kind}` : 'card';
       this.#paint(this.el.card, card ? card.html : '');
@@ -789,6 +795,18 @@
         <div class="mopts">${opts}</div>
         <div class="hint" data-mhint="${sid}">${T.menuHint}</div>
         <div class="actions"><button class="btn" data-act="focus" data-sid="${sid}">${T.openTerminal}</button></div>` };
+    }
+
+    // "Continue in Bayloob": waiting for the user to close the agent in its own terminal
+    #handoffCard(s) {
+      const name = esc(Agent.displayName(s.agent));
+      return { kind: 'handoff', html: `
+        ${this.#cardHead(s, T.movingToBayloob)}
+        <div class="summary">${T.closeToContinue(name)}</div>
+        <div class="actions">
+          <button class="btn" data-act="cancel-handoff" data-sid="${esc(s.id)}">${T.cancel}</button>
+          <button class="btn" data-act="focus" data-sid="${esc(s.id)}">${T.openTerminal}</button>
+        </div>` };
     }
 
     #cardHead(s, verb) {
@@ -1111,6 +1129,8 @@
           if (hint) { hint.textContent = r.error; hint.classList.add('err'); }
           for (const x of this.el.card.querySelectorAll('[data-act=menu]')) { x.disabled = false; }
         }
+      } else if (act === 'cancel-handoff') {
+        this.api?.cancelHandoff(b.dataset.sid);
       } else if (act === 'fix-err') {
         this.errorNote = null;
         this.api?.fixError(b.dataset.sid || null);

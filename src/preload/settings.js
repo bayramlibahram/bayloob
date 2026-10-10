@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   installExtension: () => ipcRenderer.invoke("settings:install-extension"),
   revokeRule: ruleId => ipcRenderer.invoke("settings:revoke-rule", ruleId),
   forgetDenial: id => ipcRenderer.invoke("settings:forget-denial", id),
+  shellIntegration: on => ipcRenderer.invoke("settings:shell-integration", on),
   resize: height => ipcRenderer.send("settings:resize", height),
   close: () => ipcRenderer.send("settings:close"),
 });

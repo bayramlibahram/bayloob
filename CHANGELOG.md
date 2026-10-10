@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- Replies straight into agents that run outside tmux, two ways (no GNOME extension needed):
+  - **Continue in Bayloob** (session menu, and the panel's copy-and-paste strip): close the agent in its
+    terminal once, and Bayloob resumes the same conversation in tmux (`claude --resume <id>`,
+    `codex resume <id>`) in the same folder.
+  - Settings → **Agents in tmux**: adds a small, marked block to `~/.bashrc` / `~/.zshrc` (with a backup;
+    turning it off removes exactly that block) so `claude` and `codex` typed in any terminal start inside
+    tmux, with that terminal's environment.
 - Ask Bayloob: pick the terminal a new session opens in ("Open in: Ptyxis · xterm…" — the installed
   ones, the Settings command first); the confirm step names it, and the choice is remembered.
 - The pill floats just below the desktop's top bar instead of covering it: placed from the GNOME
@@ -17,6 +24,9 @@
   the terminal's default can be the risky choice, e.g. Codex's "Update now" runs a script).
 
 ### Fixed
+- Clicks in the pill no longer get lost while agents work: the list and cards used to be rebuilt
+  several times a second, so a press and release could land on two different buttons. Parts are now
+  replaced only when they change, and never while a mouse button is held (10/10 clicks vs 2/10 before).
 - A prompt to an agent whose turn ended without a Stop hook (interrupted with Esc) no longer waits in
   the queue forever: Claude Code's own session status (`idle`, newer than Bayloob's last event) sets
   the session idle, and the queue goes out.

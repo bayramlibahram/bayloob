@@ -63,7 +63,16 @@ class SessionLauncher {
   /** Starts `agent` in `cwd` (optionally with a first prompt) and opens it in a terminal window. */
   // role: what the session is for ("challenger" reviews another agent's work); readOnly: no file changes
   // terminal: which terminal emulator opens it (an id from TerminalLauncher.list(); default otherwise)
-  async launch({ agent, cwd, prompt = "", readOnly = false, role = null, terminal = null }) {
+  // resume: an existing conversation's id to continue (instead of a new one)
+  async launch({
+    agent,
+    cwd,
+    prompt = "",
+    readOnly = false,
+    role = null,
+    terminal = null,
+    resume = null,
+  }) {
     cwd = cwd.replace(/^~(?=$|\/)/, os.homedir());
     if (!fs.statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
       throw new Error(`Not a folder: ${cwd}`);
@@ -83,7 +92,7 @@ class SessionLauncher {
       "-P",
       "-F",
       "#{pane_id}",
-      ...viaLoginShell(agentCommand(agent, prompt.trim(), { readOnly })),
+      ...viaLoginShell(agentCommand(agent, prompt.trim(), { readOnly, resume })),
     ]);
     this.attach(name, terminal);
     return { name, paneId, agent, cwd, role };

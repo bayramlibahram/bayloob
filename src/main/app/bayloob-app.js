@@ -37,6 +37,7 @@ const { WindowService } = require("../infrastructure/desktop/window.service");
 const { Git } = require("../infrastructure/system/git");
 const { AgentDiscovery } = require("../infrastructure/system/agent-discovery");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
+const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
 const { LauncherWindow } = require("../windows/launcher-window");
@@ -52,7 +53,8 @@ const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the age
 const OUTPUT_MS = 2000; // refresh of the last-output lines while the pill's list is open
 const SOUNDS_DIR = path.join(ASSETS_DIR, "sounds");
 const MENU_MS = 2000; // how often idle tmux panes are checked for a terminal-only question
-const DISCOVER_MS = 5000; // how often running agents are looked for (new ones, idle ones, ended ones)
+const DISCOVER_MS = 5000;
+const HANDOFF_MAX_MS = 10 * 60 * 1000; // how long "Continue in Bayloob" waits for the agent to be closed // how often running agents are looked for (new ones, idle ones, ended ones)
 const BLOCKED_MS = 5000; // how often waiting time is credited
 const PRESENCE_MS = 15_000; // how often the screen lock is checked
 const SAVE_MS = 60_000; // how often today's waiting total is written to disk
@@ -115,6 +117,7 @@ class BayloobApp {
   output = new SessionOutput();
   git = new Git();
   discovery = new AgentDiscovery();
+  #handoffs = new Map(); // session id -> { agent, cwd, sessionId, pid, at }: waiting to continue in tmux
   // Questions agents ask only in their terminal (folder trust, update offers…), read from tmux panes
   menus = new MenuWatcher({
     capture: capturePane,
@@ -379,6 +382,15 @@ class BayloobApp {
       hooks: this.hooks.status(),
       rules: this.server.immune?.rules() || [],
       denials: this.server.immune?.antibodies() || [],
+      // "Run agents in tmux": whether the shell's rc file has Bayloob's block (read, not remembered)
+      shell: (() => {
+        const rc = shellIntegration.rcFile();
+        return {
+          supported: !!rc,
+          installed: shellIntegration.installed(rc),
+          rc: rc ? rc.replace(os.homedir(), "~") : null,
+        };
+      })(),
       // name, file and the pack's default, for the per-sound switches
       soundList: Object.entries(this.#soundManifest()).map(([name, m]) => ({
         name,
@@ -510,6 +522,11 @@ class BayloobApp {
       { label: "Open terminal", click: () => this.focus(session) },
       { label: "Send a prompt…", enabled: canPrompt, click: () => this.openPromptBox(session) },
       { label: "Open workspace", enabled: !!session.cwd, click: () => this.openWorkspace(session) },
+      {
+        label: "Continue in Bayloob (tmux)",
+        visible: !session.term?.tmux && !!AGENTS[session.agent]?.resume,
+        click: () => this.continueInBayloob(session),
+      },
       {
         label: "Move new work to a worktree…",
         visible: !!this.#collisions[session.id],
@@ -796,6 +813,63 @@ class BayloobApp {
     }
   }
 
+  /**
+   * "Continue in Bayloob": a session in a terminal Bayloob can't type into moves into tmux. The user closes
+   * the agent in its own terminal (two processes on one conversation would clash); once its process is
+   * gone, Bayloob resumes the same conversation in tmux, in the same folder. → { ok, error? }
+   */
+  continueInBayloob(session) {
+    const def = AGENTS[session?.agent];
+    if (!session || session.term?.tmux) {
+      return { ok: false, error: "This session already runs in tmux" };
+    }
+    if (!def?.resume) {
+      return { ok: false, error: `${def?.name || "This agent"} can't be continued from Bayloob` };
+    }
+    const sessionId = session.id.slice(session.agent.length + 1);
+    const pid =
+      Number(session.term?.agentPid || (session.discovered ? session.term?.pid : 0)) || null;
+    this.#handoffs.set(session.id, {
+      agent: session.agent,
+      cwd: session.cwd,
+      sessionId,
+      pid,
+      at: Date.now(),
+    });
+    session.handoff = true;
+    this.server.store.changed();
+    return { ok: true };
+  }
+
+  // Resumes handed-off sessions whose original process has ended; gives up on ones left waiting too long
+  #resumeHandoffs() {
+    for (const [id, h] of this.#handoffs) {
+      const alive = h.pid ? fs.existsSync(`/proc/${h.pid}`) : !!this.server.store.get(id);
+      if (Date.now() - h.at > HANDOFF_MAX_MS) {
+        this.#handoffs.delete(id);
+        const s = this.server.store.get(id);
+        if (s) {
+          s.handoff = false;
+          this.server.store.changed();
+        }
+      } else if (!alive) {
+        this.#handoffs.delete(id);
+        this.launch({ agent: h.agent, cwd: h.cwd, resume: h.sessionId }).catch(e =>
+          console.error("continue:", e.message)
+        );
+      }
+    }
+  }
+
+  cancelHandoff(id) {
+    this.#handoffs.delete(id);
+    const s = this.server.store.get(id);
+    if (s?.handoff) {
+      s.handoff = false;
+      this.server.store.changed();
+    }
+  }
+
   #discover() {
     try {
       const store = this.server.store;
@@ -804,6 +878,7 @@ class BayloobApp {
       if (adopted || removed) {
         store.changed();
       }
+      this.#resumeHandoffs();
     } catch (e) {
       console.error("discovery:", e.message);
     }
@@ -892,6 +967,10 @@ class BayloobApp {
       }
     });
     ipcMain.on("open-settings", () => this.openSettings());
+    ipcMain.handle("continue-in-bayloob", (_e, sessionId) =>
+      this.continueInBayloob(session(sessionId))
+    );
+    ipcMain.on("cancel-handoff", (_e, sessionId) => this.cancelHandoff(String(sessionId)));
     // The user picked an option of a terminal-only question in the pill
     ipcMain.handle("answer-menu", async (_e, sessionId, index) => {
       const s = session(sessionId);
@@ -986,6 +1065,25 @@ class BayloobApp {
         }
       })
     );
+    // Adds or removes the shell block right away (with a backup when adding)
+    ipcMain.handle("settings:shell-integration", (_e, on) => {
+      try {
+        const rc = shellIntegration.rcFile();
+        let backup = null;
+        if (on) {
+          backup = shellIntegration.install(rc);
+        } else {
+          shellIntegration.uninstall(rc);
+        }
+        return {
+          ok: true,
+          installed: shellIntegration.installed(rc),
+          backup: backup?.replace(os.homedir(), "~") || null,
+        };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    });
     ipcMain.handle("settings:forget-denial", (_e, id) => {
       this.server.immune?.forget(String(id));
       return this.server.immune?.antibodies() || [];

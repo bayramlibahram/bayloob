@@ -35,4 +35,5 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),
   openFinding: (sessionId, file, line) => ipcRenderer.invoke("open-finding", sessionId, file, line),
   answerMenu: (sessionId, index) => ipcRenderer.invoke("answer-menu", sessionId, index),
+  cancelHandoff: sessionId => ipcRenderer.send("cancel-handoff", sessionId),
 });
