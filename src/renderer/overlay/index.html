@@ -50,6 +50,7 @@
     background: linear-gradient(180deg, color-mix(in srgb, var(--waiting) 9%, transparent), var(--card)); }
   .card.done.r-untested { border-color: color-mix(in srgb, var(--working) 40%, transparent);
     background: linear-gradient(180deg, color-mix(in srgb, var(--working) 8%, transparent), var(--card)); }
+  .row .role { color: var(--waiting); }
   .receipt { margin-top: 8px; font-size: 12.5px; font-weight: 600; }
   .receipt code { font: 500 11.5px ui-monospace, monospace; color: var(--muted); }
   .receipt.passed { color: var(--done); }
@@ -237,6 +238,8 @@
     waiting: 'waiting',
     receipt: { passed: '✓ Tests passed', failed: '✗ Tests failed', untested: '⚠ Code changed, no tests run' },
     askTests: 'Ask to run tests',
+    challenge: '⚔ Challenge', challenger: '⚔ challenger',
+    challengeTip: 'Start a different agent, read-only, to try to break these changes',
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
@@ -557,6 +560,7 @@
         ${this.toast.hint ? `<div class="hint">${esc(this.toast.hint)}</div>` : ''}
         <div class="actions">
           ${this.#needsTests(s) ? `<button class="btn" data-act="ask-tests" data-sid="${esc(s.id)}">${T.askTests}</button>` : ''}
+          ${this.#canChallenge(s) ? `<button class="btn" data-act="challenge" data-sid="${esc(s.id)}" title="${T.challengeTip}">${T.challenge}</button>` : ''}
           <button class="btn" data-act="dismiss">${T.dismiss}</button>
           <button class="btn primary" data-act="focus" data-sid="${esc(s.id)}">${T.openTerminal}</button>
         </div>` };
@@ -570,6 +574,12 @@
       return `<div class="receipt ${r.status}">${T.receipt[r.status]}${cmd}</div>`;
     }
 
+    // A finished turn that changed code can be handed to another agent to try to break it
+    #canChallenge(s) {
+      const r = this.receipts[s.id];
+      return s.role !== 'challenger' && (!!this.diffs[s.id] || (r && r.status !== 'no-changes'));
+    }
+
     #needsTests(s) {
       const r = this.receipts[s.id];
       return !!s.term?.tmux && (r?.status === 'failed' || r?.status === 'untested');
@@ -579,7 +589,7 @@
       if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
-          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
+          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
           ${this.queues[s.id] ? `<span class="queue" title="${T.queuedTip(this.queues[s.id])}">⏳${this.queues[s.id]}</span>` : ''}
           ${this.#diffHtml(s.id)}
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}${s.state === 'done' && this.receipts[s.id] ? (RECEIPT_MARK[this.receipts[s.id].status] || '') : ''}</span>
@@ -656,6 +666,11 @@
       } else if (act === 'allow' || act === 'deny' || act === 'terminal') {
         b.disabled = true;
         this.api?.decide(b.dataset.id, act);
+      } else if (act === 'challenge') {
+        b.disabled = true;
+        const r = await this.api?.challenge(b.dataset.sid);
+        if (r?.ok === false && this.toast) { this.toast.hint = r.error; }
+        this.render();
       } else if (act === 'ask-tests') {
         b.disabled = true;
         this.api?.askTests(b.dataset.sid);

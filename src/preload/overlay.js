@@ -22,4 +22,5 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onBlocked: cb => ipcRenderer.on("blocked", (_e, info) => cb(info)),
   onReceipts: cb => ipcRenderer.on("receipts", (_e, receipts) => cb(receipts)),
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
+  challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),
 });
