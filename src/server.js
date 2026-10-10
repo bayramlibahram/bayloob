@@ -65,7 +65,8 @@ function decisionBody(decision) {
 
 /** All known agent sessions. Emits 'change' with the sorted list after every update. */
 class SessionStore extends EventEmitter {
-  #sessions = new Map(); // id -> {id, agent, project, cwd, state, tool, summary, perm, term, updatedAt}
+  #sessions = new Map(); // id -> {id, agent, project, cwd, state, tool, summary, perm, term, managed, updatedAt}
+  #launched = new Map(); // tmux pane id -> { name, paneId, agent, cwd } for sessions Bayloob started
 
   get(id) { return this.#sessions.get(id); }
 
@@ -77,20 +78,45 @@ class SessionStore extends EventEmitter {
     const old = this.#sessions.get(id);
     // The hook's own directory is only a fallback when the event has no cwd and the session is new
     const cwd = ev.cwd || old?.cwd || query.get('cwd') || '';
-    const term = Object.fromEntries(TERM_KEYS.filter(k => query.get(k)).map(k => [k, query.get(k)]));
+    const fresh = Object.fromEntries(TERM_KEYS.filter(k => query.get(k)).map(k => [k, query.get(k)]));
+    const term = Object.keys(fresh).length ? fresh : (old?.term || {});
+    const launch = this.#launched.get(term.tmux);
+    if (launch) this.#sessions.delete(SessionStore.placeholderId(launch)); // the real session takes over
     const session = {
       id, agent, cwd,
       project: cwd ? path.basename(cwd) : agent,
       state: 'idle', tool: null,
       summary: old?.summary || null,
       perm: old?.perm || null,
-      term: Object.keys(term).length ? term : (old?.term || {}),
+      term,
+      managed: launch?.name || old?.managed || null,
       ...patch,
       updatedAt: Date.now(),
     };
     this.#sessions.set(id, session);
     return session;
   }
+
+  static placeholderId(launch) { return `${launch.agent}:tmux:${launch.name}`; }
+
+  // Show a launched session right away, before the agent's first hook event arrives
+  trackLaunch(launch) {
+    this.#launched.set(launch.paneId, launch);
+    const id = SessionStore.placeholderId(launch);
+    this.#sessions.set(id, {
+      id, agent: launch.agent, cwd: launch.cwd, project: path.basename(launch.cwd),
+      state: 'idle', tool: null, summary: null, perm: null,
+      term: { tmux: launch.paneId }, managed: launch.name, updatedAt: Date.now(),
+    });
+  }
+
+  // Forget a stopped tmux session and every agent session that ran in it
+  untrackLaunch(name) {
+    for (const [pane, l] of this.#launched) if (l.name === name) this.#launched.delete(pane);
+    for (const [id, s] of this.#sessions) if (s.managed === name) this.#sessions.delete(id);
+  }
+
+  launchedNames() { return [...new Set([...this.#launched.values()].map(l => l.name))]; }
 
   touch(id) {
     const s = this.#sessions.get(id);
@@ -109,7 +135,8 @@ class SessionStore extends EventEmitter {
     const now = Date.now();
     let removed = false;
     for (const [id, s] of this.#sessions) {
-      if (!s.perm && now - s.updatedAt > maxAge) { this.#sessions.delete(id); removed = true; }
+      // Bayloob-launched sessions are removed when their tmux session ends, not by age
+      if (!s.perm && !s.managed && now - s.updatedAt > maxAge) { this.#sessions.delete(id); removed = true; }
     }
     return removed;
   }

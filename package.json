@@ -62,7 +62,10 @@
       "packageName": "bayloob",
       "compression": "xz",
       "afterInstall": "build/after-install.sh",
-      "afterRemove": "build/after-remove.sh"
+      "afterRemove": "build/after-remove.sh",
+      "recommends": [
+        "tmux"
+      ]
     },
     "publish": null
   }
