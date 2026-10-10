@@ -53,9 +53,12 @@ class SoundPlayer {
   #last = {}; // name -> when it last played
   #lastAny = 0; // when any sound last played
 
-  /** { manifest, base, enabled, volume } from main; enabled false or volume 0 silences everything. */
-  configure({ manifest = {}, base = "", enabled = false, volume = 0.8 } = {}) {
+  toggles = {}; // name -> on/off chosen in Settings (overrides the pack's default_enabled)
+
+  /** { manifest, base, enabled, volume, toggles } from main; enabled false or volume 0 silences everything. */
+  configure({ manifest = {}, base = "", enabled = false, volume = 0.8, toggles = {} } = {}) {
     this.manifest = manifest;
+    this.toggles = toggles || {};
     this.base = base;
     this.volume = enabled ? Math.max(0, Math.min(1, volume)) : 0;
   }
@@ -67,7 +70,7 @@ class SoundPlayer {
 
   play(name) {
     const m = this.manifest[name];
-    if (!m?.default_enabled || this.volume === 0) {
+    if (!m || !(this.toggles[name] ?? m.default_enabled) || this.volume === 0) {
       return false;
     }
     const now = Date.now();

@@ -13,6 +13,7 @@ const DEFAULTS = {
   music: true, // watch MPRIS players and dance to music
   sounds: true, // UI sounds (permission card, done, …)
   soundVolume: 0.8, // 0..1
+  soundToggles: {}, // sound name -> on/off, overriding the pack's default_enabled
 };
 
 // How each environment variable maps onto a setting
@@ -25,6 +26,7 @@ const ENV = {
   music: () => (process.env.BAYLOOB_NO_MUSIC === "1" ? false : undefined),
   sounds: () => (process.env.BAYLOOB_SOUNDS === "0" ? false : undefined),
   soundVolume: () => undefined,
+  soundToggles: () => undefined,
 };
 
 const VALIDATE = {
@@ -35,6 +37,12 @@ const VALIDATE = {
   editor: v => String(v ?? "").trim(),
   music: v => v !== false,
   sounds: v => v !== false,
+  soundToggles: v =>
+    Object.fromEntries(
+      Object.entries(v && typeof v === "object" ? v : {}).filter(
+        ([k, on]) => /^[a-z][a-z-]{0,39}$/.test(k) && typeof on === "boolean"
+      )
+    ),
   soundVolume: v =>
     Number.isFinite(Number(v)) ? Math.max(0, Math.min(1, Number(v))) : DEFAULTS.soundVolume,
 };
@@ -81,7 +89,10 @@ class Settings extends EventEmitter {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, `${JSON.stringify(this.#saved, null, 2)}\n`);
     const after = this.all();
-    const changed = Object.keys(after).filter(k => after[k] !== before[k]);
+    // JSON comparison, so an object setting (soundToggles) only counts as changed when its content does
+    const changed = Object.keys(after).filter(
+      k => JSON.stringify(after[k]) !== JSON.stringify(before[k])
+    );
     if (changed.length) {
       this.emit("change", changed);
     }

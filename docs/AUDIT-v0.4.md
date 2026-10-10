@@ -23,7 +23,7 @@ Status: **done** = works as specified · **partial** = exists, gaps listed · **
 | F14 | Reply without terminal | partial | `overlay/index.html:704`, `panel/index.html:418`, `agents/prompt-queue.js:7` | Delivery is tmux-only; kitty / wezterm / clipboard + focus fallback missing |
 | F15 | Workspace panel | done | `panel/index.html:357`, `workspace/workspace.service.js:12`, Docker `preload/panel.js:15` | Window list via GNOME extension (no `wmctrl` on this machine; X11 path not needed) |
 | F16 | Error → fix prompt | partial | `agents/error-prompt.js:16`, `app/bayloob-app.js:439` | Clipboard is read only when the prompt window opens; no opt-in watcher + "Fix this error?" toast |
-| F17 | Sounds | partial | `shared/sounds.js:16`, Settings `settings/index.html:238` | Per-sound toggles in Settings (master switch + volume exist) |
+| F17 | Sounds | done | `shared/sounds.js` (`toggles`), Settings → "Choose sounds…", `config/settings.js` (`soundToggles`) | — |
 | F18 | Music | done | `music/music-watcher.js:35`, controls `overlay/index.html:831` | — |
 | F19 | Sleep / wake | done | `shared/novi.js:40` (`sleepAfter`, `onSleep`) | — |
 | F20 | Light theme | done | `renderer/shared/theme.css`, `shared/ui-common.js` (follows prefers-color-scheme), `nativeTheme.themeSource` in `app/bayloob-app.js`, Settings → Theme | — (added after the audit) |

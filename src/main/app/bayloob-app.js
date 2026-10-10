@@ -265,7 +265,7 @@ class BayloobApp {
     if (keys.includes("theme")) {
       nativeTheme.themeSource = this.settings.get("theme");
     }
-    if (keys.includes("sounds") || keys.includes("soundVolume")) {
+    if (keys.includes("sounds") || keys.includes("soundVolume") || keys.includes("soundToggles")) {
       this.#sendSoundConfig();
     }
     if (keys.includes("music")) {
@@ -279,18 +279,22 @@ class BayloobApp {
   }
 
   // Which UI sounds exist (src/assets/sounds/sounds.json) and how loud, for the overlay's player
-  #sendSoundConfig() {
-    let manifest = {};
+  // The sound pack's manifest (src/assets/sounds/sounds.json); {} without a pack, and the overlay stays silent
+  #soundManifest() {
     try {
-      manifest = JSON.parse(fs.readFileSync(path.join(SOUNDS_DIR, "sounds.json"), "utf8"));
+      return JSON.parse(fs.readFileSync(path.join(SOUNDS_DIR, "sounds.json"), "utf8"));
     } catch {
-      // no sound pack: the overlay stays silent
+      return {};
     }
+  }
+
+  #sendSoundConfig() {
     this.overlay.send("sound-config", {
-      manifest,
+      manifest: this.#soundManifest(),
       base: "../../assets/sounds/",
       enabled: this.settings.get("sounds"),
       volume: this.settings.get("soundVolume"),
+      toggles: this.settings.get("soundToggles"),
     });
   }
 
@@ -303,6 +307,12 @@ class BayloobApp {
       hooks: this.hooks.status(),
       rules: this.server.immune?.rules() || [],
       denials: this.server.immune?.antibodies() || [],
+      // name, file and the pack's default, for the per-sound switches
+      soundList: Object.entries(this.#soundManifest()).map(([name, m]) => ({
+        name,
+        file: m.file,
+        on: !!m.default_enabled,
+      })),
     });
   }
 

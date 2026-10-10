@@ -44,6 +44,15 @@
   .seg button[aria-pressed="true"] { background: rgba(139,92,255,.22); color: var(--text); }
   .seg button:disabled { cursor: not-allowed; opacity: .5; }
 
+  .link { grid-column: 2; justify-self: start; margin-top: -4px; color: var(--brand-soft); font-size: 12px; font-weight: 600; }
+  .link:hover { text-decoration: underline; }
+  /* one chip per sound: on = filled; turning one on plays it */
+  .soundgrid { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-radius: 12px;
+    background: var(--field); border: 1px solid var(--line); }
+  .soundgrid[hidden] { display: none; }
+  .soundgrid button { padding: 4px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+  .soundgrid button[aria-pressed="true"] { color: var(--text); background: rgba(139,92,255,.16); border-color: rgba(139,92,255,.45); }
+  .soundgrid button:disabled { opacity: .45; }
   .sound { display: flex; align-items: center; gap: 10px; }
   .sound input[type=range] { width: 130px; accent-color: var(--brand); }
   .sound input[type=range]:disabled { opacity: .4; }
@@ -112,6 +121,8 @@
         <button type="button" class="btn mini" id="testSound" title="Play a sample at this volume">▶</button>
         <button type="button" class="switch" id="sounds" role="switch" aria-checked="true" aria-label="Sounds"></button>
       </div>
+      <button type="button" class="link" id="soundMore" aria-expanded="false">Choose sounds…</button>
+      <div class="soundgrid" id="soundGrid" hidden></div>
     </div>
 
     <div class="hooks" id="hooks"></div>
@@ -130,6 +141,13 @@
 <script>
   const T = {
     denialsTitle: 'Denied before (similar requests get a red card)', forget: 'Forget',
+    soundNames: {
+      permission: 'Permission card', 'permission-reminder': 'Reminder (60 s)', allow: 'Allow', deny: 'Deny',
+      'to-terminal': 'To terminal', done: 'Agent finished', 'open-terminal': 'Open terminal', prompt: 'Prompt sent',
+      tool: 'Every tool call', 'session-start': 'Session started', 'session-end': 'Session ended',
+      'new-agent': 'Another agent joined', expand: 'List opens', collapse: 'List closes',
+      sleep: 'Novi falls asleep', wake: 'Novi wakes up', dance: 'Music starts',
+    },
     rulesTitle: 'Always allowed (from permission cards)', used: n => `used ${n}×`, remove: 'Remove',
     hooksOk: 'Claude Code hooks are installed',
     hooksPartial: n => `Claude Code hooks are only partly installed (${n} of 9 events)`,
@@ -154,7 +172,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), mascot: $('mascot'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
-        music: $('music'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -165,6 +183,7 @@
       this.theme = values.theme;
       this.music = values.music;
       this.sounds = values.sounds;
+      this.soundToggles = { ...(values.soundToggles || {}) };
       this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
       this.el.shortcut.value = values.shortcut;
       this.el.terminal.value = values.terminal;
@@ -200,6 +219,18 @@
       this.el.sounds.setAttribute('aria-checked', this.sounds);
       this.el.sounds.disabled = locked;
       this.el.volume.disabled = this.el.testSound.disabled = !this.sounds;
+      const list = this.state.soundList || [];
+      this.el.soundMore.hidden = !list.length;
+      this.el.soundGrid.innerHTML = list.map(s => {
+        const on = this.soundToggles[s.name] ?? s.on;
+        return `<button type="button" data-sound="${esc(s.name)}" aria-pressed="${on}" ${this.sounds ? '' : 'disabled'}>${esc(T.soundNames[s.name] || s.name)}</button>`;
+      }).join('');
+    }
+
+    #play(file) {
+      const a = new Audio(`../../assets/sounds/${file}`);
+      a.volume = Number(this.el.volume.value) / 100;
+      a.play().catch(() => {});
     }
 
     #renderMusic() {
@@ -262,7 +293,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
-        mascot: this.mascot, theme: this.theme, music: this.music, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100,
+        mascot: this.mascot, theme: this.theme, music: this.music, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -283,6 +314,22 @@
       });
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
       this.el.sounds.addEventListener('click', () => { this.sounds = !this.sounds; this.#renderSounds(); });
+      this.el.soundMore.addEventListener('click', () => {
+        const open = this.el.soundGrid.hidden;
+        this.el.soundGrid.hidden = !open;
+        this.el.soundMore.setAttribute('aria-expanded', String(open));
+        this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
+      });
+      this.el.soundGrid.addEventListener('click', e => {
+        const b = e.target.closest('[data-sound]');
+        if (!b || b.disabled) { return; }
+        const s = this.state.soundList.find(x => x.name === b.dataset.sound);
+        const on = !(this.soundToggles[s.name] ?? s.on);
+        // Only differences from the pack's default are kept
+        if (on === s.on) { delete this.soundToggles[s.name]; } else { this.soundToggles[s.name] = on; }
+        if (on) { this.#play(s.file); }
+        this.#renderSounds();
+      });
       this.el.testSound.addEventListener('click', () => {
         const a = new Audio('../../assets/sounds/done.ogg');
         a.volume = Number(this.el.volume.value) / 100;
