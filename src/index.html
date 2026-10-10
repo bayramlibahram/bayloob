@@ -37,7 +37,7 @@
     transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
   }
   .pill.open, .pill.has-card { width: 380px; border-radius: 0 0 24px 24px; }
-  .bar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 4px 14px 0 10px; }
+  .bar { cursor: pointer; display: flex; align-items: center; gap: 10px; height: 44px; padding: 4px 14px 0 10px; }
   .label { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .label b { font-weight: 600; }
   .label span { color: var(--muted); }
@@ -169,6 +169,7 @@
     <div class="list" id="list"></div>
   </div>
 
+<script src="ui-common.js"></script>
 <script src="packs/meta.js"></script>
 <script src="novi.js"></script>
 <script>
@@ -194,39 +195,13 @@
   const PILL_OPEN_WIDTH = 380;
   const STOP_CONFIRM_MS = 3000;
 
-  // Every agent gets its own colors — same shape, different body.
-  // pack/color: the raster mascot (novi.js, default). top/bot: gradients of the SVG mascot (BAYLOOB_MASCOT=svg).
-  // "manager" is Bayloob itself: the main mascot in the pill, always purple; agent sessions are its subs.
-  const MANAGER = 'manager';
-  const AGENTS = {
-    manager: { name: 'Bayloob',    pack: 'purple', color: '#8b5cff', top: ['#d07bff', '#a24bf7', '#7a2cec'], bot: ['#8a45f5', '#5a24e0', '#2f12a8'] },
-    claude: { name: 'Claude Code', pack: 'coral',  color: '#ff7a5c', top: ['#ffb39e', '#ff7a5c', '#e0502f'], bot: ['#f0704f', '#c9452a', '#8c2a17'] },
-    codex:  { name: 'Codex',       pack: 'teal',   color: '#22b8cf', top: ['#8ff5df', '#3fd3b6', '#16a48c'], bot: ['#2fc7ae', '#139582', '#0b5e58'] },
-    gemini: { name: 'Gemini CLI',  pack: 'blue',   color: '#5b7bff', top: ['#a9cbff', '#6a9ef8', '#3f72e6'], bot: ['#5b8ff5', '#3461d6', '#1c3a9c'] },
-    cursor: { name: 'Cursor',      pack: 'silver', color: '#b6bac6', top: ['#ffffff', '#dde2ea', '#b6bdca'], bot: ['#c3c9d4', '#9099aa', '#5d6577'] },
-    other:  { name: null,          pack: 'silver', color: '#b6bac6', top: ['#ffd88a', '#ffb547', '#f08a1c'], bot: ['#f5a23a', '#d9771a', '#9c4c0c'] },
-  };
   const SLEEP_AFTER_MS = 5 * 60 * 1000;
   // "?mascot=svg" (from BAYLOOB_MASCOT=svg) picks the SVG mascot; it's also the fallback if the raster one can't load
   const MASCOT_MODE = new URLSearchParams(location.search).get('mascot') === 'svg' || !window.Novi || !window.NOVI_META ? 'svg' : 'novi';
 
-  const ICON_TERM = '<svg viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm1.3 3.2 2.3 1.8-2.3 1.8.8 1 3.5-2.8-3.5-2.8-.8 1ZM8 10.5h4.5v-1.2H8v1.2Z"/></svg>';
-
   const ICON_PROMPT = '<svg viewBox="0 0 16 16"><path d="M2.5 2h11A1.5 1.5 0 0 1 15 3.5v7a1.5 1.5 0 0 1-1.5 1.5H6l-3.2 2.6A.5.5 0 0 1 2 14.2V12h.5A1.5 1.5 0 0 1 1 10.5v-7A1.5 1.5 0 0 1 2.5 2Zm1.5 3v1.3h8V5H4Zm0 2.7V9h5.5V7.7H4Z"/></svg>';
   const ICON_STOP = '<svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="2"/></svg>';
 
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-  class Agent {
-    static key(agent) {
-      const k = String(agent || '').toLowerCase();
-      return AGENTS[k] ? k : 'other';
-    }
-    static palette(agent) { return AGENTS[Agent.key(agent)]; }
-    static displayName(agent) { return Agent.palette(agent).name || agent; }
-    // Accent color matching the agent's mascot
-    static color(agent) { const p = Agent.palette(agent); return MASCOT_MODE === 'novi' ? p.color : p.top[1]; }
-  }
 
   /** Builds the hexagon mascot SVG in an agent's colors. Each copy gets unique gradient ids. */
   class Mascot {
@@ -307,10 +282,7 @@
     }
 
     // A static idle image for the session list — no animation, so many rows stay cheap
-    static thumb(agent) {
-      const pack = Agent.palette(agent).pack;
-      return `<div class="thumb">${['body', 'lid', 'visor', 'eyes'].map(p => `<img src="packs/${pack}/idle-${p}.png" alt="">`).join('')}</div>`;
-    }
+    static thumb(agent) { return Agent.thumb(agent); }
   }
 
   const MascotView = MASCOT_MODE === 'novi' ? NoviMascotView : SvgMascotView;
@@ -388,7 +360,7 @@
     }
 
     #cardHead(s, verb) {
-      const dot = Agent.color(s.agent);
+      const dot = Agent.color(s.agent, MASCOT_MODE);
       return `<div class="head"><span class="adot" style="background:${dot}"></span><b>${esc(Agent.displayName(s.agent))}</b> · ${esc(s.project)} · ${verb}</div>`;
     }
 
@@ -456,6 +428,8 @@
     }
 
     async #onClick(e) {
+      // A click on the top bar (mascot / label) opens the workspace panel
+      if (e.target.closest('.bar')) return this.api?.togglePanel();
       const b = e.target.closest('[data-act]');
       if (!b || b.disabled) return;
       const act = b.dataset.act;

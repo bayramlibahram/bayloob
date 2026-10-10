@@ -26,6 +26,18 @@ class HookInstaller {
 
   commandFor(agent) { return `${this.baseCommand} ${agent}`; }
 
+  // Read-only: which agent hooks in settings.json point at a Bayloob hook script (this one or another install)
+  status() {
+    try {
+      const hooks = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8')).hooks || {};
+      const isOurs = cmd => /bayloob-hook|bayo-hook|scripts[\\/]hook\.js/.test(cmd || '');
+      const events = EVENTS.filter(ev => (hooks[ev] || []).some(g => (g.hooks || []).some(h => isOurs(h.command))));
+      return { installed: events.length > 0, complete: events.length === EVENTS.length, events };
+    } catch {
+      return { installed: false, complete: false, events: [] };
+    }
+  }
+
   install() {
     const settings = this.#readSettings();
     if (!settings) return false;

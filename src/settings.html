@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bayloob settings</title>
+<style>
+  :root {
+    --glass: rgba(18, 17, 23, 0.97);
+    --field: rgba(255,255,255,0.05);
+    --line: rgba(255,255,255,0.09);
+    --text: #f2f2f5;
+    --muted: #8b8b96;
+    --brand: #8b5cff;
+    --error: #ff5d6c;
+    --ok: #4fd59a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; height: 100%; overflow: hidden;
+    font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
+    -webkit-font-smoothing: antialiased; }
+  button, input { font: inherit; color: inherit; border: 0; background: none; outline: none; }
+  button { cursor: pointer; }
+
+  .panel { margin: 10px; padding: 16px 18px; border-radius: 18px; background: var(--glass);
+    border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    display: flex; flex-direction: column; gap: 14px; animation: pop .18s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+  .title { display: flex; align-items: baseline; }
+  .title b { font-size: 15px; font-weight: 650; }
+  .title kbd { margin-left: auto; color: var(--muted); font: 11px ui-monospace, monospace; }
+
+  .field { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; }
+  .field > label { color: #c9c7d4; }
+  .field small { grid-column: 2; color: var(--muted); font-size: 11.5px; margin-top: -6px; }
+  input[type=text] { width: 100%; padding: 8px 10px; border-radius: 10px; background: var(--field); border: 1px solid var(--line);
+    font: 12px ui-monospace, "Ubuntu Mono", monospace; }
+  input[type=text]:focus { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
+  input:disabled { opacity: .5; }
+
+  .seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); width: max-content; }
+  .seg button { padding: 5px 12px; border-radius: 7px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: rgba(139,92,255,.22); color: var(--text); }
+  .seg button:disabled { cursor: not-allowed; opacity: .5; }
+
+  .switch { width: 38px; height: 22px; border-radius: 11px; background: rgba(255,255,255,.12); position: relative; transition: background .15s; }
+  .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch[aria-checked="true"] { background: var(--brand); }
+  .switch[aria-checked="true"]::after { transform: translateX(16px); }
+  .switch:disabled { opacity: .5; cursor: not-allowed; }
+
+  .hooks { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
+  .hooks .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+  .hooks span { flex: 1; color: #c9c7d4; }
+  .btn { padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 600; white-space: nowrap; }
+  .btn:hover { background: rgba(255,255,255,.14); }
+  .btn.primary { background: var(--brand); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: progress; }
+  .foot { display: flex; align-items: center; gap: 8px; }
+  .msg { flex: 1; font-size: 12px; color: var(--muted); }
+  .msg.error { color: var(--error); }
+  .msg.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+  <form class="panel" id="form" autocomplete="off">
+    <div class="title"><b>Settings</b><kbd>Esc</kbd></div>
+
+    <div class="field">
+      <label>Mascot</label>
+      <div class="seg" id="mascot"><button type="button" data-v="novi">Novi (3D)</button><button type="button" data-v="svg">Classic</button></div>
+    </div>
+    <div class="field">
+      <label for="shortcut">Launcher shortcut</label>
+      <input type="text" id="shortcut" placeholder="CommandOrControl+Alt+Space" spellcheck="false">
+      <small>Empty turns it off. On Wayland, bind a system shortcut to <code>bayloob --new-session</code>.</small>
+    </div>
+    <div class="field">
+      <label for="terminal">Terminal</label>
+      <input type="text" id="terminal" spellcheck="false">
+      <small>Used for launched sessions. The command is appended, e.g. <code>gnome-terminal --</code>.</small>
+    </div>
+    <div class="field">
+      <label for="editor">Editor</label>
+      <input type="text" id="editor" placeholder="File manager" spellcheck="false">
+      <small>"Open workspace" runs it with the folder, e.g. <code>code</code>. Empty opens the file manager.</small>
+    </div>
+    <div class="field">
+      <label>Dance to music</label>
+      <button type="button" class="switch" id="music" role="switch"></button>
+    </div>
+
+    <div class="hooks" id="hooks"></div>
+
+    <div class="foot">
+      <div class="msg" id="msg"></div>
+      <button class="btn" type="button" id="cancel">Cancel</button>
+      <button class="btn primary" type="submit" id="save">Save</button>
+    </div>
+  </form>
+
+<script>
+  const T = {
+    hooksOk: 'Claude Code hooks are installed',
+    hooksPartial: n => `Claude Code hooks are only partly installed (${n} of 9 events)`,
+    hooksMissing: 'Claude Code hooks are not installed',
+    install: 'Install hooks', installing: 'Installing…', installed: 'Hooks installed',
+    autoTerminal: name => name ? `Auto-detect (${name})` : 'Auto-detect',
+    lockedEnv: keys => `Set by environment variable: ${keys.join(', ')}`,
+    saved: 'Saved', hint: 'Ctrl+Enter to save',
+  };
+
+  /** The settings form. `state` = { values, locked, detectedTerminal, hooks } from the main process. */
+  class SettingsView {
+    state = null;
+    mascot = 'novi';
+    music = true;
+
+    constructor(api) {
+      this.api = api;
+      const $ = id => document.getElementById(id);
+      this.el = { form: $('form'), mascot: $('mascot'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
+        music: $('music'), hooks: $('hooks'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+      this.#bind();
+    }
+
+    show(state) {
+      this.state = state;
+      const { values, locked, detectedTerminal } = state;
+      this.mascot = values.mascot;
+      this.music = values.music;
+      this.el.shortcut.value = values.shortcut;
+      this.el.terminal.value = values.terminal;
+      this.el.terminal.placeholder = T.autoTerminal(detectedTerminal);
+      this.el.editor.value = values.editor;
+      for (const key of ['shortcut', 'terminal', 'editor']) this.el[key].disabled = locked.includes(key);
+      this.el.save.disabled = false;
+      this.#renderMascot();
+      this.#renderMusic();
+      this.#renderHooks();
+      this.#message(locked.length ? T.lockedEnv(locked) : T.hint);
+      this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
+      this.el.shortcut.focus();
+    }
+
+    #renderMascot() {
+      const locked = this.state.locked.includes('mascot');
+      for (const b of this.el.mascot.children) { b.setAttribute('aria-pressed', b.dataset.v === this.mascot); b.disabled = locked; }
+    }
+
+    #renderMusic() {
+      this.el.music.setAttribute('aria-checked', this.music);
+      this.el.music.disabled = this.state.locked.includes('music');
+    }
+
+    #renderHooks(override) {
+      const h = this.state.hooks;
+      const ok = h.complete, partial = h.installed && !h.complete;
+      const text = override || (ok ? T.hooksOk : partial ? T.hooksPartial(h.events.length) : T.hooksMissing);
+      const color = ok || override ? 'var(--ok)' : partial ? '#ffb547' : 'var(--error)';
+      this.el.hooks.innerHTML = `<span class="dot" style="--c:${color}"></span><span>${text}</span>` +
+        (ok || override ? '' : `<button type="button" class="btn" id="install">${T.install}</button>`);
+    }
+
+    #message(text, kind = '') {
+      this.el.msg.textContent = text;
+      this.el.msg.className = kind ? `msg ${kind}` : 'msg';
+    }
+
+    async #save() {
+      this.el.save.disabled = true;
+      const res = await this.api?.save({
+        mascot: this.mascot, music: this.music,
+        shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
+      });
+      this.el.save.disabled = false;
+      if (res?.ok) this.api.close();
+      else this.#message(res?.error || 'Could not save', 'error');
+    }
+
+    #bind() {
+      this.el.form.addEventListener('submit', e => { e.preventDefault(); this.#save(); });
+      this.el.cancel.addEventListener('click', () => this.api?.close());
+      this.el.mascot.addEventListener('click', e => {
+        const b = e.target.closest('[data-v]');
+        if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
+      });
+      this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
+      this.el.hooks.addEventListener('click', async e => {
+        const b = e.target.closest('#install');
+        if (!b) return;
+        b.disabled = true;
+        b.textContent = T.installing;
+        const res = await this.api?.installHooks();
+        if (res?.ok) this.#renderHooks(T.installed);
+        else { b.disabled = false; b.textContent = T.install; this.#message(res?.error || 'Could not install hooks', 'error'); }
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') this.api?.close();
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.#save(); }
+      });
+    }
+  }
+
+  const view = new SettingsView(window.settingsAPI);
+  if (window.settingsAPI) settingsAPI.onShow(state => view.show(state));
+  else window.__demo = view;
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
-const { app, ipcMain, globalShortcut } = require('electron');
-const { execFile } = require('child_process');
+const { app, ipcMain, globalShortcut, Menu, shell } = require('electron');
+const { execFile, spawn } = require('child_process');
 const os = require('os');
 const path = require('path');
 const { runCli } = require('./cli');
@@ -10,9 +10,15 @@ const { MusicWatcher } = require('./music');
 const { Notifier } = require('./notifier');
 const { OverlayWindow } = require('./overlay-window');
 const { LauncherWindow } = require('./launcher-window');
+const { PanelWindow } = require('./panel-window');
+const { SettingsWindow } = require('./settings-window');
 const { SessionLauncher } = require('./session-launcher');
 const { RecentProjects } = require('./recent-projects');
+const { Settings } = require('./settings');
+const { AgentStats } = require('./stats');
+const { TerminalLauncher } = require('./terminal');
 const { TrayMenu } = require('./tray');
+const { HookInstaller } = require('../scripts/install-hooks');
 
 const IS_LINUX = process.platform === 'linux';
 // When packaged, scripts live outside the asar (resources/scripts) so bash can execute them
@@ -20,54 +26,80 @@ const SCRIPTS_DIR = app.isPackaged
   ? path.join(process.resourcesPath, 'scripts')
   : path.join(__dirname, '..', 'scripts');
 const DECISIONS = new Set(['allow', 'deny', 'terminal']);
-const SHORTCUT = process.env.BAYLOOB_SHORTCUT ?? 'CommandOrControl+Alt+Space';
 const RECONCILE_MS = 5000;
-const MASCOT = process.env.BAYLOOB_MASCOT === 'svg' ? 'svg' : 'novi';
+const STATS_MS = 2000;           // CPU/memory refresh while the panel is open
+const STATUS_EVERY_TICKS = 5;    // re-read the hook status every 5th stats tick
+
+const expandHome = p => String(p || '').replace(/^~(?=$|\/)/, os.homedir());
 
 // Which agent CLIs are installed, checked once through the login shell (same PATH the agents get)
 function detectAgents() {
-  const shell = process.env.SHELL || '/bin/bash';
+  const sh = process.env.SHELL || '/bin/bash';
   const bins = Object.values(AGENTS).map(a => a.bin);
   return new Promise(resolve => {
-    execFile(shell, ['-lic', `for b in ${bins.join(' ')}; do command -v "$b" >/dev/null && echo "$b"; done`],
+    execFile(sh, ['-lic', `for b in ${bins.join(' ')}; do command -v "$b" >/dev/null && echo "$b"; done`],
       { timeout: 8000 }, (_err, out) => resolve(new Set(String(out || '').split('\n').map(s => s.trim()))));
   });
 }
 
-/** Wires the event server, launcher, music watcher and terminal focuser to the windows and tray. */
+/** Wires the event server, launcher, panel, settings, music watcher and terminal focuser to the windows and tray. */
 class BayloobApp {
-  overlay = new OverlayWindow({ mascot: MASCOT });
+  overlay = new OverlayWindow();
   launcherWindow = new LauncherWindow();
+  panel = new PanelWindow();
+  settingsWindow = new SettingsWindow();
   server = new EventServer();
   notifier = new Notifier();
   focuser = new TerminalFocuser(SCRIPTS_DIR);
   launcher = new SessionLauncher();
-  music = IS_LINUX && process.env.BAYLOOB_NO_MUSIC !== '1' ? new MusicWatcher() : null;
+  hooks = new HookInstaller(SCRIPTS_DIR, { log: () => {} });
+  stats = new AgentStats();
+  music = IS_LINUX ? new MusicWatcher() : null;
+  settings = null;
   recent = null;
   tray = null;
   installed = detectAgents();
+  #statsTimer = null;
 
-  start({ openLauncher = false } = {}) {
+  // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
+  start({ open = null } = {}) {
     this.#registerIpc();
-    app.on('second-instance', (_e, argv) => { if (argv.includes('--new-session')) this.openLauncher(); });
-    app.whenReady().then(() => this.#onReady(openLauncher));
-    app.on('window-all-closed', e => e.preventDefault()); // the launcher closing must not quit the app
+    app.on('second-instance', (_e, argv) => this.#openFromArgs(argv));
+    app.whenReady().then(() => this.#onReady(open));
+    app.on('window-all-closed', e => e.preventDefault()); // closing a popup must not quit the app
     app.on('will-quit', () => globalShortcut.unregisterAll());
   }
 
-  #onReady(openLauncher) {
-    this.recent = new RecentProjects(path.join(app.getPath('userData'), 'recent-projects.json'));
+  #openFromArgs(argv) {
+    if (argv.includes('--new-session')) this.openLauncher();
+    else if (argv.includes('--panel')) this.togglePanel();
+  }
+
+  get mascot() { return this.settings?.get('mascot') ?? 'novi'; }
+
+  #onReady(open) {
+    const data = app.getPath('userData');
+    this.settings = new Settings(path.join(data, 'settings.json'));
+    this.settings.on('change', keys => this.#applySettings(keys));
+    this.recent = new RecentProjects(path.join(data, 'recent-projects.json'));
+    this.launcher.terminal.setOverride(this.settings.get('terminal'));
 
     // On Linux the compositor needs a moment before transparency works; this avoids a black window
     setTimeout(() => {
+      this.overlay.mascot = this.mascot;
       this.overlay.create();
-      this.overlay.onLoad(() => this.overlay.send('music', this.music?.current ?? null));
-      if (openLauncher) this.openLauncher();
+      this.overlay.onLoad(() => {
+        this.overlay.send('music', this.music?.current ?? null);
+        this.overlay.send('sessions', this.server.store.list());
+      });
+      if (open === 'launcher') this.openLauncher();
+      if (open === 'panel') this.togglePanel();
     }, IS_LINUX ? 400 : 0);
 
     this.server.store.on('change', list => {
       this.notifier.update(list);
       this.overlay.send('sessions', list);
+      this.panel.send('panel:sessions', list);
     });
     this.server.http.on('error', e => {
       console.error(`Bayloob: could not open port (${e.code}). Set a different one with BAYLOOB_PORT.`);
@@ -76,25 +108,112 @@ class BayloobApp {
     this.server.listen();
     setInterval(() => this.#reconcile(), RECONCILE_MS).unref();
 
-    this.music?.on('change', np => this.overlay.send('music', np)).start();
+    this.music?.on('change', np => this.overlay.send('music', np));
+    if (this.settings.get('music')) this.music?.start();
 
     this.tray = new TrayMenu({
       newSession: () => this.openLauncher(),
       launchRecent: r => this.launch({ agent: r.agent, cwd: r.cwd }).catch(() => this.openLauncher({ agent: r.agent, cwd: r.cwd })),
-      shortcut: SHORTCUT,
+      shortcut: this.settings.get('shortcut'),
       quit: () => app.quit(),
     }).create();
     this.tray.update(this.recent.list());
+    this.#registerShortcut();
+  }
 
-    if (SHORTCUT && !globalShortcut.register(SHORTCUT, () => this.openLauncher())) {
-      console.warn(`Bayloob: could not register ${SHORTCUT}. On Wayland, bind a system shortcut to \`bayloob --new-session\` instead.`);
+  // ---------- settings ----------
+
+  #registerShortcut() {
+    globalShortcut.unregisterAll();
+    const shortcut = this.settings.get('shortcut');
+    if (!shortcut) return;
+    let ok = false;
+    try { ok = globalShortcut.register(shortcut, () => this.openLauncher()); } catch { /* invalid accelerator */ }
+    if (!ok) console.warn(`Bayloob: could not register ${shortcut}. On Wayland, bind a system shortcut to \`bayloob --new-session\` instead.`);
+  }
+
+  // Apply saved settings right away, without a restart
+  #applySettings(keys) {
+    if (keys.includes('mascot')) this.overlay.setMascot(this.mascot);
+    if (keys.includes('terminal')) this.launcher.terminal.setOverride(this.settings.get('terminal'));
+    if (keys.includes('shortcut')) {
+      this.#registerShortcut();
+      this.tray.actions.shortcut = this.settings.get('shortcut');
+      this.tray.update(this.recent.list());
+    }
+    if (keys.includes('music')) {
+      if (this.settings.get('music')) this.music?.start();
+      else { this.music?.stop(); this.overlay.send('music', null); }
     }
   }
+
+  openSettings() {
+    this.settingsWindow.show({
+      values: this.settings.all(),
+      locked: this.settings.lockedByEnv(),
+      detectedTerminal: new TerminalLauncher('').detected, // what auto-detect would pick
+      hooks: this.hooks.status(),
+    });
+  }
+
+  // ---------- panel ----------
+
+  #status() {
+    return { hooks: this.hooks.status().installed, lastEventAt: this.server.lastEventAt };
+  }
+
+  async togglePanel() {
+    if (this.panel.visible) return this.panel.hide();
+    await this.panel.show({ sessions: this.server.store.list(), status: this.#status() });
+    this.#startStats();
+  }
+
+  // Sample agent CPU/memory only while the panel is open
+  #startStats() {
+    clearInterval(this.#statsTimer);
+    this.stats.reset();
+    let tick = 0;
+    const run = () => {
+      if (!this.panel.visible) return clearInterval(this.#statsTimer);
+      this.panel.send('panel:stats', this.stats.sample(this.server.store.list()));
+      if (++tick % STATUS_EVERY_TICKS === 0) this.panel.send('panel:status', this.#status());
+    };
+    run();
+    this.#statsTimer = setInterval(run, STATS_MS);
+  }
+
+  openWorkspace(session) {
+    const dir = session?.cwd;
+    if (!dir) return { ok: false };
+    const editor = this.settings.get('editor');
+    if (!editor) return shell.openPath(dir).then(err => ({ ok: !err, error: err || undefined }));
+    const [bin, ...args] = editor.split(/\s+/);
+    const child = spawn(bin, [...args, dir], { cwd: dir, detached: true, stdio: 'ignore' });
+    child.on('error', () => {});
+    child.unref();
+    return { ok: true };
+  }
+
+  async sessionMenu(session) {
+    if (!session) return;
+    const canPrompt = !!session.term?.tmux && !session.perm;
+    const menu = Menu.buildFromTemplate([
+      { label: 'Open terminal', click: () => this.focus(session) },
+      { label: 'Send a prompt…', enabled: canPrompt, click: () => this.openPromptBox(session) },
+      { label: 'Open workspace', enabled: !!session.cwd, click: () => this.openWorkspace(session) },
+      { type: 'separator' },
+      { label: 'Stop session', enabled: !!session.managed, click: () => this.stopSession(session) },
+      { label: 'Hide from list', click: () => { this.server.store.remove(session.id); this.server.store.changed(); } },
+    ]);
+    await this.panel.keepOpenDuring(win => new Promise(resolve => menu.popup({ window: win, callback: resolve })));
+  }
+
+  // ---------- sessions ----------
 
   async openLauncher(preset = null) {
     const installed = await this.installed;
     const agents = Object.fromEntries(Object.entries(AGENTS).map(([k, a]) =>
-      [k, { name: a.name, installed: installed.has(a.bin), color: MASCOT === 'svg' ? a.svgColor : a.color }]));
+      [k, { name: a.name, installed: installed.has(a.bin), color: this.mascot === 'svg' ? a.svgColor : a.color }]));
     this.launcherWindow.show({ mode: 'new', agents, recent: this.recent.list(), preset, home: os.homedir() });
   }
 
@@ -112,6 +231,14 @@ class BayloobApp {
     this.recent.add(launch.cwd, launch.agent);
     this.tray?.update(this.recent.list());
     return launch;
+  }
+
+  async focus(session) {
+    if (!session) return { ok: false };
+    // A Bayloob-launched session whose window was closed: reopen it attached to tmux
+    const r = await this.focuser.focus(session);
+    if (!r.ok && session.managed) { this.launcher.attach(session.managed); return { ok: true, via: 'reattach' }; }
+    return r;
   }
 
   async stopSession(session) {
@@ -132,41 +259,51 @@ class BayloobApp {
   }
 
   #registerIpc() {
+    const session = id => this.server.store.get(String(id));
+    const result = fn => Promise.resolve().then(fn).then(() => ({ ok: true }), e => ({ ok: false, error: e.message }));
+
     // Overlay
     ipcMain.on('pill-rect', (_e, rect) => this.overlay.fitShape(rect));
     ipcMain.on('mouse-over-ui', (_e, over) => this.overlay.setMouseOver(over));
     ipcMain.on('decide', (_e, permId, decision) => {
       if (DECISIONS.has(decision)) this.server.decide(String(permId), decision);
     });
-    ipcMain.handle('focus', async (_e, sessionId) => {
-      const session = this.server.store.get(String(sessionId));
-      if (!session) return { ok: false };
-      // A Bayloob-launched session whose window was closed: reopen it attached to tmux
-      const r = await this.focuser.focus(session);
-      if (!r.ok && session.managed) { this.launcher.attach(session.managed); return { ok: true, via: 'reattach' }; }
-      return r;
-    });
+    ipcMain.handle('focus', (_e, sessionId) => this.focus(session(sessionId)));
     ipcMain.on('music', (_e, action) => this.music?.control(action));
     ipcMain.on('open-launcher', () => this.openLauncher());
     ipcMain.on('open-prompt', (_e, sessionId) => {
-      const session = this.server.store.get(String(sessionId));
-      if (session?.term?.tmux) this.openPromptBox(session);
+      const s = session(sessionId);
+      if (s?.term?.tmux) this.openPromptBox(s);
     });
-    ipcMain.on('stop-session', (_e, sessionId) => this.stopSession(this.server.store.get(String(sessionId))));
+    ipcMain.on('stop-session', (_e, sessionId) => this.stopSession(session(sessionId)));
+    ipcMain.on('toggle-panel', () => this.togglePanel());
 
     // Launcher
-    const result = fn => fn().then(() => ({ ok: true }), e => ({ ok: false, error: e.message }));
     ipcMain.handle('launcher:launch', (_e, opts) => result(() => this.launch(opts)));
     ipcMain.handle('launcher:send-prompt', (_e, sessionId, text) => result(async () => {
-      const session = this.server.store.get(String(sessionId));
-      if (!session?.term?.tmux) throw new Error('This session is no longer running in tmux');
-      if (session.perm) throw new Error('The agent is waiting for a permission answer first');
-      await this.launcher.sendPrompt(session.term.tmux, String(text));
+      const s = session(sessionId);
+      if (!s?.term?.tmux) throw new Error('This session is no longer running in tmux');
+      if (s.perm) throw new Error('The agent is waiting for a permission answer first');
+      await this.launcher.sendPrompt(s.term.tmux, String(text));
     }));
-    ipcMain.handle('launcher:pick-folder', (_e, current) =>
-      this.launcherWindow.pickFolder(current ? current.replace(/^~(?=$|\/)/, os.homedir()) : os.homedir()));
+    ipcMain.handle('launcher:pick-folder', (_e, current) => this.launcherWindow.pickFolder(current ? expandHome(current) : os.homedir()));
     ipcMain.on('launcher:close', () => this.launcherWindow.hide());
     ipcMain.on('launcher:resize', (_e, height) => this.launcherWindow.fitHeight(Number(height)));
+
+    // Workspace panel
+    ipcMain.handle('panel:open-workspace', (_e, sessionId) => this.openWorkspace(session(sessionId)));
+    ipcMain.on('panel:session-menu', (_e, sessionId) => this.sessionMenu(session(sessionId)));
+    ipcMain.on('panel:open-settings', () => this.openSettings());
+    ipcMain.on('panel:close', () => this.panel.hide());
+    ipcMain.on('panel:resize', (_e, height) => this.panel.fitHeight(Number(height)));
+
+    // Settings
+    ipcMain.handle('settings:save', (_e, values) => result(() => { this.settings.save(values || {}); }));
+    ipcMain.handle('settings:install-hooks', () => result(() => {
+      if (!this.hooks.install()) throw new Error('~/.claude/settings.json is not valid JSON; nothing was changed');
+    }));
+    ipcMain.on('settings:close', () => this.settingsWindow.hide());
+    ipcMain.on('settings:resize', (_e, height) => this.settingsWindow.fitHeight(Number(height)));
   }
 }
 
@@ -177,6 +314,7 @@ if (cliExit !== null) process.exit(cliExit);
 // On Wayland an app can't place its own window or keep it always on top → run under XWayland
 if (IS_LINUX) app.commandLine.appendSwitch('ozone-platform', 'x11');
 
-// Only one instance at a time (avoids a port clash). `bayloob --new-session` while running opens the launcher.
+// Only one instance at a time (avoids a port clash). `bayloob --new-session` / `--panel` while running
+// opens the launcher / the workspace panel in the running instance.
 if (!app.requestSingleInstanceLock()) app.exit(0);
-else new BayloobApp().start({ openLauncher: argv.includes('--new-session') });
+else new BayloobApp().start({ open: argv.includes('--new-session') ? 'launcher' : argv.includes('--panel') ? 'panel' : null });

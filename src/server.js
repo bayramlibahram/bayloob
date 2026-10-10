@@ -1,8 +1,10 @@
 // Local event server: agent hooks POST events here and we keep the session state.
 // Has no Electron dependency, so it can also be run on its own with `node src/server.js`.
+const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { EventEmitter } = require('events');
+const { describeActivity } = require('./activity');
 
 const PORT = Number(process.env.BAYLOOB_PORT || 7777);
 const STALE_MS = 15 * 60 * 1000;                                                // drop sessions silent for 15 min
@@ -10,8 +12,23 @@ const PERM_TIMEOUT_MS = Number(process.env.BAYLOOB_PERM_TIMEOUT || 280) * 1000; 
 const MAX_BODY = 2e6;
 const DETAIL_MAX = 600;
 const SUMMARY_MAX = 160;
+const HISTORY_MAX = 8;
 const TERM_KEYS = ['term', 'winid', 'kitty', 'kittysock', 'wez', 'tmux', 'pid'];
 const ALLOWED_HOSTS = new Set(['127.0.0.1', 'localhost', `127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+
+// The hook reports its parent PID, which is usually a short-lived `sh -c` started by the agent.
+// Resolve it to the agent process itself while that shell still exists (Linux /proc; elsewhere: as is).
+const SHELLS = new Set(['sh', 'bash', 'dash', 'zsh', 'fish']);
+function agentPidOf(pid) {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const comm = stat.slice(stat.indexOf('(') + 1, stat.lastIndexOf(')'));
+    const ppid = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1];
+    return SHELLS.has(comm) ? ppid : String(pid);
+  } catch {
+    return String(pid);
+  }
+}
 
 // Hook event name -> mascot state
 function toState(ev) {
@@ -65,7 +82,7 @@ function decisionBody(decision) {
 
 /** All known agent sessions. Emits 'change' with the sorted list after every update. */
 class SessionStore extends EventEmitter {
-  #sessions = new Map(); // id -> {id, agent, project, cwd, state, tool, summary, perm, term, managed, updatedAt}
+  #sessions = new Map(); // id -> {id, agent, project, cwd, state, tool, summary, perm, term, managed, activity, history, startedAt, updatedAt}
   #launched = new Map(); // tmux pane id -> { name, paneId, agent, cwd } for sessions Bayloob started
 
   get(id) { return this.#sessions.get(id); }
@@ -79,6 +96,7 @@ class SessionStore extends EventEmitter {
     // The hook's own directory is only a fallback when the event has no cwd and the session is new
     const cwd = ev.cwd || old?.cwd || query.get('cwd') || '';
     const fresh = Object.fromEntries(TERM_KEYS.filter(k => query.get(k)).map(k => [k, query.get(k)]));
+    if (fresh.pid) fresh.agentPid = agentPidOf(fresh.pid);
     const term = Object.keys(fresh).length ? fresh : (old?.term || {});
     const launch = this.#launched.get(term.tmux);
     if (launch) this.#sessions.delete(SessionStore.placeholderId(launch)); // the real session takes over
@@ -90,6 +108,9 @@ class SessionStore extends EventEmitter {
       perm: old?.perm || null,
       term,
       managed: launch?.name || old?.managed || null,
+      activity: old?.activity || null,
+      history: old?.history || [],
+      startedAt: old?.startedAt || Date.now(),
       ...patch,
       updatedAt: Date.now(),
     };
@@ -106,8 +127,23 @@ class SessionStore extends EventEmitter {
     this.#sessions.set(id, {
       id, agent: launch.agent, cwd: launch.cwd, project: path.basename(launch.cwd),
       state: 'idle', tool: null, summary: null, perm: null,
-      term: { tmux: launch.paneId }, managed: launch.name, updatedAt: Date.now(),
+      term: { tmux: launch.paneId }, managed: launch.name,
+      activity: { title: 'Starting…', detail: launch.cwd, at: Date.now() }, history: [],
+      startedAt: Date.now(), updatedAt: Date.now(),
     });
+  }
+
+  // Add an event to the session's activity history (newest first); a repeat of the same line only refreshes its time
+  record(id, ev) {
+    const s = this.#sessions.get(id);
+    const line = s && describeActivity(ev, s.cwd);
+    if (!line) return;
+    const entry = { ...line, at: Date.now() };
+    const [last, ...rest] = s.history;
+    s.history = last && last.title === entry.title && last.detail === entry.detail
+      ? [entry, ...rest]
+      : [entry, ...s.history].slice(0, HISTORY_MAX);
+    s.activity = entry;
   }
 
   // Forget a stopped tmux session and every agent session that ran in it
@@ -146,6 +182,7 @@ class SessionStore extends EventEmitter {
 class EventServer {
   #pending = new Map(); // permId -> {res, timer, sid}
   #permSeq = 0;
+  lastEventAt = null;
 
   constructor({ port = PORT, store = new SessionStore() } = {}) {
     this.port = port;
@@ -199,13 +236,16 @@ class EventServer {
     req.on('end', () => {
       let ev;
       try { ev = JSON.parse(body); } catch { return res.end(''); }
+      this.lastEventAt = Date.now();
       const query = new URL(req.url, 'http://x').searchParams;
       const agent = query.get('agent') || ev._agent || 'claude';
       const id = `${agent}:${ev.session_id || ev['thread-id'] || ev.cwd || query.get('cwd') || 'default'}`;
 
-      if (isPerm) return this.#onPermission(id, agent, ev, query, res);
-      res.end('ok');
-      this.#onEvent(id, agent, ev, query);
+      if (isPerm) this.#onPermission(id, agent, ev, query, res);
+      else { res.end('ok'); this.#onEvent(id, agent, ev, query); }
+      // Handlers only update the store; the change goes out once, after the activity line is recorded
+      this.store.record(id, ev);
+      this.store.changed();
     });
   }
 
@@ -222,22 +262,20 @@ class EventServer {
       this.store.settlePermission(id, permId, 'thinking');
       this.store.changed();
     });
-    this.store.changed();
   }
 
   #onEvent(id, agent, ev, query) {
     const state = toState(ev);
     if (!state) return;
-    if (state === 'end') { this.store.remove(id); return this.store.changed(); }
+    if (state === 'end') return this.store.remove(id);
 
     // A Notification etc. arriving while a permission is pending must not replace the card
-    if (this.store.get(id)?.perm && state !== 'done') { this.store.touch(id); return this.store.changed(); }
+    if (this.store.get(id)?.perm && state !== 'done') return this.store.touch(id);
 
     const patch = { state, tool: state === 'working' ? (ev.tool_name || null) : null };
     if (state === 'done') patch.summary = short(ev.last_assistant_message || ev['last-assistant-message'], SUMMARY_MAX) || null;
     if (ev.hook_event_name === 'UserPromptSubmit') patch.summary = null;
     this.store.upsert(id, agent, ev, query, patch);
-    this.store.changed();
   }
 }
 

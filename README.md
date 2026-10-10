@@ -80,6 +80,31 @@ Three ways to open the launcher:
 > (GNOME Settings → Keyboard → Custom Shortcuts) to `bayloob --new-session` instead. It opens the
 > launcher in the running Bayloob.
 
+### 🗂️ The whole workspace at a glance
+
+<img src="docs/screenshots/panel.png" width="760" alt="Workspace overview: sessions, current activity, CPU and memory">
+
+Click the pill and the **workspace overview** drops down from the top of the screen:
+
+- **Sessions:** every agent with its project, status, an open-terminal button and a **⋮** menu
+  (open terminal, send a prompt, open workspace, stop, hide from list)
+- **Current activity:** what the selected agent is doing right now (*Editing Header.jsx ·
+  src/components*), plus a timeline of its last steps, built from the hook events
+- **CPU and memory** of all watched agents and every process they started (tests, builds, servers)
+- **Connected:** whether the Claude Code hooks are installed and when the last event arrived
+- **New session** and **Open workspace** (your editor, or the file manager)
+
+Use ↑ ↓ to pick a session, Enter to open its terminal, Esc to close. `bayloob --panel` opens the
+panel from anywhere, which makes a handy system shortcut on Wayland.
+
+### ⚙️ Settings
+
+<img src="docs/screenshots/settings.png" width="380" alt="Settings: mascot, launcher shortcut, terminal, editor, music, hooks">
+
+The gear in the panel opens the settings: mascot style, launcher shortcut, terminal, editor and
+music. Changes apply right away, with no restart. If the Claude Code hooks are missing, you can
+install them from here. Settings are saved in `~/.config/Bayloob/settings.json`.
+
 ### ✅ Know the moment work is done
 
 <img src="docs/screenshots/done.png" width="440" alt="Done card with the agent's last message">
@@ -169,6 +194,7 @@ anything, and is safe to run again.
 | `bayloob` | Opens the overlay |
 | `bayloob --install-hooks` | Installs Claude Code hooks and prints the lines for Codex and Gemini |
 | `bayloob --new-session` | Opens the launcher (starts Bayloob first if it isn't running) |
+| `bayloob --panel` | Opens the workspace panel (same) |
 | `bayloob --autostart` / `--no-autostart` | Start (or stop starting) Bayloob when you log in |
 | `sudo apt remove bayloob` | Uninstalls. Hooks stay in `settings.json` and do nothing while Bayloob is gone |
 
@@ -212,6 +238,13 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 | `src/server.js` | `EventServer`, `SessionStore` | HTTP endpoint for hooks; sessions and the permission queue |
 | `src/overlay-window.js` | `OverlayWindow` | The transparent, click-through, always-on-top window |
 | `src/notifier.js` | `Notifier` | Desktop notifications for "needs approval" and "done" |
+| `src/popup-window.js` | `PopupWindow` | Base for the focusable popups: launcher, panel, settings |
+| `src/panel-window.js` | `PanelWindow` | The workspace overview (`panel.html`) |
+| `src/settings-window.js` | `SettingsWindow` | The settings form (`settings.html`) |
+| `src/settings.js` | `Settings` | Saved settings, with environment variables taking precedence |
+| `src/activity.js` | — | Turns hook events into activity lines ("Editing Header.jsx") |
+| `src/stats.js` | `AgentStats` | CPU and memory of agent process trees, from `/proc` |
+| `src/ui-common.js` | `Agent` | Agent palette and helpers shared by the overlay and the panel |
 | `src/focus.js` | `TerminalFocuser` | Raises the right terminal: kitty / WezTerm / tmux / X11 |
 | `src/music.js` | `MusicWatcher` | What's playing over MPRIS, play / pause / next / prev |
 | `src/cli.js` | — | `--install-hooks`, `--autostart`, `--no-autostart` |
@@ -236,6 +269,9 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 
 ## Configuration
 
+Most of these are in the **Settings** window. An environment variable, when set, wins over the saved
+setting (the field is then shown read-only), which is handy for development and scripts.
+
 | Variable | Default | What it does |
 |---|---|---|
 | `BAYLOOB_PORT` | `7777` | Local port for the server and the hooks |
@@ -244,6 +280,7 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 | `BAYLOOB_MASCOT` | `novi` | `svg` switches back to the original flat mascot |
 | `BAYLOOB_SHORTCUT` | `Ctrl+Alt+Space` | Global shortcut for the launcher (Electron accelerator syntax); empty turns it off |
 | `BAYLOOB_TERMINAL` | auto-detected | Terminal used for launched sessions, e.g. `kitty` or `gnome-terminal --` (the command is appended) |
+| `BAYLOOB_EDITOR` | file manager | Command for "Open workspace", e.g. `code` (the folder is appended) |
 
 ## Development
 
