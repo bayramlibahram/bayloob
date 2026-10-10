@@ -19,6 +19,7 @@ const { WorkspaceService } = require("../modules/workspace/workspace.service");
 const { GnomeExtension } = require("../infrastructure/desktop/gnome-extension");
 const { TerminalFocuser } = require("../infrastructure/desktop/terminal-focuser");
 const { WindowService } = require("../infrastructure/desktop/window.service");
+const { Git } = require("../infrastructure/system/git");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
 const { LauncherWindow } = require("../windows/launcher-window");
 const { OverlayWindow } = require("../windows/overlay-window");
@@ -83,6 +84,7 @@ class BayloobApp {
   installed = detectAgents();
   #statsTimer = null;
   output = new SessionOutput();
+  git = new Git();
   #outputTimer = null;
 
   // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
@@ -391,7 +393,16 @@ class BayloobApp {
     this.server.store.changed();
   }
 
-  // While the pill's list is open, send each session's latest output line; nothing is read otherwise
+  // Uncommitted changes per session, asking git once per folder
+  async #diffs(sessions) {
+    const dirs = [...new Set(sessions.map(s => s.cwd).filter(Boolean))];
+    const byDir = new Map(await Promise.all(dirs.map(async d => [d, await this.git.changes(d)])));
+    return Object.fromEntries(
+      sessions.filter(s => byDir.get(s.cwd)).map(s => [s.id, byDir.get(s.cwd)])
+    );
+  }
+
+  // While the pill's list is open, send each session's latest output line and changes; nothing is read otherwise
   #watchOutput(open) {
     clearInterval(this.#outputTimer);
     this.#outputTimer = null;
@@ -399,7 +410,13 @@ class BayloobApp {
       return;
     }
     const run = async () => {
-      this.overlay.send("output", await this.output.lines(this.server.store.list()));
+      const sessions = this.server.store.list();
+      const [lines, diffs] = await Promise.all([
+        this.output.lines(sessions),
+        this.#diffs(sessions),
+      ]);
+      this.overlay.send("output", lines);
+      this.overlay.send("diffs", diffs);
     };
     run();
     this.#outputTimer = setInterval(run, OUTPUT_MS);
