@@ -1,6 +1,6 @@
 // Launches coding agents inside tmux sessions and controls them afterwards:
 // open in a terminal, send a prompt, stop. tmux keeps the agent alive even if its window is closed.
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -24,6 +24,17 @@ const tmux = args =>
         resolve(String(stdout).trim());
       }
     });
+  });
+
+// Loads text into a named tmux buffer through stdin (no shell, no length limits of argv)
+const loadBuffer = (name, text) =>
+  new Promise((resolve, reject) => {
+    const child = spawn("tmux", ["load-buffer", "-b", name, "-"]);
+    child.on("error", reject);
+    child.on("close", code =>
+      code === 0 ? resolve() : reject(new Error("tmux load-buffer failed"))
+    );
+    child.stdin.end(text);
   });
 
 // tmux session names can't contain '.' or ':'
@@ -81,12 +92,22 @@ class SessionLauncher {
   }
 
   /** Types `text` into the agent's input and submits it. */
+  /**
+   * Types `text` into the agent's input and submits it. Multi-line text goes in as a bracketed paste,
+   * so its newlines stay newlines instead of submitting early; Enter is sent once at the end.
+   */
   async sendPrompt(paneId, text) {
-    const line = text.replace(/\s*\n\s*/g, " ").trim(); // a newline would submit early
-    if (!line) {
+    const body = String(text).replace(/\r/g, "").trim();
+    if (!body) {
       return;
     }
-    await tmux(["send-keys", "-t", paneId, "-l", "--", line]);
+    if (body.includes("\n")) {
+      const buffer = `bayloob-${Date.now()}`;
+      await loadBuffer(buffer, body);
+      await tmux(["paste-buffer", "-p", "-d", "-b", buffer, "-t", paneId]);
+    } else {
+      await tmux(["send-keys", "-t", paneId, "-l", "--", body]);
+    }
     await tmux(["send-keys", "-t", paneId, "Enter"]);
   }
 
