@@ -6,12 +6,33 @@ const http = require("node:http");
 const { EventServer } = require("../src/main/modules/sessions/event-server");
 
 const PORT = Number(process.env.BAYLOOB_PORT);
+const TOKEN = "ab".repeat(32);
 
+// Close and wait, so the next test can listen on the same port
+const stop = server =>
+  new Promise(r => {
+    server.close();
+    server.http.closeAllConnections();
+    server.http.once("close", r);
+  });
+
+// Like the hooks: with the token header, unless `headers` overrides it
 function request(path, body, headers = {}) {
   return new Promise((resolve, reject) => {
     const data = body === undefined ? "" : JSON.stringify(body);
     const req = http.request(
-      { host: "127.0.0.1", port: PORT, path, method: body === undefined ? "GET" : "POST", headers },
+      {
+        host: "127.0.0.1",
+        port: PORT,
+        agent: false, // a fresh connection each time, like the hooks (no keep-alive socket to a closed server)
+        path,
+        method: body === undefined ? "GET" : "POST",
+        headers: Object.fromEntries(
+          Object.entries({ "x-bayloob-token": TOKEN, ...headers }).filter(
+            ([, v]) => v !== undefined
+          )
+        ),
+      },
       res => {
         let out = "";
         res.on("data", c => {
@@ -26,9 +47,9 @@ function request(path, body, headers = {}) {
 }
 
 test("event server", async t => {
-  const server = new EventServer().listen();
+  const server = new EventServer({ token: TOKEN }).listen();
   await new Promise(r => server.http.once("listening", r));
-  t.after(() => server.close());
+  t.after(() => stop(server));
 
   await t.test("an event creates a session with an activity line", async () => {
     await request("/ev?agent=claude&cwd=%2Fw%2Fsite", {
@@ -105,4 +126,26 @@ test("event server", async t => {
     await request("/ev?agent=claude", { hook_event_name: "SessionEnd", session_id: "s1" });
     assert.equal(server.store.get("claude:s1"), undefined);
   });
+});
+
+test("requests without the right token are refused; ?t= works for scripts", async t => {
+  const server = new EventServer({ token: TOKEN }).listen();
+  await new Promise(r => server.http.once("listening", r));
+  t.after(() => stop(server));
+  const ev = { hook_event_name: "SessionStart", session_id: "x" };
+  assert.equal((await request("/ev", ev, { "x-bayloob-token": "" })).status, 403);
+  assert.equal((await request("/ev", ev, { "x-bayloob-token": "cd".repeat(32) })).status, 403);
+  assert.equal((await request("/state", undefined, { "x-bayloob-token": "" })).status, 403);
+  assert.equal(server.store.list().length, 0);
+  assert.equal(
+    (await request(`/state?t=${TOKEN}`, undefined, { "x-bayloob-token": undefined })).status,
+    200
+  );
+});
+
+test("a server without a token accepts nothing", async t => {
+  const server = new EventServer().listen();
+  await new Promise(r => server.http.once("listening", r));
+  t.after(() => stop(server));
+  assert.equal((await request("/state")).status, 403);
 });

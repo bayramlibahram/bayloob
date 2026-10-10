@@ -14,6 +14,7 @@ const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { BlockedClock } = require("../modules/sessions/blocked-clock");
 const { receiptFor } = require("../modules/sessions/receipt");
+const { loadOrCreateToken } = require("../modules/sessions/api-token");
 const { TodoProgress } = require("../modules/sessions/todo-progress");
 const { CollisionRadar } = require("../modules/sessions/collision-radar");
 const { ImmuneSystem } = require("../modules/permissions/immune-system");
@@ -144,6 +145,10 @@ class BayloobApp {
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
     this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
+    // The hooks read the same file (default <config>/Bayloob/token, or BAYLOOB_TOKEN_FILE)
+    this.server.token = loadOrCreateToken(
+      process.env.BAYLOOB_TOKEN_FILE || path.join(data, "token")
+    );
     const checkLock = async () => {
       this.#locked = await this.presence.locked();
     };

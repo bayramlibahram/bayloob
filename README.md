@@ -252,7 +252,8 @@ renderer/launcher ──IPC──► SessionLauncher ──► tmux new-session 
 The hook is a dependency-free bash script that talks to `127.0.0.1:7777` over `/dev/tcp`.
 A normal event costs about 10 ms. Nothing leaves your machine, and the server only answers
 local processes: requests from browser pages (an `Origin` header) or from a foreign `Host`
-(DNS rebinding) are refused.
+(DNS rebinding) are refused, and every request must carry the secret from
+`~/.config/Bayloob/token` (created on first start, readable only by you).
 
 The code is split by Electron process, and the main process by layer (see
 [docs/architecture.md](docs/architecture.md)):
@@ -301,6 +302,7 @@ setting (the field is then shown read-only), which is handy for development and 
 | Variable | Default | What it does |
 |---|---|---|
 | `BAYLOOB_PORT` | `7777` | Local port for the server and the hooks |
+| `BAYLOOB_TOKEN_FILE` | `~/.config/Bayloob/token` | Where the app and the hooks keep the shared secret |
 | `BAYLOOB_PERM_TIMEOUT` | `280` | Seconds before a permission request goes back to the terminal |
 | `BAYLOOB_NO_MUSIC` | unset | Set to `1` to turn off music detection |
 | `BAYLOOB_MASCOT` | `novi` | `svg` switches back to the original flat mascot |

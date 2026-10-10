@@ -2,6 +2,7 @@
 // Has no Electron dependency, so it can also be run on its own:
 //   node src/main/modules/sessions/event-server.js
 const http = require("node:http");
+const { loadOrCreateToken, tokenMatches } = require("./api-token");
 const { SessionStore } = require("./session-store");
 
 const PORT = Number(process.env.BAYLOOB_PORT || 7777);
@@ -139,9 +140,11 @@ class EventServer {
   immune = null; // ImmuneSystem: remembered decisions, rules and antibodies (optional)
   observers = []; // (sessionId, event) => void, called for every hook event before the store updates
 
-  constructor({ port = PORT, store = new SessionStore() } = {}) {
+  // token: the shared secret every request must carry (X-Bayloob-Token header or ?t=); without one, nothing is accepted
+  constructor({ port = PORT, store = new SessionStore(), token = null } = {}) {
     this.port = port;
     this.store = store;
+    this.token = token;
     this.http = http.createServer((req, res) => this.#route(req, res));
   }
 
@@ -221,12 +224,20 @@ class EventServer {
     return ALLOWED_HOSTS.has(req.headers.host) && !req.headers.origin;
   }
 
+  // ...and only from someone who could read the token file (the hooks, run as the same user)
+  #isAuthorized(req) {
+    const given =
+      req.headers["x-bayloob-token"] ?? new URL(req.url, "http://x").searchParams.get("t");
+    return tokenMatches(this.token, given);
+  }
+
   #route(req, res) {
-    if (!EventServer.#isLocal(req)) {
+    if (!EventServer.#isLocal(req) || !this.#isAuthorized(req)) {
+      req.resume(); // drain the body, so the client gets the 403 rather than a reset connection
       res.statusCode = 403;
       return res.end();
     }
-    if (req.method === "GET" && req.url === "/state") {
+    if (req.method === "GET" && new URL(req.url, "http://x").pathname === "/state") {
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify(this.store.list()));
     }
@@ -361,7 +372,7 @@ module.exports = {
 };
 
 if (require.main === module) {
-  const server = new EventServer().listen();
+  const server = new EventServer({ token: loadOrCreateToken() }).listen();
   server.store.on("change", list => console.log(JSON.stringify(list)));
   // For testing: type "allow 1" / "deny 1" / "terminal 1" on stdin
   process.stdin.on("data", d => {
