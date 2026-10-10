@@ -52,28 +52,34 @@
     filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ring) 70%, transparent)) drop-shadow(0 2px 3px rgba(0,0,0,.5));
     transform-origin: 50% 90%; }
   .mascot.mini svg { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--ring) 60%, transparent)); }
-  .mascot .lid, .mascot .eye, .mascot .joy { transform-box: fill-box; transform-origin: center; }
-  .mascot .lid { transition: transform .3s cubic-bezier(.3,1.5,.5,1); }
-  .mascot .visor-frame { stroke: var(--ring); transition: stroke .3s; }
-  .mascot .eye { fill: #f3eaff; transition: transform .2s; }
-  .mascot .joy { opacity: 0; stroke: #f3eaff; transition: opacity .2s; }
+  .mascot svg .lid, .mascot svg .eye, .mascot svg .joy { transform-box: fill-box; transform-origin: center; }
+  .mascot svg .lid { transition: transform .3s cubic-bezier(.3,1.5,.5,1); }
+  .mascot svg .visor-frame { stroke: var(--ring); transition: stroke .3s; }
+  .mascot svg .eye { fill: #f3eaff; transition: transform .2s; }
+  .mascot svg .joy { opacity: 0; stroke: #f3eaff; transition: opacity .2s; }
 
-  .mascot[data-s=idle] svg { animation: breathe 3.2s ease-in-out infinite; }
-  .mascot[data-s=idle] .eye { animation: blink 4.5s infinite; }
-  .mascot[data-s=thinking] .eyes { animation: scan 2.2s ease-in-out infinite; }
-  .mascot[data-s=thinking] .visor-frame { animation: glow 1.2s ease-in-out infinite; }
-  .mascot[data-s=working] .lid { animation: chomp .45s ease-in-out infinite; }
-  .mascot[data-s=working] .eye { transform: scaleY(.45); }
-  .mascot[data-s=waiting] .lid { transform: translate(-2px,-7px) rotate(-6deg); }
-  .mascot[data-s=waiting] .eye { transform: scale(1.15,1.2); }
+  /* idle: one-off breaths and blinks toggled by SvgMascotView — an endless animation would keep the
+     transparent overlay redrawing every frame even when nothing happens */
+  .mascot.breath svg { animation: breathe 2.4s ease-in-out 1; }
+  .mascot.blink svg .eye { animation: blink-once .3s ease-in-out 1; }
+  .mascot[data-s=thinking] svg .eyes { animation: scan 2.2s ease-in-out infinite; }
+  .mascot[data-s=thinking] svg .visor-frame { animation: glow 1.2s ease-in-out infinite; }
+  .mascot[data-s=working] svg .lid { animation: chomp .45s ease-in-out infinite; }
+  .mascot[data-s=working] svg .eye { transform: scaleY(.45); }
+  .mascot[data-s=waiting] svg .lid { transform: translate(-2px,-7px) rotate(-6deg); }
+  .mascot[data-s=waiting] svg .eye { transform: scale(1.15,1.2); }
   .mascot[data-s=waiting] svg { animation: shake .4s ease-in-out infinite; }
-  .mascot[data-s=waiting] .visor-frame { animation: glow .5s steps(2) infinite; }
-  .mascot[data-s=done] .eye, .mascot[data-s=dance] .eye { opacity: 0; }
-  .mascot[data-s=done] .joy, .mascot[data-s=dance] .joy { opacity: 1; }
+  .mascot[data-s=waiting] svg .visor-frame { animation: glow .5s steps(2) infinite; }
+  .mascot[data-s=done] svg .eye, .mascot[data-s=dance] svg .eye { opacity: 0; }
+  .mascot[data-s=done] svg .joy, .mascot[data-s=dance] svg .joy { opacity: 1; }
   .mascot[data-s=done] svg { animation: joy .7s cubic-bezier(.3,1.6,.5,1) 1; }
   /* dance: music is playing — sways, the lid bobs to the beat, notes float up */
   .mascot[data-s=dance] svg { animation: groove .5s ease-in-out infinite alternate; }
-  .mascot[data-s=dance] .lid { animation: chomp .5s ease-in-out infinite; }
+  .mascot[data-s=dance] svg .lid { animation: chomp .5s ease-in-out infinite; }
+  /* raster mascot (novi.js): static idle thumbnail in the session list */
+  .thumb { position: relative; width: 100%; height: 100%;
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--ring) 60%, transparent)); }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; }
   .mascot .notes { position: absolute; inset: 0; pointer-events: none; display: none; }
   .mascot[data-s=dance] .notes { display: block; }
   .mascot .notes i { position: absolute; font-style: normal; font-size: 10px; color: #c9a4ff; opacity: 0;
@@ -83,7 +89,7 @@
   .mascot .notes i:nth-child(3) { left: -4px; top: 6px; animation-delay: 1.3s; }
 
   @keyframes breathe { 50% { transform: scale(1.03, .97); } }
-  @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+  @keyframes blink-once { 50% { transform: scaleY(.1); } }
   @keyframes scan { 0%,100% { transform: translate(-5px, 2px); } 50% { transform: translate(5px, -2px); } }
   @keyframes glow { 50% { stroke-opacity: .35; } }
   @keyframes chomp { 50% { transform: translate(-1px,-5px) rotate(-3deg); } }
@@ -126,7 +132,11 @@
   /* ---------- Session list (opens on hover) ---------- */
   .list { max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .25s; padding: 0 12px; }
   .pill.open .list { max-height: 320px; opacity: 1; padding-bottom: 10px; }
-  .row { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-top: 1px solid var(--line); }
+  .row { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 2px 6px 18px; border-top: 1px solid var(--line); }
+  /* sessions are subs of the manager mascot: a tree guide links each row to the pill's mascot column */
+  .row::before { content: ''; position: absolute; left: 6px; top: -1px; bottom: 0; border-left: 1px solid rgba(255,255,255,.12); }
+  .row::after { content: ''; position: absolute; left: 6px; top: 50%; width: 8px; border-top: 1px solid rgba(255,255,255,.12); }
+  .row.last::before { bottom: 50%; }
   .row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .agent { color: var(--muted); font-size: 11px; }
   .row .st { font-size: 11px; }
@@ -159,6 +169,8 @@
     <div class="list" id="list"></div>
   </div>
 
+<script src="packs/meta.js"></script>
+<script src="novi.js"></script>
 <script>
   // Every UI string lives here — a language switcher later only needs to swap this object
   const T = {
@@ -182,14 +194,21 @@
   const PILL_OPEN_WIDTH = 380;
   const STOP_CONFIRM_MS = 3000;
 
-  // Every agent gets its own colors — same shape, different body. Claude = Baynovix violet.
+  // Every agent gets its own colors — same shape, different body.
+  // pack/color: the raster mascot (novi.js, default). top/bot: gradients of the SVG mascot (BAYLOOB_MASCOT=svg).
+  // "manager" is Bayloob itself: the main mascot in the pill, always purple; agent sessions are its subs.
+  const MANAGER = 'manager';
   const AGENTS = {
-    claude: { name: 'Claude Code', top: ['#d07bff', '#a24bf7', '#7a2cec'], bot: ['#8a45f5', '#5a24e0', '#2f12a8'] },
-    codex:  { name: 'Codex',       top: ['#8ff5df', '#3fd3b6', '#16a48c'], bot: ['#2fc7ae', '#139582', '#0b5e58'] },
-    gemini: { name: 'Gemini CLI',  top: ['#a9cbff', '#6a9ef8', '#3f72e6'], bot: ['#5b8ff5', '#3461d6', '#1c3a9c'] },
-    cursor: { name: 'Cursor',      top: ['#ffffff', '#dde2ea', '#b6bdca'], bot: ['#c3c9d4', '#9099aa', '#5d6577'] },
-    other:  { name: null,          top: ['#ffd88a', '#ffb547', '#f08a1c'], bot: ['#f5a23a', '#d9771a', '#9c4c0c'] },
+    manager: { name: 'Bayloob',    pack: 'purple', color: '#8b5cff', top: ['#d07bff', '#a24bf7', '#7a2cec'], bot: ['#8a45f5', '#5a24e0', '#2f12a8'] },
+    claude: { name: 'Claude Code', pack: 'coral',  color: '#ff7a5c', top: ['#ffb39e', '#ff7a5c', '#e0502f'], bot: ['#f0704f', '#c9452a', '#8c2a17'] },
+    codex:  { name: 'Codex',       pack: 'teal',   color: '#22b8cf', top: ['#8ff5df', '#3fd3b6', '#16a48c'], bot: ['#2fc7ae', '#139582', '#0b5e58'] },
+    gemini: { name: 'Gemini CLI',  pack: 'blue',   color: '#5b7bff', top: ['#a9cbff', '#6a9ef8', '#3f72e6'], bot: ['#5b8ff5', '#3461d6', '#1c3a9c'] },
+    cursor: { name: 'Cursor',      pack: 'silver', color: '#b6bac6', top: ['#ffffff', '#dde2ea', '#b6bdca'], bot: ['#c3c9d4', '#9099aa', '#5d6577'] },
+    other:  { name: null,          pack: 'silver', color: '#b6bac6', top: ['#ffd88a', '#ffb547', '#f08a1c'], bot: ['#f5a23a', '#d9771a', '#9c4c0c'] },
   };
+  const SLEEP_AFTER_MS = 5 * 60 * 1000;
+  // "?mascot=svg" (from BAYLOOB_MASCOT=svg) picks the SVG mascot; it's also the fallback if the raster one can't load
+  const MASCOT_MODE = new URLSearchParams(location.search).get('mascot') === 'svg' || !window.Novi || !window.NOVI_META ? 'svg' : 'novi';
 
   const ICON_TERM = '<svg viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm1.3 3.2 2.3 1.8-2.3 1.8.8 1 3.5-2.8-3.5-2.8-.8 1ZM8 10.5h4.5v-1.2H8v1.2Z"/></svg>';
 
@@ -205,6 +224,8 @@
     }
     static palette(agent) { return AGENTS[Agent.key(agent)]; }
     static displayName(agent) { return Agent.palette(agent).name || agent; }
+    // Accent color matching the agent's mascot
+    static color(agent) { const p = Agent.palette(agent); return MASCOT_MODE === 'novi' ? p.color : p.top[1]; }
   }
 
   /** Builds the hexagon mascot SVG in an agent's colors. Each copy gets unique gradient ids. */
@@ -231,6 +252,69 @@
     }
   }
 
+  /** The original SVG mascot: CSS animations driven by the element's data-s attribute. */
+  class SvgMascotView {
+    #agent = null;
+    #timers = [];
+
+    constructor(el) { this.el = el; }
+
+    set(agent, state) {
+      if (agent !== this.#agent) {
+        this.#agent = agent;
+        this.el.innerHTML = Mascot.svg(agent) + '<div class="notes"><i>♪</i><i>♫</i><i>♪</i></div>';
+      }
+      if (this.el.dataset.s === state) return;
+      this.el.dataset.s = state; // restarts the animation on change
+      this.#timers.forEach(clearTimeout);
+      this.#timers = [];
+      this.el.classList.remove('breath', 'blink');
+      if (state === 'idle') {
+        this.#every('breath', 2400, 10000, 16000);
+        this.#every('blink', 300, 3000, 6000);
+      }
+    }
+
+    // Plays a one-off CSS animation (by toggling a class) at random intervals while the state lasts
+    #every(cls, duration, min, max) {
+      const run = () => {
+        this.el.classList.add(cls);
+        this.#timers.push(setTimeout(() => this.el.classList.remove(cls), duration));
+        this.#timers.push(setTimeout(run, min + Math.random() * (max - min)));
+      };
+      this.#timers.push(setTimeout(run, 1000 + Math.random() * 2000));
+    }
+
+    static thumb(agent) { return Mascot.svg(agent); }
+  }
+
+  /** The layered raster mascot animated by novi.js, in the color pack of the agent. */
+  class NoviMascotView {
+    #pack = null;
+    #novi = null;
+
+    constructor(el) { this.el = el; }
+
+    set(agent, state) {
+      const pack = Agent.palette(agent).pack;
+      if (pack !== this.#pack) {
+        // A new agent color: replace the instance (each one runs its own frame loop)
+        this.#novi?.destroy();
+        this.#pack = pack;
+        this.#novi = new Novi(this.el, NOVI_META[pack], `packs/${pack}`, { sleepAfter: SLEEP_AFTER_MS });
+      }
+      this.#novi.set(state);
+    }
+
+    // A static idle image for the session list — no animation, so many rows stay cheap
+    static thumb(agent) {
+      const pack = Agent.palette(agent).pack;
+      return `<div class="thumb">${['body', 'lid', 'visor', 'eyes'].map(p => `<img src="packs/${pack}/idle-${p}.png" alt="">`).join('')}</div>`;
+    }
+  }
+
+  const MascotView = MASCOT_MODE === 'novi' ? NoviMascotView : SvgMascotView;
+
   /** The pill: top bar, permission / "done" card and the session list that opens on hover. */
   class OverlayView {
     sessions = [];
@@ -238,13 +322,13 @@
     toast = null;          // { sid, until, hint } — the "done" card
     hovering = false;
     confirmStop = null;    // session id armed for stopping
-    #mainAgent = null;
     #prevStates = new Map();
 
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), card: $('card'), list: $('list') };
+      this.mascot = new MascotView(this.el.mascot);
       this.#bindEvents();
     }
 
@@ -268,7 +352,8 @@
       const state = top ? top.state : 'idle';
       const dancing = this.music?.playing && (state === 'idle' || state === 'done');
       document.documentElement.style.setProperty('--accent', COLORS[state]);
-      this.#setMascot(top ? top.agent : 'claude', dancing ? 'dance' : state);
+      // The manager mascot shows the most urgent state across all sessions
+      this.mascot.set(MANAGER, dancing ? 'dance' : state);
 
       this.el.label.innerHTML = this.#labelHtml(top, state);
       const n = this.sessions.length;
@@ -283,14 +368,6 @@
       this.el.pill.classList.toggle('has-card', !!card);
 
       this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
-    }
-
-    #setMascot(agent, state) {
-      if (agent !== this.#mainAgent) {
-        this.#mainAgent = agent;
-        this.el.mascot.innerHTML = Mascot.svg(agent) + '<div class="notes"><i>♪</i><i>♫</i><i>♪</i></div>';
-      }
-      if (this.el.mascot.dataset.s !== state) this.el.mascot.dataset.s = state; // restarts the animation on change
     }
 
     #labelHtml(top, state) {
@@ -311,7 +388,7 @@
     }
 
     #cardHead(s, verb) {
-      const dot = Agent.palette(s.agent).top[1];
+      const dot = Agent.color(s.agent);
       return `<div class="head"><span class="adot" style="background:${dot}"></span><b>${esc(Agent.displayName(s.agent))}</b> · ${esc(s.project)} · ${verb}</div>`;
     }
 
@@ -345,8 +422,8 @@
 
     #listHtml() {
       if (!this.sessions.length) return `<div class="empty">${T.noActive}</div>`;
-      return this.sessions.map(s => `<div class="row">
-          <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${Mascot.svg(s.agent)}</div>
+      return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
+          <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
           <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span></span>
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
           ${this.#rowControls(s)}</div>`).join('');
