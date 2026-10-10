@@ -1,0 +1,44 @@
+/* Colour tokens shared by every window. Dark is the default; [data-theme=light] on <html> (set from
+   prefers-color-scheme in ui-common.js, which follows the System/Light/Dark setting) swaps them.
+   Pages tint surfaces with rgb(var(--ink) / α) and shadows with rgb(var(--shade) / α·k), so one rule
+   works on both themes. Each page's own :root still sets its glass, card and line colours. */
+:root {
+  color-scheme: dark;
+  --ink: 255 255 255; /* tints, borders and hovers on top of the glass */
+  --shade: 0 0 0; /* shadows */
+  --shade-k: 1;
+  --soft: #c9c7d4; /* secondary text */
+  --softer: #d9d7e3; /* quoted / body text a step below --text */
+  --brand-soft: #b28bff; /* brand-coloured text and small marks */
+  --note-text: #e8cf9e; /* text on amber notes */
+  --btn-primary-bg: #f2f2f5;
+  --btn-primary-fg: #121216;
+  --on-done: #08130d; /* text on a green (done / allow) button */
+  --chip-tint: #ffffff; /* state-chip text = state colour mixed toward this */
+}
+
+/* Light: white surfaces, hairline borders, soft shadows, state colours darkened to ≥ 4.5:1 on white */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink: 20 16 40;
+  --shade: 20 16 40;
+  --shade-k: 0.35;
+  --glass: rgba(255, 255, 255, 0.97);
+  --text: #1b1830;
+  --muted: #6b6880;
+  --soft: #3f3c55;
+  --softer: #2e2b42;
+  --brand-soft: #6a3fe0;
+  --note-text: #7a4a00;
+  --idle: #6b6880;
+  --thinking: #1d5fd6;
+  --working: #9a5800;
+  --waiting: #c42338;
+  --done: #12784a;
+  --error: #c42338;
+  --ok: #12784a;
+  --btn-primary-bg: #1b1830;
+  --btn-primary-fg: #ffffff;
+  --on-done: #ffffff;
+  --chip-tint: #1b1830;
+}

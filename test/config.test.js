@@ -63,3 +63,18 @@ test("agents start with their first prompt", () => {
   assert.deepEqual(agentCommand("codex"), ["codex"]);
   assert.throws(() => agentCommand("rm"), /Unknown agent/);
 });
+
+test("theme: system by default, light/dark when chosen, anything else falls back; BAYLOOB_THEME wins", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bl-theme-"));
+  const s = new Settings(path.join(dir, "settings.json"));
+  assert.equal(s.get("theme"), "system");
+  s.save({ theme: "light" });
+  assert.equal(s.get("theme"), "light");
+  s.save({ theme: "neon" });
+  assert.equal(s.get("theme"), "system");
+  process.env.BAYLOOB_THEME = "dark";
+  assert.equal(s.get("theme"), "dark");
+  assert.ok(s.lockedByEnv().includes("theme"));
+  delete process.env.BAYLOOB_THEME;
+  fs.rmSync(dir, { recursive: true });
+});

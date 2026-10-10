@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>Bayloob settings</title>
+<link rel="stylesheet" href="../shared/theme.css">
 <style>
   :root {
     --glass: rgba(18, 17, 23, 0.97);
-    --field: rgba(255,255,255,0.05);
-    --line: rgba(255,255,255,0.09);
+    --field: rgb(var(--ink) / 0.05);
+    --line: rgb(var(--ink) / 0.09);
     --text: #f2f2f5;
     --muted: #8b8b96;
     --brand: #8b5cff;
@@ -23,7 +24,7 @@
   button { cursor: pointer; }
 
   .panel { margin: 10px; padding: 16px 18px; border-radius: 18px; background: var(--glass);
-    border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    border: 1px solid var(--line); box-shadow: 0 16px 40px rgb(var(--shade) / calc(.45 * var(--shade-k)));
     display: flex; flex-direction: column; gap: 14px; animation: pop .18s cubic-bezier(.2,.9,.3,1.2); }
   @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
   .title { display: flex; align-items: baseline; }
@@ -31,7 +32,7 @@
   .title kbd { margin-left: auto; color: var(--muted); font: 11px ui-monospace, monospace; }
 
   .field { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; }
-  .field > label, .field > .label { color: #c9c7d4; }
+  .field > label, .field > .label { color: var(--soft); }
   .field small { grid-column: 2; color: var(--muted); font-size: 11.5px; margin-top: -6px; }
   input[type=text] { width: 100%; padding: 8px 10px; border-radius: 10px; background: var(--field); border: 1px solid var(--line);
     font: 12px ui-monospace, "Ubuntu Mono", monospace; }
@@ -47,7 +48,7 @@
   .sound input[type=range] { width: 130px; accent-color: var(--brand); }
   .sound input[type=range]:disabled { opacity: .4; }
   .btn.mini { padding: 4px 9px; border-radius: 8px; font-size: 11px; }
-  .switch { width: 38px; height: 22px; border-radius: 11px; background: rgba(255,255,255,.12); position: relative; transition: background .15s; }
+  .switch { width: 38px; height: 22px; border-radius: 11px; background: rgb(var(--ink) / .12); position: relative; transition: background .15s; }
   .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
   .switch[aria-checked="true"] { background: var(--brand); }
   .switch[aria-checked="true"]::after { transform: translateX(16px); }
@@ -55,15 +56,15 @@
 
   .hooks { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
   .hooks .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
-  .hooks span { flex: 1; color: #c9c7d4; }
+  .hooks span { flex: 1; color: var(--soft); }
   .rules { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
-  .rules .title { color: #c9c7d4; font-weight: 600; }
+  .rules .title { color: var(--soft); font-weight: 600; }
   .rules .rule { display: flex; align-items: center; gap: 10px; }
   .rules code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12px ui-monospace, monospace; }
-  .rules small { color: var(--muted, #8b8898); white-space: nowrap; }
+  .rules small { color: var(--muted, var(--muted)); white-space: nowrap; }
   .rules .btn { padding: 4px 10px; }
-  .btn { padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 600; white-space: nowrap; }
-  .btn:hover { background: rgba(255,255,255,.14); }
+  .btn { padding: 8px 14px; border-radius: 10px; background: rgb(var(--ink) / .08); font-weight: 600; white-space: nowrap; }
+  .btn:hover { background: rgb(var(--ink) / .14); }
   .btn.primary { background: var(--brand); color: #fff; }
   .btn:disabled { opacity: .5; cursor: progress; }
   .foot { display: flex; align-items: center; gap: 8px; }
@@ -80,6 +81,10 @@
     <div class="field">
       <span class="label">Mascot</span>
       <div class="seg" id="mascot"><button type="button" data-v="novi">Novi (3D)</button><button type="button" data-v="svg">Classic</button></div>
+    </div>
+    <div class="field">
+      <span class="label">Theme</span>
+      <div class="seg" id="theme"><button type="button" data-v="system">System</button><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button></div>
     </div>
     <div class="field">
       <label for="shortcut">Launcher shortcut</label>
@@ -146,7 +151,7 @@
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { form: $('form'), mascot: $('mascot'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
+      this.el = { form: $('form'), mascot: $('mascot'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
         music: $('music'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
@@ -155,6 +160,7 @@
       this.state = state;
       const { values, locked, detectedTerminal } = state;
       this.mascot = values.mascot;
+      this.theme = values.theme;
       this.music = values.music;
       this.sounds = values.sounds;
       this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
@@ -165,6 +171,7 @@
       for (const key of ['shortcut', 'terminal', 'editor']) { this.el[key].disabled = locked.includes(key); }
       this.el.save.disabled = false;
       this.#renderMascot();
+      this.#renderTheme();
       this.#renderMusic();
       this.#renderSounds();
       this.#renderHooks();
@@ -173,6 +180,11 @@
       this.#message(locked.length ? T.lockedEnv(locked) : T.hint);
       this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
       this.el.shortcut.focus();
+    }
+
+    #renderTheme() {
+      const locked = this.state.locked.includes('theme');
+      for (const b of this.el.theme.children) { b.setAttribute('aria-pressed', b.dataset.v === this.theme); b.disabled = locked; }
     }
 
     #renderMascot() {
@@ -235,7 +247,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
-        mascot: this.mascot, music: this.music, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100,
+        mascot: this.mascot, theme: this.theme, music: this.music, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -246,6 +258,10 @@
     #bind() {
       this.el.form.addEventListener('submit', e => { e.preventDefault(); this.#save(); });
       this.el.cancel.addEventListener('click', () => this.api?.close());
+      this.el.theme.addEventListener('click', e => {
+        const b = e.target.closest('[data-v]');
+        if (b && !b.disabled) { this.theme = b.dataset.v; this.#renderTheme(); }
+      });
       this.el.mascot.addEventListener('click', e => {
         const b = e.target.closest('[data-v]');
         if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
