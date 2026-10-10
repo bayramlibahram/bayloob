@@ -4,13 +4,13 @@
 //
 //   gdbus call --session --dest org.gnome.Shell --object-path /com/baynovix/Bayloob \
 //     --method com.baynovix.Bayloob.Windows.List
-import Gio from 'gi://Gio';
-import Meta from 'gi://Meta';
-import Shell from 'gi://Shell';
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+import Gio from "gi://Gio";
+import Meta from "gi://Meta";
+import Shell from "gi://Shell";
+import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-const OBJECT_PATH = '/com/baynovix/Bayloob';
+const OBJECT_PATH = "/com/baynovix/Bayloob";
 const VERSION = 1;
 const IFACE = `
 <node>
@@ -31,9 +31,12 @@ class WindowBridge {
 
   // Normal, user-visible windows only (no menus, tooltips or the shell's own surfaces)
   #windows() {
-    return global.get_window_actors()
+    return global
+      .get_window_actors()
       .map(actor => actor.get_meta_window())
-      .filter(win => win && !win.is_skip_taskbar() && win.get_window_type() === Meta.WindowType.NORMAL);
+      .filter(
+        win => win && !win.is_skip_taskbar() && win.get_window_type() === Meta.WindowType.NORMAL
+      );
   }
 
   List() {
@@ -41,12 +44,12 @@ class WindowBridge {
     const windows = this.#windows().map(win => {
       const app = tracker.get_window_app(win);
       return {
-        id: String(win.get_id()),          // 64-bit; sent as a string so JSON keeps it exact
-        title: win.get_title() || '',
+        id: String(win.get_id()), // 64-bit; sent as a string so JSON keeps it exact
+        title: win.get_title() || "",
         pid: win.get_pid(),
-        wmClass: win.get_wm_class() || '',
-        appId: app?.get_id() || '',         // desktop file id, e.g. "firefox_firefox.desktop"
-        appName: app?.get_name() || '',
+        wmClass: win.get_wm_class() || "",
+        appId: app?.get_id() || "", // desktop file id, e.g. "firefox_firefox.desktop"
+        appName: app?.get_name() || "",
         workspace: win.get_workspace()?.index() ?? -1,
         focused: win.has_focus(),
         minimized: win.minimized,
@@ -57,7 +60,9 @@ class WindowBridge {
 
   Activate(windowId) {
     const win = this.#windows().find(w => String(w.get_id()) === String(windowId));
-    if (!win) return false;
+    if (!win) {
+      return false;
+    }
     Main.activateWindow(win); // switches workspace, unminimizes and focuses
     return true;
   }

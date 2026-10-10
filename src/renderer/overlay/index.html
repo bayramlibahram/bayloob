@@ -218,7 +218,7 @@
     static #seq = 0;
 
     static svg(agent) {
-      const u = 'm' + (++Mascot.#seq), p = Agent.palette(agent);
+      const u = `m${++Mascot.#seq}`, p = Agent.palette(agent);
       const stops = c => c.map((col, i) => `<stop offset="${[0, .48, 1][i]}" stop-color="${col}"/>`).join('');
       const hex = '50,14 82,32 82,68 50,86 18,68 18,32';
       return `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>
@@ -247,9 +247,9 @@
     set(agent, state) {
       if (agent !== this.#agent) {
         this.#agent = agent;
-        this.el.innerHTML = Mascot.svg(agent) + '<div class="notes"><i>♪</i><i>♫</i><i>♪</i></div>';
+        this.el.innerHTML = `${Mascot.svg(agent)}<div class="notes"><i>♪</i><i>♫</i><i>♪</i></div>`;
       }
-      if (this.el.dataset.s === state) return;
+      if (this.el.dataset.s === state) { return; }
       this.el.dataset.s = state; // restarts the animation on change
       this.#timers.forEach(clearTimeout);
       this.#timers = [];
@@ -320,7 +320,7 @@
       // A fresh transition to "done" shows the done card for a while
       for (const s of list) {
         const old = this.#prevStates.get(s.id);
-        if (s.state === 'done' && old && old !== 'done') this.toast = { sid: s.id, until: Date.now() + DONE_TOAST_MS };
+        if (s.state === 'done' && old && old !== 'done') { this.toast = { sid: s.id, until: Date.now() + DONE_TOAST_MS }; }
       }
       this.#prevStates = new Map(list.map(s => [s.id, s.state]));
       this.sessions = list;
@@ -350,15 +350,15 @@
       this.el.card.className = card ? `card ${card.kind}` : 'card';
       this.el.card.innerHTML = card ? card.html : '';
       this.el.pill.classList.toggle('has-card', !!card);
-      if (card?.kind === 'perm') this.#syncPermScroll();
+      if (card?.kind === 'perm') { this.#syncPermScroll(); }
 
       this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
     }
 
     #labelHtml(top, state) {
-      if (top?.perm?.kind === 'question') return `<b>${esc(top.project)}</b> <span>${T.asksYou}</span>`;
+      if (top?.perm?.kind === 'question') { return `<b>${esc(top.project)}</b> <span>${T.asksYou}</span>`; }
       if (top && state !== 'idle') {
-        return `<b>${esc(top.project)}</b> <span>${T.state[state]}${top.tool ? ' · ' + esc(top.tool) : ''}</span>`;
+        return `<b>${esc(top.project)}</b> <span>${T.state[state]}${top.tool ? ` · ${esc(top.tool)}` : ''}</span>`;
       }
       if (this.music?.title) {
         return `<span class="note">♪</span> <b>${esc(this.music.title)}</b> <span>· ${esc(this.music.artist)}</span>`;
@@ -368,9 +368,9 @@
 
     #expireToast() {
       const t = this.toast;
-      if (!t) return;
+      if (!t) { return; }
       const stillDone = this.sessions.some(s => s.id === t.sid && s.state === 'done');
-      if (!stillDone || (Date.now() > t.until && !this.hovering)) this.toast = null;
+      if (!stillDone || (Date.now() > t.until && !this.hovering)) { this.toast = null; }
     }
 
     #cardHead(s, verb) {
@@ -407,19 +407,20 @@
     // approves a tail they haven't seen. The scroll position survives re-renders.
     #syncPermScroll() {
       const box = this.el.card.querySelector('.code[data-perm]');
-      if (!box) return;
+      if (!box) { return; }
       const id = box.dataset.perm;
       const allow = this.el.card.querySelector('[data-act=allow]');
       const hint = this.el.card.querySelector(`[data-hint="${id}"]`);
       box.scrollTop = this.#permScroll.get(id) || 0;
       const fits = box.scrollHeight <= box.clientHeight + 2;
       const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
-      if (fits || atEnd) this.#permRead.add(id);
-      if (allow.disabled && allow.title === T.allowBlocked) return; // hidden characters: terminal only
+      if (fits || atEnd) { this.#permRead.add(id); }
+      if (allow.disabled && allow.title === T.allowBlocked) { return; // hidden characters: terminal only
+}
       const read = this.#permRead.has(id);
       allow.disabled = !read;
       allow.title = read ? '' : T.allowUnread;
-      if (hint) hint.textContent = read ? '' : T.scrollToAllow;
+      if (hint) { hint.textContent = read ? '' : T.scrollToAllow; }
     }
 
     #doneCard() {
@@ -435,7 +436,7 @@
     }
 
     #listHtml() {
-      if (!this.sessions.length) return `<div class="empty">${T.noActive}</div>`;
+      if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
           <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span></span>
@@ -460,10 +461,10 @@
 
     #musicHtml() {
       const m = this.music;
-      if (!m?.title) return '';
+      if (!m?.title) { return ''; }
       return `<div class="music">
         <div class="art">♪</div>
-        <div class="t"><b>${esc(m.title)}</b> <span>${esc(m.artist)}${m.app ? ' · ' + esc(m.app) : ''}</span></div>
+        <div class="t"><b>${esc(m.title)}</b> <span>${esc(m.artist)}${m.app ? ` · ${esc(m.app)}` : ''}</span></div>
         <button class="icon" data-act="music" data-m="prev" title="${T.prev}">⏮</button>
         <button class="icon" data-act="music" data-m="toggle" title="${T.playPause}">${m.playing ? '⏸' : '▶'}</button>
         <button class="icon" data-act="music" data-m="next" title="${T.next}">⏭</button></div>`;
@@ -471,9 +472,9 @@
 
     async #onClick(e) {
       // A click on the top bar (mascot / label) opens the workspace panel
-      if (e.target.closest('.bar')) return this.api?.togglePanel();
+      if (e.target.closest('.bar')) { return this.api?.togglePanel(); }
       const b = e.target.closest('[data-act]');
-      if (!b || b.disabled) return;
+      if (!b || b.disabled) { return; }
       const act = b.dataset.act;
       if (act === 'answer') {
         b.disabled = true;
@@ -487,8 +488,8 @@
         this.render();
       } else if (act === 'focus') {
         const r = this.api ? await this.api.focus(b.dataset.sid) : { ok: false };
-        if (r?.ok) this.toast = null;
-        else if (this.toast) this.toast.hint = T.focusFailed;
+        if (r?.ok) { this.toast = null; }
+        else if (this.toast) { this.toast.hint = T.focusFailed; }
         this.render();
       } else if (act === 'music') {
         this.api?.music(b.dataset.m);
@@ -502,7 +503,8 @@
           this.confirmStop = null;
           this.api?.stopSession(b.dataset.sid);
         } else {
-          const sid = this.confirmStop = b.dataset.sid;
+          const sid = b.dataset.sid;
+          this.confirmStop = sid;
           setTimeout(() => { if (this.confirmStop === sid) { this.confirmStop = null; this.render(); } }, STOP_CONFIRM_MS);
         }
         this.render();
@@ -514,7 +516,7 @@
       pill.addEventListener('click', e => this.#onClick(e));
       // scroll doesn't bubble, so listen in the capture phase for the permission command box
       pill.addEventListener('scroll', e => {
-        if (!e.target.matches?.('.code[data-perm]')) return;
+        if (!e.target.matches?.('.code[data-perm]')) { return; }
         this.#permScroll.set(e.target.dataset.perm, e.target.scrollTop);
         this.#syncPermScroll();
       }, true);
@@ -525,9 +527,9 @@
         this.api?.setMouseOver(false);
         this.render();
       });
-      setInterval(() => { if (this.toast && !this.hovering && Date.now() > this.toast.until) this.render(); }, 1000);
+      setInterval(() => { if (this.toast && !this.hovering && Date.now() > this.toast.until) { this.render();  }}, 1000);
 
-      if (!this.api) return;
+      if (!this.api) { return; }
       // Report the pill's bounds whenever they change (on Linux the window shape follows them)
       const sendRect = () => {
         const r = pill.getBoundingClientRect();
