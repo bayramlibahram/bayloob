@@ -51,6 +51,35 @@ No answer in 280 seconds? The decision goes back to the terminal automatically
 (`BAYLOOB_PERM_TIMEOUT`). If Bayloob isn't running at all, the hook exits instantly and your
 agent behaves exactly as it always has. **Bayloob never blocks your agent.**
 
+### 🚀 Launch and steer agents from the pill
+
+<img src="docs/screenshots/launcher.png" width="440" alt="New session launcher: pick an agent, a project and a first prompt">
+
+Start a new agent without opening a terminal first. Pick **Claude Code**, **Codex** or **Gemini CLI**,
+choose a project (recent ones are one click away), optionally type a first prompt, and hit
+**Ctrl+Enter**. The agent starts in its own **tmux** session and opens in your terminal, so it keeps
+running even if you close the window.
+
+<img src="docs/screenshots/controls.png" width="440" alt="Session list with send-prompt, stop and open-terminal buttons">
+
+Every session that runs in tmux gets extra buttons in the list:
+
+| Button | What it does |
+|---|---|
+| 💬 **Send a prompt** | Type a follow-up and it lands in the agent's input, no window switching |
+| ⏹ **Stop** | Ends a session Bayloob launched (click twice to confirm) |
+| ▸_ **Open terminal** | Raises its window, or reopens one attached to tmux if you closed it |
+
+Three ways to open the launcher:
+
+- the **+ New session** row at the bottom of the session list
+- the global shortcut **Ctrl+Alt+Space** (`BAYLOOB_SHORTCUT` to change it, empty to turn it off)
+- the **tray icon**, which also relaunches recent projects in one click
+
+> **On Wayland**, global shortcuts only fire while an X11 window has focus. Bind a system shortcut
+> (GNOME Settings → Keyboard → Custom Shortcuts) to `bayloob --new-session` instead. It opens the
+> launcher in the running Bayloob.
+
 ### ✅ Know the moment work is done
 
 <img src="docs/screenshots/done.png" width="440" alt="Done card with the agent's last message">
@@ -101,7 +130,7 @@ Works with any MPRIS player over `gdbus`. Not in the mood? `BAYLOOB_NO_MUSIC=1 b
 ## Getting started
 
 Bayloob is built for **Linux** (tested on Ubuntu). macOS and Windows code paths exist
-but are experimental.
+but are experimental. Launching agents needs **tmux** (`sudo apt install tmux`).
 
 You'll need [Bun](https://bun.sh) to build it.
 
@@ -122,6 +151,7 @@ anything, and is safe to run again.
 |---|---|
 | `bayloob` | Opens the overlay |
 | `bayloob --install-hooks` | Installs Claude Code hooks and prints the lines for Codex and Gemini |
+| `bayloob --new-session` | Opens the launcher (starts Bayloob first if it isn't running) |
 | `bayloob --autostart` / `--no-autostart` | Start (or stop starting) Bayloob when you log in |
 | `sudo apt remove bayloob` | Uninstalls. Hooks stay in `settings.json` and do nothing while Bayloob is gone |
 
@@ -143,6 +173,9 @@ For Gemini CLI, add the same command with `gemini` as the argument to the `hooks
 Claude Code hook ──┐                                               ┌── focus.js  (raise the terminal)
 Codex notify ──────┼─► bayloob-hook ──HTTP──► server.js ───────────┼── music.js  (MPRIS via gdbus)
 Gemini CLI hook ───┘   (pure bash)   ◄─decision─                   └── IPC ──► index.html (mascot, cards)
+
+launcher.html ──IPC──► session-launcher.js ──► tmux new-session ──► terminal.js (opens a window)
+                                           ──► tmux send-keys / kill-session
 ```
 
 The hook is a dependency-free bash script that talks to `127.0.0.1:7777` over `/dev/tcp`.
@@ -152,7 +185,13 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 
 | File | Class | Role |
 |---|---|---|
-| `src/main.js` | `BayloobApp` | Entry point. Wires everything below to the overlay over IPC |
+| `src/main.js` | `BayloobApp` | Entry point. Wires everything below to the windows over IPC |
+| `src/session-launcher.js` | `SessionLauncher` | Starts agents in tmux; sends prompts, stops, reattaches |
+| `src/terminal.js` | `TerminalLauncher` | Opens a command in whichever terminal emulator you have |
+| `src/launcher-window.js` | `LauncherWindow` | The focusable popup for new sessions and prompts (`launcher.html`) |
+| `src/recent-projects.js` | `RecentProjects` | Remembers where you launched agents |
+| `src/tray.js` | `TrayMenu` | Tray icon: new session, relaunch recent, quit |
+| `src/agents.js` | — | The agents Bayloob can launch and their command lines |
 | `src/server.js` | `EventServer`, `SessionStore` | HTTP endpoint for hooks; sessions and the permission queue |
 | `src/overlay-window.js` | `OverlayWindow` | The transparent, click-through, always-on-top window |
 | `src/notifier.js` | `Notifier` | Desktop notifications for "needs approval" and "done" |
@@ -182,6 +221,8 @@ local processes: requests from browser pages (an `Origin` header) or from a fore
 | `BAYLOOB_PORT` | `7777` | Local port for the server and the hooks |
 | `BAYLOOB_PERM_TIMEOUT` | `280` | Seconds before a permission request goes back to the terminal |
 | `BAYLOOB_NO_MUSIC` | unset | Set to `1` to turn off music detection |
+| `BAYLOOB_SHORTCUT` | `Ctrl+Alt+Space` | Global shortcut for the launcher (Electron accelerator syntax); empty turns it off |
+| `BAYLOOB_TERMINAL` | auto-detected | Terminal used for launched sessions, e.g. `kitty` or `gnome-terminal --` (the command is appended) |
 
 ## Development
 

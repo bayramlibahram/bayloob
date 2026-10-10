@@ -2,7 +2,7 @@ const { app, BrowserWindow, screen } = require('electron');
 const path = require('path');
 
 const IS_LINUX = process.platform === 'linux';
-const WIDTH = 440, HEIGHT = 480; // window size (the visible pill is smaller, see index.html)
+const WIDTH = 440, HEIGHT = 560; // window size (the visible pill is smaller, see index.html)
 
 /** The transparent always-on-top window at the top-center of the primary display. */
 class OverlayWindow {

@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('bayloobAPI', {
   decide: (permId, decision) => ipcRenderer.send('decide', permId, decision),
   focus: sessionId => ipcRenderer.invoke('focus', sessionId),
   music: action => ipcRenderer.send('music', action),
+  openLauncher: () => ipcRenderer.send('open-launcher'),
+  openPrompt: sessionId => ipcRenderer.send('open-prompt', sessionId),
+  stopSession: sessionId => ipcRenderer.send('stop-session', sessionId),
 });

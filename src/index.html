@@ -125,7 +125,7 @@
 
   /* ---------- Session list (opens on hover) ---------- */
   .list { max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .25s; padding: 0 12px; }
-  .pill.open .list { max-height: 260px; opacity: 1; padding-bottom: 10px; }
+  .pill.open .list { max-height: 320px; opacity: 1; padding-bottom: 10px; }
   .row { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-top: 1px solid var(--line); }
   .row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .agent { color: var(--muted); font-size: 11px; }
@@ -133,6 +133,13 @@
   .icon { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
   .icon:hover { background: rgba(255,255,255,.1); color: var(--text); }
   .icon svg { width: 13px; height: 13px; fill: currentColor; }
+  .icon.stop:hover { color: var(--waiting); }
+  .icon.stop.armed { background: color-mix(in srgb, var(--waiting) 22%, transparent); color: var(--waiting); }
+  .new { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 2px; border-top: 1px solid var(--line);
+    color: var(--muted); text-align: left; transition: color .15s; }
+  .new:hover { color: var(--text); }
+  .new span { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 14px;
+    background: rgba(255,255,255,.07); }
   .empty { color: var(--muted); padding: 8px 2px; border-top: 1px solid var(--line); }
   .music { display: flex; align-items: center; gap: 8px; padding: 7px 2px 2px; border-top: 1px solid var(--line); }
   .music .art { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 11px;
@@ -166,12 +173,14 @@
     dismiss: 'Dismiss', openTerminal: 'Open terminal',
     focusFailed: 'Could not bring this terminal to the front (see README → "Open terminal").',
     prev: 'Previous', playPause: 'Play / pause', next: 'Next',
+    newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const DONE_TOAST_MS = 12000;
   const PILL_OPEN_WIDTH = 380;
+  const STOP_CONFIRM_MS = 3000;
 
   // Every agent gets its own colors — same shape, different body. Claude = Baynovix violet.
   const AGENTS = {
@@ -183,6 +192,9 @@
   };
 
   const ICON_TERM = '<svg viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm1.3 3.2 2.3 1.8-2.3 1.8.8 1 3.5-2.8-3.5-2.8-.8 1ZM8 10.5h4.5v-1.2H8v1.2Z"/></svg>';
+
+  const ICON_PROMPT = '<svg viewBox="0 0 16 16"><path d="M2.5 2h11A1.5 1.5 0 0 1 15 3.5v7a1.5 1.5 0 0 1-1.5 1.5H6l-3.2 2.6A.5.5 0 0 1 2 14.2V12h.5A1.5 1.5 0 0 1 1 10.5v-7A1.5 1.5 0 0 1 2.5 2Zm1.5 3v1.3h8V5H4Zm0 2.7V9h5.5V7.7H4Z"/></svg>';
+  const ICON_STOP = '<svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="2"/></svg>';
 
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -225,6 +237,7 @@
     music = null;
     toast = null;          // { sid, until, hint } — the "done" card
     hovering = false;
+    confirmStop = null;    // session id armed for stopping
     #mainAgent = null;
     #prevStates = new Map();
 
@@ -269,7 +282,7 @@
       this.el.card.innerHTML = card ? card.html : '';
       this.el.pill.classList.toggle('has-card', !!card);
 
-      this.el.list.innerHTML = this.#listHtml() + this.#musicHtml();
+      this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
     }
 
     #setMascot(agent, state) {
@@ -336,7 +349,22 @@
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${Mascot.svg(s.agent)}</div>
           <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span></span>
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
-          <button class="icon" data-act="focus" data-sid="${esc(s.id)}" title="${T.openTerminal}">${ICON_TERM}</button></div>`).join('');
+          ${this.#rowControls(s)}</div>`).join('');
+    }
+
+    // Prompt needs a tmux pane (and no pending permission); stop only for sessions Bayloob launched
+    #rowControls(s) {
+      const sid = esc(s.id);
+      const armed = this.confirmStop === s.id;
+      return [
+        s.term?.tmux && !s.perm ? `<button class="icon" data-act="prompt" data-sid="${sid}" title="${T.sendPrompt}">${ICON_PROMPT}</button>` : '',
+        s.managed ? `<button class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
+        `<button class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}">${ICON_TERM}</button>`,
+      ].join('');
+    }
+
+    #newSessionHtml() {
+      return this.api ? `<button class="new" data-act="new"><span>+</span> ${T.newSession}</button>` : '';
     }
 
     #musicHtml() {
@@ -367,6 +395,20 @@
         this.render();
       } else if (act === 'music') {
         this.api?.music(b.dataset.m);
+      } else if (act === 'new') {
+        this.api?.openLauncher();
+      } else if (act === 'prompt') {
+        this.api?.openPrompt(b.dataset.sid);
+      } else if (act === 'stop') {
+        // Stopping kills the agent, so it takes a second click within a few seconds
+        if (this.confirmStop === b.dataset.sid) {
+          this.confirmStop = null;
+          this.api?.stopSession(b.dataset.sid);
+        } else {
+          const sid = this.confirmStop = b.dataset.sid;
+          setTimeout(() => { if (this.confirmStop === sid) { this.confirmStop = null; this.render(); } }, STOP_CONFIRM_MS);
+        }
+        this.render();
       }
     }
 
@@ -392,7 +434,7 @@
       // Give the full open size up front so the shape doesn't clip the opening animation
       pill.addEventListener('mouseenter', () => {
         const r = pill.getBoundingClientRect();
-        this.api.setPillRect({ x: Math.min(r.left, (innerWidth - PILL_OPEN_WIDTH) / 2), y: r.top, w: PILL_OPEN_WIDTH, h: r.height + 300 });
+        this.api.setPillRect({ x: Math.min(r.left, (innerWidth - PILL_OPEN_WIDTH) / 2), y: r.top, w: PILL_OPEN_WIDTH, h: r.height + 360 });
       });
       sendRect();
     }

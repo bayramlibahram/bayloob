@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bayloob launcher</title>
+<style>
+  :root {
+    --glass: rgba(18, 17, 23, 0.97);
+    --field: rgba(255,255,255,0.05);
+    --line: rgba(255,255,255,0.09);
+    --text: #f2f2f5;
+    --muted: #8b8b96;
+    --brand: #8b4dff;
+    --error: #ff5d6c;
+    --ok: #4fd59a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; height: 100%; overflow: hidden;
+    font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
+    -webkit-font-smoothing: antialiased; }
+  button, input, textarea { font: inherit; color: inherit; border: 0; background: none; outline: none; }
+  button { cursor: pointer; }
+
+  .panel { margin: 10px; padding: 16px; border-radius: 18px; background: var(--glass);
+    border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    display: flex; flex-direction: column; gap: 12px; animation: pop .18s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+  .title { display: flex; align-items: baseline; gap: 8px; }
+  .title b { font-size: 15px; font-weight: 650; }
+  .title span { color: var(--muted); font-size: 12px; }
+  .title kbd { margin-left: auto; color: var(--muted); font: 11px ui-monospace, monospace; }
+  label.cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+
+  .agents { display: flex; gap: 6px; }
+  .agent { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 6px;
+    border-radius: 10px; background: var(--field); border: 1px solid transparent; transition: background .15s, border-color .15s; }
+  .agent:hover { background: rgba(255,255,255,.08); }
+  .agent[aria-pressed="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+  .agent:disabled { opacity: .35; cursor: not-allowed; }
+  .agent i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .agent small { color: var(--muted); font-size: 10px; }
+
+  .row { display: flex; gap: 6px; }
+  .field { flex: 1; padding: 8px 10px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); }
+  .field:focus { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
+  input.field { font: 12px ui-monospace, "Ubuntu Mono", monospace; }
+  textarea.field { resize: none; height: 74px; }
+  .btn { padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 600; white-space: nowrap; }
+  .btn:hover { background: rgba(255,255,255,.14); }
+  .btn.primary { background: var(--brand); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn:disabled { opacity: .5; cursor: progress; }
+
+  .recent { display: flex; flex-direction: column; gap: 2px; max-height: 118px; overflow-y: auto; }
+  .recent button { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; text-align: left; }
+  .recent button:hover, .recent button.on { background: rgba(255,255,255,.07); }
+  .recent i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: none; }
+  .recent b { font-weight: 600; }
+  .recent span { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .foot { display: flex; align-items: center; gap: 8px; }
+  .msg { flex: 1; font-size: 12px; color: var(--muted); }
+  .msg.error { color: var(--error); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <form class="panel" id="form" autocomplete="off">
+    <div class="title"><b id="title">New session</b><span id="subtitle"></span><kbd>Esc</kbd></div>
+
+    <section id="newOnly">
+      <div class="agents" id="agents"></div>
+    </section>
+
+    <section id="projectBox">
+      <label class="cap" for="cwd">Project</label>
+      <div class="row" style="margin-top:6px">
+        <input class="field" id="cwd" placeholder="~/projects/my-app" spellcheck="false">
+        <button class="btn" type="button" id="browse">Browse…</button>
+      </div>
+      <div class="recent" id="recent" style="margin-top:6px"></div>
+    </section>
+
+    <section>
+      <label class="cap" for="prompt" id="promptCap">First prompt <span style="text-transform:none">(optional)</span></label>
+      <textarea class="field" id="prompt" style="margin-top:6px; width:100%" placeholder="What should the agent do?"></textarea>
+    </section>
+
+    <div class="foot">
+      <div class="msg" id="msg"></div>
+      <button class="btn primary" type="submit" id="submit">Launch</button>
+    </div>
+  </form>
+
+<script>
+  const COLORS = { claude: '#a24bf7', codex: '#3fd3b6', gemini: '#6a9ef8' };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tilde = (p, home) => home && p.startsWith(home) ? '~' + p.slice(home.length) : p;
+
+  /** The launcher form. `state` comes from the main process on every show. */
+  class LauncherView {
+    state = null;
+    agent = 'claude';
+    busy = false;
+
+    constructor(api) {
+      this.api = api;
+      const $ = id => document.getElementById(id);
+      this.el = { form: $('form'), title: $('title'), subtitle: $('subtitle'), newOnly: $('newOnly'), projectBox: $('projectBox'),
+        agents: $('agents'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'), promptCap: $('promptCap'),
+        prompt: $('prompt'), msg: $('msg'), submit: $('submit') };
+      this.#bind();
+    }
+
+    show(state) {
+      this.state = state;
+      this.busy = false;
+      this.el.prompt.value = '';
+      const isNew = state.mode === 'new';
+      this.el.newOnly.hidden = this.el.projectBox.hidden = !isNew;
+      this.el.title.textContent = isNew ? 'New session' : 'Send a prompt';
+      this.el.subtitle.textContent = isNew ? '' : `${state.session.project} · ${state.session.agentName}`;
+      this.el.promptCap.innerHTML = isNew ? 'First prompt <span style="text-transform:none">(optional)</span>' : 'Message';
+      this.el.prompt.placeholder = isNew ? 'What should the agent do?' : 'Type a follow-up for the agent…';
+      this.el.submit.textContent = isNew ? 'Launch' : 'Send';
+      this.el.submit.disabled = false;
+      if (isNew) {
+        const last = state.recent[0];
+        this.agent = state.preset?.agent || last?.agent || this.agent;
+        if (!state.agents[this.agent]?.installed) this.agent = Object.keys(state.agents).find(k => state.agents[k].installed) || this.agent;
+        this.el.cwd.value = tilde(state.preset?.cwd || last?.cwd || '', state.home);
+        this.#renderAgents();
+        this.#renderRecent();
+        (this.el.cwd.value ? this.el.prompt : this.el.cwd).focus();
+      } else {
+        this.el.prompt.focus();
+      }
+      this.#message(isNew ? 'Ctrl+Enter to launch' : 'Enter to send');
+      // Fit the window to the form (plus the panel's margin)
+      this.api.resize?.(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
+    }
+
+    #renderAgents() {
+      this.el.agents.innerHTML = Object.entries(this.state.agents).map(([key, a]) => `
+        <button type="button" class="agent" data-agent="${key}" style="--c:${COLORS[key]}" aria-pressed="${key === this.agent}"
+          ${a.installed ? '' : 'disabled title="Not found on PATH"'}><i></i>${esc(a.name)}${a.installed ? '' : ' <small>not installed</small>'}</button>`).join('');
+    }
+
+    #renderRecent() {
+      const { recent, home } = this.state;
+      this.el.recent.innerHTML = recent.map(r => `
+        <button type="button" data-cwd="${esc(r.cwd)}" data-agent="${esc(r.agent)}" class="${tilde(r.cwd, home) === this.el.cwd.value ? 'on' : ''}">
+          <i style="--c:${COLORS[r.agent] || '#ffb547'}"></i><b>${esc(r.name)}</b><span>${esc(tilde(r.cwd, home))}</span></button>`).join('');
+    }
+
+    #message(text, isError = false) {
+      this.el.msg.textContent = text;
+      this.el.msg.className = isError ? 'msg error' : 'msg';
+    }
+
+    async #submit() {
+      if (this.busy) return;
+      const prompt = this.el.prompt.value.trim();
+      let res;
+      this.busy = true;
+      this.el.submit.disabled = true;
+      if (this.state.mode === 'new') {
+        const cwd = this.el.cwd.value.trim();
+        if (!cwd) { this.busy = false; this.el.submit.disabled = false; this.#message('Pick a project folder first', true); return this.el.cwd.focus(); }
+        this.#message('Starting…');
+        res = await this.api.launch({ agent: this.agent, cwd, prompt });
+      } else {
+        if (!prompt) { this.busy = false; this.el.submit.disabled = false; return; }
+        res = await this.api.sendPrompt(this.state.session.id, prompt);
+      }
+      this.busy = false;
+      this.el.submit.disabled = false;
+      if (res?.ok) this.api.close();
+      else this.#message(res?.error || 'Something went wrong', true);
+    }
+
+    #bind() {
+      this.el.form.addEventListener('submit', e => { e.preventDefault(); this.#submit(); });
+      this.el.agents.addEventListener('click', e => {
+        const b = e.target.closest('[data-agent]');
+        if (!b || b.disabled) return;
+        this.agent = b.dataset.agent;
+        this.#renderAgents();
+      });
+      this.el.recent.addEventListener('click', e => {
+        const b = e.target.closest('[data-cwd]');
+        if (!b) return;
+        this.el.cwd.value = tilde(b.dataset.cwd, this.state.home);
+        if (this.state.agents[b.dataset.agent]?.installed) this.agent = b.dataset.agent;
+        this.#renderAgents();
+        this.#renderRecent();
+        this.el.prompt.focus();
+      });
+      this.el.cwd.addEventListener('input', () => this.#renderRecent());
+      this.el.browse.addEventListener('click', async () => {
+        const dir = await this.api.pickFolder(this.el.cwd.value);
+        if (dir) { this.el.cwd.value = tilde(dir, this.state.home); this.#renderRecent(); this.el.prompt.focus(); }
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') this.api.close();
+        // Enter sends a prompt; for a new session Ctrl+Enter launches from anywhere (Enter in the prompt adds a line)
+        const inPrompt = e.target === this.el.prompt;
+        if (e.key === 'Enter' && ((inPrompt && this.state?.mode === 'prompt' && !e.shiftKey) || e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          this.#submit();
+        }
+      });
+    }
+  }
+
+  const fakeApi = { launch: async () => ({ ok: true }), sendPrompt: async () => ({ ok: true }), pickFolder: async () => null, close() {} };
+  const view = new LauncherView(window.launcherAPI || fakeApi);
+  if (window.launcherAPI) window.launcherAPI.onShow(state => view.show(state));
+  else window.__demo = { show: state => view.show(state) }; // opened in a plain browser
+</script>
+</body>
+</html>
