@@ -32,11 +32,12 @@
   .pill {
     position: relative;
     width: 340px; min-height: 58px;
-    background: var(--glass);
+    background: var(--surface-solid);
     border-radius: 20px;
     border: 1px solid var(--line);
-    box-shadow: 0 1px 0 rgb(var(--ink) / .06) inset, 0 10px 30px -6px rgb(var(--shade) / calc(.45 * var(--shade-k))),
-      0 2px 6px rgb(var(--shade) / calc(.2 * var(--shade-k)));
+    /* Everything stays inside the pill (or within 1 px): on Linux the window's visible shape is the pill's
+       rectangle plus 2 px, so a wider shadow or halo would be cut into a hard-edged, smeary band */
+    box-shadow: 0 1px 0 rgb(var(--ink) / .06) inset, 0 1px 1px rgb(var(--shade) / calc(.35 * var(--shade-k)));
     overflow: hidden;
     transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s, box-shadow .4s, border-color .4s;
   }
@@ -48,8 +49,9 @@
   .pill[data-state=waiting]::before, .pill[data-state=done]::before { opacity: .9; }
   .pill[data-state=thinking], .pill[data-state=working], .pill[data-state=waiting], .pill[data-state=done] {
     border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
-    box-shadow: 0 1px 0 rgb(var(--ink) / .06) inset, 0 10px 30px -6px rgb(var(--shade) / calc(.45 * var(--shade-k))),
-      0 6px 26px -10px color-mix(in srgb, var(--accent) 55%, transparent);
+    /* the state's glow is drawn inside the edge, not around it */
+    box-shadow: 0 1px 0 rgb(var(--ink) / .06) inset, inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+      inset 0 10px 24px -14px color-mix(in srgb, var(--accent) 45%, transparent), 0 1px 1px rgb(var(--shade) / calc(.35 * var(--shade-k)));
   }
   .pill:hover .tile { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgb(var(--ink) / .08), 0 5px 14px rgb(var(--shade) / calc(.35 * var(--shade-k))); }
   .pill.multi { width: 420px; } /* room for the agent stack next to the name */

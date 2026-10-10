@@ -13,6 +13,7 @@
   --note-text: #e8cf9e; /* text on amber notes */
   --btn-primary-bg: #f2f2f5;
   --btn-primary-fg: #121216;
+  --surface-solid: #111016; /* the pill: it floats over other apps, so nothing may show through */
   --on-done: #08130d; /* text on a green (done / allow) button */
   --chip-tint: #ffffff; /* state-chip text = state colour mixed toward this */
 }
@@ -39,6 +40,7 @@
   --ok: #12784a;
   --btn-primary-bg: #1b1830;
   --btn-primary-fg: #ffffff;
+  --surface-solid: #ffffff;
   --on-done: #ffffff;
   --chip-tint: #1b1830;
 }
