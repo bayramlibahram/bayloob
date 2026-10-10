@@ -264,7 +264,7 @@
       this.el.title.textContent = this.isNew ? T.ask : T.send(s.agentName);
       this.el.subtitle.textContent = this.isNew ? T.askSub : s.project;
       this.el.prompt.value = state.prefill || '';
-      this.el.prompt.classList.toggle('code', !!state.prefill);
+      this.el.prompt.classList.toggle('code', !!state.prefill && !state.draft);
       this.el.prompt.placeholder = this.isNew ? T.promptPlaceholder : T.followUp;
       this.el.projectBox.hidden = !this.isNew;
       if (this.isNew) {
@@ -302,7 +302,7 @@
         ? `${check}${this.isNew ? T.launch : this.#willQueue ? T.queueBtn : T.sendBtn}`
         : `${T.next}${arrow}`;
       if (first) {
-        this.#message(this.state.prefill && this.el.prompt.value === this.state.prefill ? `${T.prefilled} · ${T.hintWrite}` : T.hintWrite, false, true);
+        this.#message(this.state.prefill && !this.state.draft && this.el.prompt.value === this.state.prefill ? `${T.prefilled} · ${T.hintWrite}` : T.hintWrite, false, true);
         this.#renderQueue();
         this.#updateCount();
         this.el.prompt.focus();

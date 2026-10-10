@@ -113,6 +113,19 @@
   .say .hint.ok, .ask .hint.ok { color: var(--done); }
   .say .hint.err, .ask .hint.err { color: var(--waiting); }
   /* confirm strip: what is about to happen, before it happens (Enter confirms, Esc / Edit goes back) */
+  /* "an agent just finished": reply from here, no terminal needed */
+  .finished { display: flex; align-items: center; gap: 12px; margin: 10px 16px 0; padding: 10px 10px 10px 12px; border-radius: 14px;
+    background: linear-gradient(90deg, rgba(79,213,154,.13), rgba(79,213,154,.04)); border: 1px solid rgba(79,213,154,.35);
+    animation: cin .2s ease-out; }
+  .finished[hidden] { display: none; }
+  .finished .ic { width: 30px; height: 30px; flex: none; }
+  .finished .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .finished .txt b { font-weight: 700; }
+  .finished .txt span { color: var(--muted); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .finished .more { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .finished .btn.on { background: var(--done); color: #08130d; border-color: transparent; }
+  .finished .x { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
+  .finished .x:hover { background: rgba(255,255,255,.08); color: var(--text); }
   .confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 8px 8px 12px; border-radius: 12px;
     background: rgba(139,92,255,.09); border: 1px solid rgba(139,92,255,.35); animation: cin .15s ease-out; }
   .confirm[hidden] { display: none; }
@@ -202,6 +215,8 @@
       </button>
     </header>
 
+    <div class="finished" id="finished" hidden></div>
+
     <div class="main">
       <nav class="side" id="side"></nav>
       <section class="listcol">
@@ -253,6 +268,9 @@
     confirmSend: (agent, project) => `Send to <b>${agent}</b> · ${project}`, now: 'now', toQueue: 'to the queue',
     confirmLaunch: (agent, cwd) => `Launch <b>${agent}</b> in <code>${cwd}</code>`, inWorktree: '⑂ new worktree',
     edit: 'Edit', sendBtn: '✓ Send', queueBtn: '✓ Add to queue', launchBtn: '✓ Launch', confirmHint: 'Enter confirms · Esc goes back',
+    taskDone: 'Task completed.',
+    finishedIn: (agent, project) => `<b>${agent}</b> finished · ${project}`, finishedMore: n => `+${n} more`,
+    reply: 'Reply', dismissTip: 'Dismiss',
     sent: 'Sent ✓', queued: 'Queued ⏳ — goes out when the agent finishes its turn',
     askHint: 'Pick an agent and folder · Enter starts', startAgent: 'Start', worktree: '⑂ New worktree',
     notInstalled: 'not installed', folder: 'Folder', starting: 'Starting…', started: 'Started ✓', pickFolder: 'Choose a project folder',
@@ -283,6 +301,7 @@
     idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const HEALTH_COLOR = { healthy: 'var(--done)', running: 'var(--thinking)', starting: 'var(--working)', unhealthy: 'var(--waiting)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
+  const FINISHED_RECENT_MS = 10 * 60 * 1000;
   const BUSY = new Set(['thinking', 'working', 'waiting']); // a prompt sent now is queued for the end of the turn
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   const FOLDER = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
@@ -348,6 +367,8 @@
     launchable = null;
     #flashTimer = null;
     #sayTimer = null;
+    #prevStates = new Map(); // session id -> state at the previous update
+    finished = [];         // ids of agents that just finished, newest first (the banner shows the first)
     sayFor = null;         // session the prompt box is for (its text is cleared when the selection changes)
 
     constructor(api) {
@@ -357,7 +378,7 @@
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
         saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
-        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm') };
+        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
@@ -367,6 +388,11 @@
 
     show(state) {
       this.sessions = state.sessions || [];
+      this.#prevStates = new Map(this.sessions.map(s => [s.id, s.state]));
+      // Opened after an agent finished: still offer the reply for turns that ended in the last few minutes
+      this.finished = this.sessions
+        .filter(s => s.state === 'done' && s.term?.tmux && Date.now() - s.updatedAt < FINISHED_RECENT_MS)
+        .sort((a, b) => b.updatedAt - a.updatedAt).map(s => s.id);
       this.collisions = state.collisions || {};
       this.status = state.status || null;
       this.launchMode = false;
@@ -375,7 +401,47 @@
       this.render();
       this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20);
     }
-    setSessions(list) { this.sessions = list; this.render(); }
+    setSessions(list) {
+      // Agents that just finished their turn, newest first, until replied to or dismissed
+      for (const s of list) {
+        const old = this.#prevStates.get(s.id);
+        if (s.state === 'done' && old && old !== 'done' && s.term?.tmux) {
+          this.finished = [s.id, ...this.finished.filter(id => id !== s.id)];
+        }
+      }
+      this.#prevStates = new Map(list.map(s => [s.id, s.state]));
+      this.finished = this.finished.filter(id => list.some(s => s.id === id && s.state === 'done'));
+      this.sessions = list;
+      this.render();
+    }
+
+    #renderFinished() {
+      const s = this.sessions.find(x => x.id === this.finished[0]);
+      const box = this.el.finished;
+      const was = !box.hidden;
+      box.hidden = !s;
+      if (s) {
+        const more = this.finished.length - 1;
+        box.innerHTML = `<div class="ic agent">${Agent.thumb(s.agent)}</div>
+          <div class="txt">${T.finishedIn(esc(Agent.displayName(s.agent)), esc(s.project))}<span title="${esc(s.summary || '')}">${esc(s.summary || T.taskDone)}</span></div>
+          ${more > 0 ? `<span class="more">${T.finishedMore(more)}</span>` : ''}
+          <button type="button" class="btn on" data-reply="${esc(s.id)}">${T.reply}</button>
+          <button type="button" class="x" data-dismiss="${esc(s.id)}" title="${T.dismissTip}" aria-label="${T.dismissTip}">✕</button>`;
+      }
+      if (was !== !box.hidden) { this.#fit(); }
+    }
+
+    // Reply: select that agent and put the cursor in its prompt box
+    #replyTo(id) {
+      this.finished = this.finished.filter(x => x !== id);
+      this.launchMode = false;
+      this.query = '';
+      this.el.search.value = '';
+      if (this.section !== 'agents' && this.section !== 'overview') { this.section = 'agents'; }
+      this.selected = `agent:${id}`;
+      this.render();
+      this.el.sayText.focus();
+    }
     setWorkspace(snap) { this.apps = snap.apps; this.extension = snap.extension; this.render(); }
     setBlocked(info) { this.blocked = info; this.#renderMeters(); }
     setCollisions(map) { this.collisions = map || {}; this.render(); }
@@ -411,6 +477,7 @@
       this.#renderDetail();
       this.#renderMeters();
       this.#renderSay();
+      this.#renderFinished();
       this.el.openWorkspace.disabled = !(this.current?.kind === 'agent' && this.current.data.cwd);
     }
 
@@ -821,6 +888,12 @@
       this.el.settings.addEventListener('click', () => this.api?.openSettings());
       // Prompt to the selected agent: Enter sends, Shift+Enter is a new line
       this.el.say.addEventListener('submit', e => { e.preventDefault(); this.#send(); });
+      this.el.finished.addEventListener('click', e => {
+        const reply = e.target.closest('[data-reply]');
+        if (reply) { return this.#replyTo(reply.dataset.reply); }
+        const x = e.target.closest('[data-dismiss]');
+        if (x) { this.finished = this.finished.filter(id => id !== x.dataset.dismiss); this.#renderFinished(); }
+      });
       this.el.sayConfirm.addEventListener('click', e => {
         if (e.target.closest('[data-edit]')) { this.#confirmSay(false); this.el.sayText.focus(); }
       });

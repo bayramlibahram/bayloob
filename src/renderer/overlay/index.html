@@ -80,6 +80,17 @@
   .card.perm.antibody { border-color: color-mix(in srgb, var(--waiting) 55%, transparent); }
   .immune.warn { margin-top: 8px; font-size: 12.5px; color: var(--waiting); }
   .immune code { font: 500 11.5px ui-monospace, monospace; }
+  .reply { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 4px 4px 4px 12px; border-radius: 12px;
+    background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+  .reply:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
+  .reply.confirm { border-color: color-mix(in srgb, var(--brand) 70%, transparent); background: rgba(139,92,255,.1); }
+  .reply .rtext { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); font: inherit; padding: 6px 0; user-select: text; }
+  .reply .rtext::placeholder { color: var(--muted); }
+  .reply .ricon { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
+  .reply .ricon:hover { background: rgba(255,255,255,.08); color: var(--text); }
+  .reply .btn.rsend { padding: 6px 12px; background: var(--brand); color: #fff; }
+  .rhint { margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+  .rhint .err { color: var(--waiting); }
   .receipt { margin-top: 8px; font-size: 12.5px; font-weight: 600; }
   .receipt code { font: 500 11.5px ui-monospace, monospace; color: var(--muted); }
   .receipt.passed { color: var(--done); }
@@ -279,6 +290,9 @@
     progress: (d, t) => `${d} of ${t} to-dos done`,
     receipt: { passed: '✓ Tests passed', failed: '✗ Tests failed', untested: '⚠ Code changed, no tests run' },
     askTests: 'Ask to run tests',
+    replyTo: agent => `Reply to ${agent}…`, replySend: '✓ Send', replySendTip: 'Enter, then Enter again to send',
+    replyConfirm: agent => `Enter again sends it to ${agent} · Esc to edit`, replyDialog: 'Open in the prompt window',
+    replyFailed: 'Could not send',
     challenge: '⚔ Challenge', challenger: '⚔ challenger',
     challengeTip: 'Start a different agent, read-only, to try to break these changes',
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
@@ -409,6 +423,7 @@
     sounds = new SoundPlayer();
     #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
     #permSince = new Map(); // permId -> when it appeared or was last reminded about
+    #reply = { sid: null, text: '', confirm: false, focused: false, error: '' }; // the done card's reply box
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
 
@@ -520,6 +535,7 @@
       const card = perms.length ? this.#permCard(perms[0], perms.length - 1) : this.toast ? this.#doneCard() : null;
       this.el.card.className = card ? `card ${card.kind}` : 'card';
       this.el.card.innerHTML = card ? card.html : '';
+      this.#restoreReply();
       this.el.pill.classList.toggle('has-card', !!card);
       if (card?.kind.split(' ')[0] === 'perm') { this.#syncPermScroll(); }
 
@@ -560,7 +576,8 @@
       const t = this.toast;
       if (!t) { return; }
       const stillDone = this.sessions.some(s => s.id === t.sid && s.state === 'done');
-      if (!stillDone || (Date.now() > t.until && !this.hovering)) { this.toast = null; }
+      const replying = this.#reply.sid === t.sid && (this.#reply.focused || this.#reply.text.trim());
+      if (!stillDone || (Date.now() > t.until && !this.hovering && !replying)) { this.toast = null; }
     }
 
     #cardHead(s, verb) {
@@ -684,6 +701,7 @@
         ${this.#cardHead(s, T.finished)}
         <div class="summary">${esc(s.summary || T.taskDone)}</div>
         ${this.#receiptHtml(s)}
+        ${this.#replyHtml(s)}
         ${this.toast.hint ? `<div class="hint">${esc(this.toast.hint)}</div>` : ''}
         <div class="actions">
           ${this.#needsTests(s) ? `<button class="btn" data-act="ask-tests" data-sid="${esc(s.id)}">${T.askTests}</button>` : ''}
@@ -691,6 +709,47 @@
           <button class="btn" data-act="dismiss">${T.dismiss}</button>
           <button class="btn primary" data-act="focus" data-sid="${esc(s.id)}">${T.openTerminal}</button>
         </div>` };
+    }
+
+    // Reply right in the done card, without the terminal: Enter, then Enter again to confirm
+    #replyHtml(s) {
+      if (!s.term?.tmux) { return ''; }
+      const r = this.#reply.sid === s.id ? this.#reply : { text: '', confirm: false, error: '' };
+      const hint = r.error ? `<span class="err">${esc(r.error)}</span>` : r.confirm ? T.replyConfirm(esc(Agent.displayName(s.agent))) : '';
+      return `<form class="reply${r.confirm ? ' confirm' : ''}" data-sid="${esc(s.id)}" autocomplete="off">
+          <input class="rtext" placeholder="${esc(T.replyTo(Agent.displayName(s.agent)))}" spellcheck="false">
+          <button type="button" class="ricon" data-act="reply-dialog" data-sid="${esc(s.id)}" title="${T.replyDialog}">↗</button>
+          <button type="submit" class="btn primary rsend" title="${T.replySendTip}">${r.confirm ? T.replySend : '→'}</button>
+        </form>${hint ? `<div class="rhint">${hint}</div>` : ''}`;
+    }
+
+    // The card is re-rendered on every update: put the reply text, focus and caret back
+    #restoreReply() {
+      const input = this.el.card.querySelector('.reply .rtext');
+      if (!input) { return; }
+      const sid = input.closest('.reply').dataset.sid;
+      if (this.#reply.sid !== sid) { this.#reply = { sid, text: '', confirm: false, focused: false, error: '' }; }
+      input.value = this.#reply.text;
+      if (this.#reply.focused) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    }
+
+    async #replySend() {
+      const r = this.#reply;
+      const text = r.text.trim();
+      if (!text || !r.sid) { return; }
+      if (!r.confirm) { r.confirm = true; r.error = ''; return this.render(); }
+      const res = await this.api?.sendPrompt(r.sid, text);
+      if (res?.ok) {
+        this.#reply = { sid: null, text: '', confirm: false, focused: false, error: '' };
+        this.api?.keyboard(false);
+        this.toast = null;
+      } else {
+        Object.assign(r, { confirm: false, error: res?.error || T.replyFailed });
+      }
+      this.render();
     }
 
     // ✓ / ✗ / ⚠ line under a finished turn's summary: did its tests pass, or were none run
@@ -806,6 +865,9 @@
         const r = await this.api?.challenge(b.dataset.sid);
         if (r?.ok === false && this.toast) { this.toast.hint = r.error; }
         this.render();
+      } else if (act === 'reply-dialog') {
+        this.api?.keyboard(false);
+        this.api?.openPrompt(b.dataset.sid, this.#reply.sid === b.dataset.sid ? this.#reply.text : '');
       } else if (act === 'ask-tests') {
         b.disabled = true;
         this.api?.askTests(b.dataset.sid);
@@ -841,6 +903,40 @@
     #bindEvents() {
       const { pill } = this.el;
       pill.addEventListener('click', e => this.#onClick(e));
+      // Done card reply box: the overlay takes keyboard focus only while it's being typed into
+      const card = this.el.card;
+      card.addEventListener('pointerdown', e => {
+        if (e.target.closest('.rtext')) { this.#reply.focused = true; this.api?.keyboard(true); }
+      });
+      card.addEventListener('focusin', e => {
+        if (e.target.closest('.rtext')) { this.#reply.focused = true; }
+      });
+      card.addEventListener('focusout', e => {
+        if (!e.target.closest('.rtext')) { return; }
+        // a re-render also blurs the box for a moment; only a real leave hands the keyboard back
+        setTimeout(() => {
+          if (!card.querySelector('.rtext:focus')) { this.#reply.focused = false; this.api?.keyboard(false); }
+        }, 50);
+      });
+      card.addEventListener('input', e => {
+        if (!e.target.closest('.rtext')) { return; }
+        Object.assign(this.#reply, { text: e.target.value, confirm: false, error: '', focused: true });
+        e.target.closest('.reply').classList.remove('confirm');
+        const send = card.querySelector('.rsend');
+        if (send) { send.textContent = '→'; }
+        card.querySelector('.rhint')?.remove();
+      });
+      card.addEventListener('submit', e => {
+        if (!e.target.closest('.reply')) { return; }
+        e.preventDefault();
+        this.#replySend();
+      });
+      card.addEventListener('keydown', e => {
+        if (e.key !== 'Escape' || !e.target.closest('.rtext')) { return; }
+        e.preventDefault();
+        if (this.#reply.confirm) { this.#reply.confirm = false; this.render(); }
+        else { e.target.blur(); }
+      });
       // scroll doesn't bubble, so listen in the capture phase for the permission command box
       pill.addEventListener('scroll', e => {
         if (!e.target.matches?.('.code[data-perm]')) { return; }
