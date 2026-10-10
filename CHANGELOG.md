@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Attach files to a prompt — in the panel's agent prompt box, the panel's Ask Bayloob box and the Ask Bayloob
+  dialog (where the pill's voice prompt lands): the 📎 button, dropping files on the box, or pasting a
+  screenshot with Ctrl+V. Files are copied to `~/.cache/bayloob/uploads` (up to 50 MB each, pruned after
+  7 days) and the agent gets their paths as `@/path` mentions after the text.
 - The agent's prompt box in the panel: `/` opens shortcuts (`/test`, `/review`, `/explain`, `/continue`)
   that fill in editable text; ↑ / ↓ in an empty box bring back earlier prompts to that agent; prompts
   waiting for a busy agent are listed under the box, each removable.

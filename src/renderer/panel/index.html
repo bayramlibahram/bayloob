@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>Bayloob workspace</title>
 <link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="../shared/attachments.css">
 <style>
   :root {
     --glass: rgba(17, 16, 22, 0.97);
@@ -287,7 +288,9 @@
         <form class="say" id="say" hidden autocomplete="off">
           <div class="slash" id="slash" hidden role="listbox"></div>
           <div class="box"><textarea id="sayText" rows="1" spellcheck="false"></textarea>
+            <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
             <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+          <ul class="atts" id="sayAtts" hidden></ul>
           <div class="confirm" id="sayConfirm" hidden></div>
           <div class="hint" id="sayHint"></div>
           <ul class="pqueue" id="sayQueue" hidden></ul>
@@ -297,7 +300,9 @@
 
     <form class="ask" id="ask" autocomplete="off">
       <div class="box"><span class="spark">✦</span><input id="askText" spellcheck="false" placeholder="Ask Bayloob — what should be done?">
+        <button type="button" class="attach" id="askAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
         <button type="submit" class="send" id="askSend" title="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+      <ul class="atts" id="askAtts" hidden></ul>
       <div class="askpick" id="askPick" hidden></div>
       <div class="confirm" id="askConfirm" hidden></div>
       <div class="hint" id="askHint" hidden></div>
@@ -315,12 +320,14 @@
   </div>
 
 <script src="../shared/ui-common.js"></script>
+<script src="../shared/attachments.js"></script>
 <script>
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
     sayTo: (agent, project) => `Prompt to ${agent} · ${project}…`,
     sayHint: 'Enter sends · Shift+Enter new line', sayBusy: 'Busy — Enter adds it to the queue',
-    confirmSend: (agent, project) => `Send to <b>${agent}</b> · ${project}`, now: 'now', toQueue: 'to the queue',
+    confirmSend: (agent, project) => `Send to <b>${agent}</b> · ${project}`,
+    withFiles: n => ` · ${n} file${n === 1 ? '' : 's'}`, attaching: 'Wait — the files are still being attached', now: 'now', toQueue: 'to the queue',
     confirmLaunch: (agent, cwd) => `Launch <b>${agent}</b> in <code>${cwd}</code>`, inWorktree: '⑂ new worktree',
     edit: 'Edit', sendBtn: '✓ Send', queueBtn: '✓ Add to queue', launchBtn: '✓ Launch', confirmHint: 'Enter confirms · Esc goes back',
     taskDone: 'Task completed.',
@@ -504,8 +511,14 @@
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
         saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
-        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue') };
+        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
+        sayAttach: $('sayAttach'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
+      // Files attached to the agent's prompt and to Ask Bayloob; the agent gets their paths
+      this.sayAtt = new Attachments({ api: api?.uploads, list: this.el.sayAtts,
+        onChange: () => { this.el.saySend.disabled = this.#sayEmpty; this.#fit(); }, onError: t => this.#sayHint(t, 'err') });
+      this.askAtt = new Attachments({ api: api?.uploads, list: this.el.askAtts, onChange: () => this.#fit(), onError: t => this.#askHint(t, 'err') });
+      this.el.sayAttach.hidden = this.el.askAttach.hidden = !this.sayAtt.available;
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
     }
@@ -875,6 +888,7 @@
         if (this.#sayConfirming) { this.#confirmSay(false); }
         this.sayFor = s.id;
         this.el.sayText.value = '';
+        this.sayAtt.clear();
         this.#sayHint('');
         this.#histPos = -1;
         this.#renderQueue([]);
@@ -885,7 +899,7 @@
       if (!this.el.sayHint.dataset.kind) {
         this.el.sayHint.textContent = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
       }
-      this.el.saySend.disabled = !this.el.sayText.value.trim();
+      this.el.saySend.disabled = this.#sayEmpty;
       if (this.#sayConfirming) { this.#renderSayConfirm(); } // busy may have changed: now vs queue
     }
 
@@ -898,6 +912,7 @@
     }
 
     get #sayConfirming() { return !this.el.sayConfirm.hidden; }
+    get #sayEmpty() { return !this.el.sayText.value.trim() && !this.sayAtt.count; }
 
     // First Enter shows what will happen (sent now or queued); the second one sends
     #confirmSay(on) {
@@ -922,7 +937,7 @@
       const paste = !s.term?.tmux;
       const busy = !paste && BUSY.has(s.state);
       const [cls, badge, btn] = paste ? ['paste', T.toPaste, T.pasteBtn] : busy ? ['queue', T.toQueue, T.queueBtn] : ['now', T.now, T.sendBtn];
-      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(s.project))}</span>
+      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(s.project))}${this.sayAtt.count ? T.withFiles(this.sayAtt.count) : ''}</span>
         <span class="badge ${cls}">${badge}</span>
         <button type="button" class="btn" data-edit>${T.edit}</button>
         <button type="submit" class="btn on">${btn}</button>
@@ -931,14 +946,16 @@
 
     async #send() {
       const text = this.el.sayText.value.trim();
-      if (!text || !this.sayFor) { return; }
+      if (this.#sayEmpty || !this.sayFor) { return; }
+      if (this.sayAtt.busy) { return this.#sayHint(T.attaching, 'err'); }
       if (!this.#sayConfirming) { return this.#confirmSay(true); }
       this.#confirmSay(false);
       this.el.saySend.disabled = true;
-      const res = await this.api?.sendPrompt(this.sayFor, text);
+      const res = await this.api?.sendPrompt(this.sayFor, this.sayAtt.compose(text));
       if (res?.ok) {
-        this.#remember(this.sayFor, text);
+        if (text) { this.#remember(this.sayFor, text); }
         this.el.sayText.value = '';
+        this.sayAtt.clear();
         this.#grow(this.el.sayText);
         this.#loadQueue(true);
         this.#sayHint(res.via === 'clipboard' ? T.copiedPaste : res.queued ? T.queued : T.sent, 'ok');
@@ -988,7 +1005,7 @@
       this.#histPos = pos;
       this.el.sayText.value = pos === -1 ? '' : h[pos];
       this.#grow(this.el.sayText);
-      this.el.saySend.disabled = !this.el.sayText.value.trim();
+      this.el.saySend.disabled = this.#sayEmpty;
       return true;
     }
 
@@ -1013,8 +1030,8 @@
 
     // "Ask Bayloob": type what should be done, Enter, then pick the agent and folder right here
     async #askNext() {
-      const text = this.el.askText.value.trim();
-      if (!text) { return; }
+      if (!this.el.askText.value.trim() && !this.askAtt.count) { return; }
+      if (this.askAtt.busy) { return this.#askHint(T.attaching, 'err'); }
       if (!this.el.askConfirm.hidden) { return this.#askStart(); }
       if (!this.el.askPick.hidden) { return this.#confirmAsk(true); }
       const opts = await this.api?.launchOptions();
@@ -1054,7 +1071,7 @@
         this.askCwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
         if (!this.askAgent || !this.askCwd) { return this.#askHint(T.pickFolder, 'err'); }
         const a = this.askOpts.agents[this.askAgent];
-        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}</span>
+        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}${this.askAtt.count ? T.withFiles(this.askAtt.count) : ''}</span>
           <button type="button" class="btn" data-edit>${T.edit}</button>
           <button type="submit" class="btn on">${T.launchBtn}</button>`;
         this.#askHint(T.confirmHint);
@@ -1073,9 +1090,10 @@
       const cwd = this.askCwd;
       if (!this.askAgent || !cwd) { return this.#askHint(T.pickFolder, 'err'); }
       this.#askHint(T.starting);
-      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.el.askText.value.trim(), worktree: this.askWorktree });
+      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.askAtt.compose(this.el.askText.value), worktree: this.askWorktree });
       if (res?.ok) {
         this.#askReset();
+        this.askAtt.clear();
         this.#askHint(T.started, 'ok');
         setTimeout(() => { this.#askHint(''); this.#fit(); }, 2500);
       } else {
@@ -1194,7 +1212,7 @@
       this.el.sayText.addEventListener('input', () => {
         this.#histPos = -1;
         this.#slashAt = 0;
-        this.#renderSlash(); this.#grow(this.el.sayText); this.el.saySend.disabled = !this.el.sayText.value.trim(); });
+        this.#renderSlash(); this.#grow(this.el.sayText); this.el.saySend.disabled = this.#sayEmpty; });
       this.el.sayText.addEventListener('keydown', e => {
         // The / shortcuts menu takes the arrows, Enter / Tab and Esc while it's open
         if (!this.el.slash.hidden) {
@@ -1230,6 +1248,13 @@
       });
       // Ask Bayloob: Enter → pick agent + folder → Enter starts
       this.el.ask.addEventListener('submit', e => { e.preventDefault(); this.#askNext(); });
+      this.el.sayAttach.addEventListener('click', () => this.sayAtt.pick());
+      this.el.askAttach.addEventListener('click', () => this.askAtt.pick());
+      this.sayAtt.bindDrop(this.el.say);
+      this.sayAtt.bindPaste(this.el.sayText);
+      this.askAtt.bindDrop(this.el.ask);
+      this.askAtt.bindPaste(this.el.askText);
+      Attachments.guardWindow();
       this.el.askText.addEventListener('input', () => { if (!this.el.askText.value.trim() && !this.el.askPick.hidden) { this.#askReset(); } });
       this.el.askPick.addEventListener('click', e => {
         const a = e.target.closest('[data-agent]');
