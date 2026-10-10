@@ -51,6 +51,9 @@
   .card.done.r-untested { border-color: color-mix(in srgb, var(--working) 40%, transparent);
     background: linear-gradient(180deg, color-mix(in srgb, var(--working) 8%, transparent), var(--card)); }
   .row .role { color: var(--waiting); }
+  .card.perm.antibody { border-color: color-mix(in srgb, var(--waiting) 55%, transparent); }
+  .immune.warn { margin-top: 8px; font-size: 12.5px; color: var(--waiting); }
+  .immune code { font: 500 11.5px ui-monospace, monospace; }
   .receipt { margin-top: 8px; font-size: 12.5px; font-weight: 600; }
   .receipt code { font: 500 11.5px ui-monospace, monospace; color: var(--muted); }
   .receipt.passed { color: var(--done); }
@@ -225,6 +228,11 @@
     asksYou: 'has a question', answerInTerminal: 'Answer in terminal', sendAnswer: 'Send answer',
     pickAll: 'Pick an answer for every question', pickMany: 'any number',
     deny: 'Deny', terminal: 'In terminal', terminalTip: 'Decide in the terminal', allow: 'Allow',
+    antibody: (cmd, when) => `🛡 Looks like <code>${cmd}</code>, which you denied ${when}`,
+    always: 'Always allow here',
+    alwaysTip: key => `You've allowed "${key}" here several times. Allow it in this folder from now on (removable in Settings)`,
+    cooling: s => `Read it first — Allow unlocks in ${s}s`,
+    coolTip: 'A short pause before allowing: you approved several requests very quickly, or this resembles one you denied',
     allowBlocked: 'Part of this command is hidden, so it can only be approved in the terminal',
     allowUnread: 'Read the whole command first (scroll to its end)',
     dismiss: 'Dismiss', openTerminal: 'Open terminal',
@@ -244,6 +252,8 @@
   };
 
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+  const COOL_MS = 3000;
+  const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
   const RECEIPT_MARK = { passed: ' ✓', failed: ' ✗', untested: ' ⚠' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const DONE_TOAST_MS = 12000;
@@ -358,6 +368,8 @@
     receipts = {};         // session id -> { status, command? } of its last finished turn
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
+    #permShown = new Map();  // permId -> when its card first appeared (for the Allow cooldown)
+    #coolTimer = null;
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
 
@@ -420,7 +432,7 @@
       this.el.card.className = card ? `card ${card.kind}` : 'card';
       this.el.card.innerHTML = card ? card.html : '';
       this.el.pill.classList.toggle('has-card', !!card);
-      if (card?.kind === 'perm') { this.#syncPermScroll(); }
+      if (card?.kind.split(' ')[0] === 'perm') { this.#syncPermScroll(); }
 
       this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
     }
@@ -480,14 +492,18 @@
             <button type="button" class="btn primary" data-act="send-answer" data-id="${pid}" ${complete ? '' : `disabled title="${T.pickAll}"`}>${T.sendAnswer}</button>
           </div>` };
       }
-      return { kind: 'perm', html: `
+      const im = s.perm.immune || {};
+      if (!this.#permShown.has(id)) { this.#permShown.set(id, Date.now()); }
+      return { kind: im.antibody ? 'perm antibody' : 'perm', html: `
         ${this.#cardHead(s, T.permAsks)}
         <div><span class="chip">${esc(tool)}</span></div>
         ${detail ? `<div class="code" data-perm="${pid}">${esc(detail)}</div>` : ''}
+        ${im.antibody ? `<div class="immune warn">${T.antibody(esc(im.antibody.command), ago(im.antibody.at))}</div>` : ''}
         <div class="hint" data-hint="${pid}">${hidden ? T.hidden(hidden) : ''}</div>
         <div class="actions">${more}
           <button class="btn deny" data-act="deny" data-id="${pid}">${T.deny}</button>
           <button class="btn" data-act="terminal" data-id="${pid}" title="${T.terminalTip}">${T.terminal}</button>
+          ${im.suggest && !im.antibody ? `<button class="btn" data-act="always-allow" data-id="${pid}" title="${esc(T.alwaysTip(im.suggest.key))}">${T.always}</button>` : ''}
           <button class="btn allow" data-act="allow" data-id="${pid}" ${hidden ? `disabled title="${T.allowBlocked}"` : ''}>${T.allow}</button>
         </div>` };
     }
@@ -543,9 +559,17 @@
       if (allow.disabled && allow.title === T.allowBlocked) { return; // hidden characters: terminal only
 }
       const read = this.#permRead.has(id);
-      allow.disabled = !read;
-      allow.title = read ? '' : T.allowUnread;
-      if (hint) { hint.textContent = read ? '' : T.scrollToAllow; }
+      // Tripwire (several approvals in a row, each under a second) or a resemblance to a denied request:
+      // Allow unlocks only after a short pause, so the request actually gets read
+      const im = this.#questionPerm(id)?.immune || {};
+      const wait = im.slowDown || im.antibody ? COOL_MS - (Date.now() - (this.#permShown.get(id) || 0)) : 0;
+      allow.disabled = !read || wait > 0;
+      allow.title = !read ? T.allowUnread : wait > 0 ? T.coolTip : '';
+      if (hint) { hint.textContent = !read ? T.scrollToAllow : wait > 0 ? T.cooling(Math.ceil(wait / 1000)) : ''; }
+      if (wait > 0) {
+        clearTimeout(this.#coolTimer);
+        this.#coolTimer = setTimeout(() => this.#syncPermScroll(), Math.min(wait, 250));
+      }
     }
 
     #doneCard() {
@@ -663,6 +687,9 @@
         b.disabled = true;
         this.api?.decide(b.dataset.id, 'terminal');
         this.api?.focus(b.dataset.sid);
+      } else if (act === 'always-allow') {
+        b.disabled = true;
+        this.api?.alwaysAllow(b.dataset.id);
       } else if (act === 'allow' || act === 'deny' || act === 'terminal') {
         b.disabled = true;
         this.api?.decide(b.dataset.id, act);

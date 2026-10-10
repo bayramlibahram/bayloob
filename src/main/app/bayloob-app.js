@@ -13,6 +13,7 @@ const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { BlockedClock } = require("../modules/sessions/blocked-clock");
 const { receiptFor } = require("../modules/sessions/receipt");
+const { ImmuneSystem } = require("../modules/permissions/immune-system");
 const { SessionOutput } = require("../modules/sessions/session-output");
 const { TokenUsage } = require("../modules/sessions/token-usage");
 const { HookHealth } = require("../modules/hooks/hook-health");
@@ -134,6 +135,7 @@ class BayloobApp {
     this.settings.on("change", keys => this.#applySettings(keys));
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
+    this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
     const checkLock = async () => {
       this.#locked = await this.presence.locked();
     };
@@ -252,6 +254,7 @@ class BayloobApp {
       locked: this.settings.lockedByEnv(),
       detectedTerminal: new TerminalLauncher("").detected, // what auto-detect would pick
       hooks: this.hooks.status(),
+      rules: this.server.immune?.rules() || [],
     });
   }
 
@@ -583,6 +586,13 @@ class BayloobApp {
         this.server.decide(String(permId), decision);
       }
     });
+    ipcMain.on("always-allow", (_e, permId) => {
+      try {
+        this.server.alwaysAllow(String(permId));
+      } catch {
+        // not a simple command: the card stays, the user decides as usual
+      }
+    });
     // Answers to an agent's question: { question text: [labels] }, strings only
     ipcMain.on("answer", (_e, permId, answers) => {
       const clean = Object.fromEntries(
@@ -690,6 +700,10 @@ class BayloobApp {
         }
       })
     );
+    ipcMain.handle("settings:revoke-rule", (_e, ruleId) => {
+      this.server.immune?.revoke(String(ruleId));
+      return this.server.immune?.rules() || [];
+    });
     ipcMain.handle("settings:install-extension", async () => {
       try {
         const r = await this.extension.install();

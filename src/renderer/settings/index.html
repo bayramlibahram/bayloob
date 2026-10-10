@@ -52,6 +52,12 @@
   .hooks { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
   .hooks .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
   .hooks span { flex: 1; color: #c9c7d4; }
+  .rules { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
+  .rules .title { color: #c9c7d4; font-weight: 600; }
+  .rules .rule { display: flex; align-items: center; gap: 10px; }
+  .rules code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12px ui-monospace, monospace; }
+  .rules small { color: var(--muted, #8b8898); white-space: nowrap; }
+  .rules .btn { padding: 4px 10px; }
   .btn { padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 600; white-space: nowrap; }
   .btn:hover { background: rgba(255,255,255,.14); }
   .btn.primary { background: var(--brand); color: #fff; }
@@ -93,6 +99,7 @@
 
     <div class="hooks" id="hooks"></div>
     <div class="hooks" id="extension" hidden></div>
+    <div class="rules" id="rules" hidden></div>
 
     <div class="foot">
       <div class="msg" id="msg"></div>
@@ -101,8 +108,10 @@
     </div>
   </form>
 
+<script src="../shared/ui-common.js"></script>
 <script>
   const T = {
+    rulesTitle: 'Always allowed (from permission cards)', used: n => `used ${n}×`, remove: 'Remove',
     hooksOk: 'Claude Code hooks are installed',
     hooksPartial: n => `Claude Code hooks are only partly installed (${n} of 9 events)`,
     hooksMissing: 'Claude Code hooks are not installed',
@@ -126,7 +135,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), mascot: $('mascot'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
-        music: $('music'), hooks: $('hooks'), extension: $('extension'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -145,6 +154,7 @@
       this.#renderMusic();
       this.#renderHooks();
       this.#renderExtension();
+      this.#renderRules(this.state.rules || []);
       this.#message(locked.length ? T.lockedEnv(locked) : T.hint);
       this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
       this.el.shortcut.focus();
@@ -183,6 +193,18 @@
         (ok || relogin ? '' : `<button type="button" class="btn" id="enableExt">${T.enable}</button>`);
     }
 
+    // "Always allow" rules made from permission cards: each one visible here, and removable
+    #renderRules(rules) {
+      const box = this.el.rules;
+      box.hidden = !rules.length;
+      const folder = p => p.split('/').filter(Boolean).pop() || p;
+      const rows = rules.map(r => `
+        <div class="rule"><code title="${esc(r.cwd)}">${esc(r.key)}</code>
+          <small>${esc(folder(r.cwd))} · ${T.used(r.hits)}</small>
+          <button type="button" class="btn" data-revoke="${esc(r.id)}">${T.remove}</button></div>`);
+      box.innerHTML = `<div class="title">${T.rulesTitle}</div>${rows.join('')}`;
+    }
+
     #message(text, kind = '') {
       this.el.msg.textContent = text;
       this.el.msg.className = kind ? `msg ${kind}` : 'msg';
@@ -215,6 +237,14 @@
         const res = await this.api?.installExtension();
         if (res?.ok) { this.#renderExtension(res); }
         else { b.disabled = false; b.textContent = T.enable; this.#message(res?.error || 'Could not enable the extension', 'error'); }
+      });
+      this.el.rules.addEventListener('click', async e => {
+        const b = e.target.closest('[data-revoke]');
+        if (!b) { return; }
+        b.disabled = true;
+        const rules = await this.api?.revokeRule(b.dataset.revoke);
+        this.#renderRules(rules || []);
+        this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
       });
       this.el.hooks.addEventListener('click', async e => {
         const b = e.target.closest('#install');

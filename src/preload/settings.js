@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   save: values => ipcRenderer.invoke("settings:save", values),
   installHooks: () => ipcRenderer.invoke("settings:install-hooks"),
   installExtension: () => ipcRenderer.invoke("settings:install-extension"),
+  revokeRule: ruleId => ipcRenderer.invoke("settings:revoke-rule", ruleId),
   resize: height => ipcRenderer.send("settings:resize", height),
   close: () => ipcRenderer.send("settings:close"),
 });

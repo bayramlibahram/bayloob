@@ -133,9 +133,10 @@ function decisionBody(decision, updatedInput = null, event = "PermissionRequest"
 
 /** HTTP endpoint for the hooks: /ev for events, /perm for permission requests that wait for the user. */
 class EventServer {
-  #pending = new Map(); // permId -> {res, timer, sid, input, event}
+  #pending = new Map(); // permId -> {res, timer, sid, tool, input, cwd, event, shownAt}
   #permSeq = 0;
   lastEventAt = null;
+  immune = null; // ImmuneSystem: remembered decisions, rules and antibodies (optional)
 
   constructor({ port = PORT, store = new SessionStore() } = {}) {
     this.port = port;
@@ -181,6 +182,19 @@ class EventServer {
     this.#pending.delete(permId);
     clearTimeout(p.timer);
     p.res.end(decisionBody(decision, updatedInput, p.event));
+    if (
+      this.immune &&
+      (decision === "allow" || decision === "deny") &&
+      !QUESTION_TOOLS.has(p.tool)
+    ) {
+      this.immune.record({
+        tool: p.tool,
+        input: p.input,
+        cwd: p.cwd,
+        decision,
+        latencyMs: Date.now() - p.shownAt,
+      });
+    }
     this.store.settlePermission(
       p.sid,
       permId,
@@ -188,6 +202,16 @@ class EventServer {
     );
     this.store.changed();
     return true;
+  }
+
+  /** "Always allow here": makes a standing rule from this request, then allows it. */
+  alwaysAllow(permId) {
+    const p = this.#pending.get(permId);
+    if (!p || !this.immune) {
+      return false;
+    }
+    this.immune.addRule(p.tool, p.input, p.cwd);
+    return this.decide(permId, "allow");
   }
 
   // Only accept requests addressed to us by a local process: a browser page (Origin header)
@@ -250,14 +274,40 @@ class EventServer {
     if (event === "PermissionRequest" && QUESTION_TOOLS.has(tool)) {
       return res.end("");
     }
+    const input = ev.tool_input || {};
+    const cwd = ev.cwd || query.get("cwd") || "";
+    const detail = permDetail(tool, input);
+    const known =
+      QUESTION_TOOLS.has(tool) || !this.immune ? null : this.immune.assess(tool, input, cwd);
+    // A rule the user made for exactly this simple command here: allow without a card. Never when part
+    // of the command is hidden from view.
+    if (known?.rule && !detail.hidden) {
+      this.immune.noteHit(known.rule.id);
+      this.store.upsert(id, agent, ev, query, { state: "working", tool });
+      return res.end(decisionBody("allow", null, event));
+    }
     const permId = String(++this.#permSeq);
+    const immune = known && {
+      antibody: known.antibody,
+      suggest: !detail.hidden && known.suggest ? known.suggest : null,
+      slowDown: known.slowDown,
+    };
     this.store.upsert(id, agent, ev, query, {
       state: "waiting",
       tool,
-      perm: { id: permId, tool, ...permDetail(tool, ev.tool_input) },
+      perm: { id: permId, tool, ...detail, immune },
     });
     const timer = setTimeout(() => this.decide(permId, "terminal"), PERM_TIMEOUT_MS);
-    this.#pending.set(permId, { res, timer, sid: id, input: ev.tool_input || {}, event });
+    this.#pending.set(permId, {
+      res,
+      timer,
+      sid: id,
+      tool,
+      input,
+      cwd,
+      event,
+      shownAt: Date.now(),
+    });
     // The hook went away (answered in the terminal, agent timeout, …) → remove the card
     res.on("close", () => {
       if (!this.#pending.delete(permId)) {
