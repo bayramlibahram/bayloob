@@ -47,6 +47,19 @@ Three choices:
 many characters are missing and **Allow** is disabled, so you can only approve it in the terminal
 where you can read all of it.
 
+### 🛡️ An immune system for permissions
+
+Bayloob remembers how you answer, and gets in the way of mistakes rather than of you:
+
+| | What happens |
+|---|---|
+| **Combo** | Allowed the same simple command 3 times in a project (`npm test`)? The card offers **Always allow here**. From then on it's allowed without a card, and the pill says *✓ npm test · allowed by rule*. Only simple commands inside the project qualify — never pipes, `;`, `&&`, `$( )`, redirects, `sudo`, `rm -r`, `--force` or paths outside the project |
+| **Antibody** | Something resembling a command you denied (`git push -f` after denying `git push --force`) gets a red card: *🛡 Looks like git push --force, which you denied 26 min ago*. Deny becomes the main button |
+| **Tripwire** | Approving three cards within a second, or each under a second? The next **Allow** waits 3 seconds (🔒) — read it first |
+| **Waiting meter** | Cards show *waiting 2m 14s*, the mascot fades while an agent waits on you, a soft reminder plays after a minute, and the panel shows how long agents waited today |
+
+Rules and remembered denials are listed in **Settings**, each removable; denials are forgotten after 30 days.
+
 No answer in 280 seconds? The decision goes back to the terminal automatically
 (`BAYLOOB_PERM_TIMEOUT`). If Bayloob isn't running at all, the hook exits instantly and your
 agent behaves exactly as it always has. **Bayloob never blocks your agent.**
@@ -60,9 +73,13 @@ agent behaves exactly as it always has. **Bayloob never blocks your agent.**
 
 Start a new agent without opening a terminal first. Just say what should be done:
 
-1. **Ask Bayloob.** Type the task, pick the project (recent ones are one click away) and press **Enter**.
-2. **Bayloob asks which agent should do it.** Pick **Claude Code**, **Codex** or **Gemini CLI**
-   with **1 / 2 / 3** or the arrow keys and press **Enter**. Agents that aren't installed are greyed out.
+1. **Task.** Type what should be done, pick the project (recent ones are one click away) and press **Enter**.
+2. **Agent.** Pick **Claude Code**, **Codex** or **Gemini CLI** with **1 / 2 / 3** or the arrow keys.
+   Agents that aren't installed are greyed out. Optionally run it **in a new git worktree** (its own
+   branch next to the project), so it never edits the same files as another agent.
+3. **Confirm.** A summary — agent, folder, worktree, prompt — and **Launch**. Nothing starts before this.
+
+The same **Ask Bayloob** box sits at the bottom of the workspace panel.
 
 The agent starts in its own **tmux** session with your prompt and opens in your terminal, so it keeps
 running even if you close the window.
@@ -73,7 +90,7 @@ Every session that runs in tmux gets extra buttons in the list:
 
 | Button | What it does |
 |---|---|
-| 💬 **Send a prompt** | Type a follow-up and it lands in the agent's input, no window switching |
+| 💬 **Send a prompt** | Type a follow-up (confirmed before it goes) and it lands in the agent's input, no window switching. Busy agent? It's queued and sent when its turn ends |
 | ⏹ **Stop** | Ends a session Bayloob launched (click twice to confirm) |
 | ▸_ **Open terminal** | Raises its window, or reopens one attached to tmux if you closed it |
 
@@ -127,16 +144,27 @@ Without it, everything else still works and focusing falls back to X11/XWayland 
 
 <img src="docs/screenshots/settings.png" width="380" alt="Settings: mascot, launcher shortcut, terminal, editor, music, hooks">
 
-The gear in the panel opens the settings: mascot style, launcher shortcut, terminal, editor and
-music. Changes apply right away, with no restart. If the Claude Code hooks or the GNOME extension are
+The gear in the panel opens the settings: mascot style, **theme** (System / Light / Dark — System follows
+GNOME's light/dark switch), launcher shortcut, terminal, editor, music, **sounds** (volume and each sound
+on or off), **watch clipboard**, and your permission rules and remembered denials. Changes apply right
+away, with no restart. If the Claude Code hooks or the GNOME extension are
 missing, you can install them from here. Settings are saved in `~/.config/Bayloob/settings.json`.
 
 ### ✅ Know the moment work is done
 
 <img src="docs/screenshots/done.png" width="440" alt="Done card with the agent's last message">
 
-A "finished" card shows a short summary of the agent's last reply. Hit **Open terminal**
-and Bayloob brings the right window to the front, even the right tmux pane.
+A "finished" card shows a short summary of the agent's last reply, and a **delivery receipt** read from
+the agent's own turn: **✓ Tests passed**, **✗ Tests failed** or **⚠ Code changed, no tests run** — the card
+is only green when the tests passed. From the card you can:
+
+- **Reply** right there, no terminal needed (typed into tmux; for other terminals it's copied and the
+  terminal comes forward for **Ctrl+Shift+V**). The panel shows a *finished* banner with **Reply** too.
+- **Ask to run tests** when they failed or didn't run.
+- **⚔ Challenge**: a *different* agent (Codex for Claude's work, Claude for Codex's) starts read-only in
+  the same folder and tries to break the changes. Its card lists each `file:line` it found; a click opens
+  it in your editor. Bayloob refuses anything the challenger asks to do that isn't read-only.
+- **Open terminal**: Bayloob brings the right window to the front, even the right tmux pane.
 
 | Terminal | How it's focused |
 |---|---|
@@ -146,9 +174,27 @@ and Bayloob brings the right window to the front, even the right tmux pane.
 | Any window on GNOME, native Wayland included (Ptyxis, GNOME Terminal…) | the Bayloob GNOME extension |
 | Any X11 / XWayland window (xterm, VS Code, Cursor, Tilix, Konsole…) | `_NET_ACTIVE_WINDOW` via python3 + libX11 |
 
+### ⚠️ Collision radar
+
+Two agents editing the same file in the same repo get a red ⚠ in the pill and the list, plus a desktop
+notification; both busy in the same tree on different files get a yellow one. **Move new work to a
+worktree…** starts the next agent on its own branch. Agents in different worktrees never collide.
+
+### 🐞 Copy an error, fix it
+
+Turn on **Watch clipboard** in Settings, copy a stack trace (Python, JS/TS, PHP, Go, Java) and the pill
+asks *Error copied — fix it?*: **Fix in Claude Code · shop** opens its prompt window with *Fix this error:*
+and the trace, **New session…** starts a fresh agent with it. Nothing is sent without you.
+
+### 🔊 Sounds, 🌗 light theme
+
+Short, soft sounds for what needs you (a permission card, a reminder, done, sleep / wake), one at a time,
+each one switchable. Every window comes in light and dark.
+
 ### 🎨 One manager, many agents
 
-The big mascot in the pill is **Bayloob itself, the manager**. It's always violet and always shows
+The big mascot in the pill is **Bayloob itself, the manager**. With several agents their mascots are
+stacked next to it, and a thin bar shows how far the top agent is through its own to-do list (*2 of 5*). It's always violet and always shows
 the most urgent thing across all your sessions: if any agent needs approval, the manager's lid pops
 open. Your agents are its **subs**. They're listed under it, each in its own color, so you can tell
 them apart from across the room:
@@ -172,7 +218,7 @@ Works with any MPRIS player over `gdbus`. Not in the mood? `BAYLOOB_NO_MUSIC=1 b
 ## The mascot
 
 The mascot is a layered 3D-style character (body, lid, visor and eyes) animated by
-[`src/novi.js`](src/novi.js), a small engine with no dependencies. Every state has its own little story:
+[`src/renderer/shared/novi.js`](src/renderer/shared/novi.js), a small engine with no dependencies. Every state has its own little story:
 
 | What the agent did | State | What the mascot does |
 |---|---|---|

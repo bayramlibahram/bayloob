@@ -1,8 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-10
+
+Bayloob grows from a status overlay into a place to steer agents from: an immune system for
+permissions, delivery receipts, a second agent that challenges the first, a collision radar, replies
+without a terminal, a light theme and a recordable demo. Upgrading: restart Bayloob once so it creates
+its API token (`~/.config/Bayloob/token`) — until then the updated hooks stay silent.
 
 ### Added
+- Questions from an agent (AskUserQuestion) answered from a bigger, interactive pill.
+- "Can't hear the agents" warning when hooks are missing or broken, or a busy agent sends nothing.
+- In the session list: each agent's latest output line, a git diff badge (`+120 −30`), Claude's token
+  count, and queued prompts (`⏳ 2`) — prompts to a busy agent wait for its turn to end.
+- A copied error opens the prompt window pre-filled with "Fix this error:".
+- Wait-time meter: "waiting 2m 14s" on cards, a fading mascot, "Agents waited 7m today" in the panel.
+- Delivery receipt on done cards (✓ Tests passed / ✗ failed / ⚠ untested) with **Ask to run tests**.
+- ⚔ Challenge: a different agent reviews the changes read-only.
+- Permission immune system: Combo rules, Antibody (look-alike of a denial), Tripwire.
+- New pill: mascot tile, status chip, chevron, to-do progress bar.
+- Collision radar and "launch in a new git worktree".
+- Prompt box and Ask Bayloob in the workspace panel; the prompt window became a dialog with a
+  confirm step (Task → Agent → Confirm / Write → Confirm); panel prompts are confirmed too.
+- UI sounds (one at a time, cooldowns, a 60 s reminder), sleep / wake sounds.
+- Reply to a finished agent from its done card or the panel's "finished" banner.
 - `bun run demo` (`bayloob --demo`): a scripted ~70 s tour of the features for screenshots and video —
   four agents (shop, api, blog, docs), to-do progress, a permission card, a rule, a red look-alike
   card, a collision, receipts, a ⚔ challenge report and a copied error. Cards wait 6 s for a click,
