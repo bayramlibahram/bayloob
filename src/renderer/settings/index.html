@@ -43,6 +43,10 @@
   .seg button[aria-pressed="true"] { background: rgba(139,92,255,.22); color: var(--text); }
   .seg button:disabled { cursor: not-allowed; opacity: .5; }
 
+  .sound { display: flex; align-items: center; gap: 10px; }
+  .sound input[type=range] { width: 130px; accent-color: var(--brand); }
+  .sound input[type=range]:disabled { opacity: .4; }
+  .btn.mini { padding: 4px 9px; border-radius: 8px; font-size: 11px; }
   .switch { width: 38px; height: 22px; border-radius: 11px; background: rgba(255,255,255,.12); position: relative; transition: background .15s; }
   .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
   .switch[aria-checked="true"] { background: var(--brand); }
@@ -96,6 +100,14 @@
       <span class="label">Dance to music</span>
       <button type="button" class="switch" id="music" role="switch" aria-checked="true" aria-label="Dance to music"></button>
     </div>
+    <div class="field">
+      <span class="label">Sounds</span>
+      <div class="sound">
+        <input type="range" id="volume" min="0" max="100" step="5" aria-label="Sound volume">
+        <button type="button" class="btn mini" id="testSound" title="Play a sample at this volume">▶</button>
+        <button type="button" class="switch" id="sounds" role="switch" aria-checked="true" aria-label="Sounds"></button>
+      </div>
+    </div>
 
     <div class="hooks" id="hooks"></div>
     <div class="hooks" id="extension" hidden></div>
@@ -135,7 +147,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), mascot: $('mascot'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
-        music: $('music'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -144,6 +156,8 @@
       const { values, locked, detectedTerminal } = state;
       this.mascot = values.mascot;
       this.music = values.music;
+      this.sounds = values.sounds;
+      this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
       this.el.shortcut.value = values.shortcut;
       this.el.terminal.value = values.terminal;
       this.el.terminal.placeholder = T.autoTerminal(detectedTerminal);
@@ -152,6 +166,7 @@
       this.el.save.disabled = false;
       this.#renderMascot();
       this.#renderMusic();
+      this.#renderSounds();
       this.#renderHooks();
       this.#renderExtension();
       this.#renderRules(this.state.rules || []);
@@ -163,6 +178,13 @@
     #renderMascot() {
       const locked = this.state.locked.includes('mascot');
       for (const b of this.el.mascot.children) { b.setAttribute('aria-pressed', b.dataset.v === this.mascot); b.disabled = locked; }
+    }
+
+    #renderSounds() {
+      const locked = this.state.locked.includes('sounds');
+      this.el.sounds.setAttribute('aria-checked', this.sounds);
+      this.el.sounds.disabled = locked;
+      this.el.volume.disabled = this.el.testSound.disabled = !this.sounds;
     }
 
     #renderMusic() {
@@ -213,7 +235,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
-        mascot: this.mascot, music: this.music,
+        mascot: this.mascot, music: this.music, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -229,6 +251,12 @@
         if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
       });
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
+      this.el.sounds.addEventListener('click', () => { this.sounds = !this.sounds; this.#renderSounds(); });
+      this.el.testSound.addEventListener('click', () => {
+        const a = new Audio('../../assets/sounds/done.ogg');
+        a.volume = Number(this.el.volume.value) / 100;
+        a.play().catch(() => {});
+      });
       this.el.extension.addEventListener('click', async e => {
         const b = e.target.closest('#enableExt');
         if (!b) { return; }

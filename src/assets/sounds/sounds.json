@@ -1,0 +1,172 @@
+{
+  "permission": {
+    "file": "permission.ogg",
+    "event": "PermissionRequest — icazə kartı açılır",
+    "description": "Qapaq açılır + iki tonlu diqqət siqnalı. Ən vacib səs.",
+    "level": "attention",
+    "peak_db": -6.0,
+    "duration_ms": 810,
+    "default_enabled": true,
+    "cooldown_ms": 1500
+  },
+  "permission-reminder": {
+    "file": "permission-reminder.ogg",
+    "event": "İcazə 60 san cavabsız qalır (təkrar xatırlatma)",
+    "description": "Tək, daha sakit ping — qıcıqlandırmadan xatırladır.",
+    "level": "confirm",
+    "peak_db": -10.0,
+    "duration_ms": 450,
+    "default_enabled": true,
+    "cooldown_ms": 60000
+  },
+  "allow": {
+    "file": "allow.ogg",
+    "event": "İcazə ver düyməsi",
+    "description": "Klik + yuxarı qalxan böyük terts (D♭→F) — \"bəli\".",
+    "level": "confirm",
+    "peak_db": -10.0,
+    "duration_ms": 920,
+    "default_enabled": true,
+    "cooldown_ms": 0
+  },
+  "deny": {
+    "file": "deny.ogg",
+    "event": "Rədd et düyməsi",
+    "description": "Klik + aşağı enən iki ton (A♭→F), yumşaq — \"xeyr\", amma cəza kimi səslənmir.",
+    "level": "confirm",
+    "peak_db": -10.0,
+    "duration_ms": 560,
+    "default_enabled": true,
+    "cooldown_ms": 0
+  },
+  "to-terminal": {
+    "file": "to-terminal.ogg",
+    "event": "\"Terminalda\" düyməsi / icazə timeout ilə terminala qaytarıldı",
+    "description": "Neytral, sağa gedən qısa \"whoosh\" — qərar başqa yerə ötürüldü.",
+    "level": "confirm",
+    "peak_db": -10.0,
+    "duration_ms": 390,
+    "default_enabled": true,
+    "cooldown_ms": 0
+  },
+  "done": {
+    "file": "done.ogg",
+    "event": "Stop — agent işi bitirdi",
+    "description": "Rezin \"boing\" + kiçik parıltı. Uğur hissi, amma təntənəli deyil.",
+    "level": "confirm",
+    "peak_db": -10.0,
+    "duration_ms": 830,
+    "default_enabled": true,
+    "cooldown_ms": 800
+  },
+  "open-terminal": {
+    "file": "open-terminal.ogg",
+    "event": "\"Terminalı aç\" düyməsi",
+    "description": "Klik + yuxarı qalxan qısa whoosh — \"ora keçirəm\".",
+    "level": "confirm",
+    "peak_db": -10.0,
+    "duration_ms": 325,
+    "default_enabled": true,
+    "cooldown_ms": 0
+  },
+  "prompt": {
+    "file": "prompt.ogg",
+    "event": "UserPromptSubmit — agent düşünməyə başladı",
+    "description": "Çox yumşaq yuxarı \"hava\" səsi.",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 330,
+    "default_enabled": true,
+    "cooldown_ms": 2000
+  },
+  "tool": {
+    "file": "tool.ogg",
+    "event": "PreToolUse — hər alət çağırışı",
+    "description": "Kiçik tik. Çox tez-tez gəlir — default söndürülüb.",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 50,
+    "default_enabled": false,
+    "cooldown_ms": 400
+  },
+  "session-start": {
+    "file": "session-start.ogg",
+    "event": "SessionStart — yeni agent sessiyası",
+    "description": "İki yuxarı pluck — \"salam\".",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 380,
+    "default_enabled": true,
+    "cooldown_ms": 1000
+  },
+  "session-end": {
+    "file": "session-end.ogg",
+    "event": "SessionEnd — sessiya bağlandı",
+    "description": "İki aşağı pluck — \"sağ ol\".",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 390,
+    "default_enabled": true,
+    "cooldown_ms": 1000
+  },
+  "new-agent": {
+    "file": "new-agent.ogg",
+    "event": "Fərqli agent qoşuldu (Codex, Gemini…)",
+    "description": "Rəng \"pop\"-u — videodakı rəng seriyasından.",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 160,
+    "default_enabled": true,
+    "cooldown_ms": 1000
+  },
+  "expand": {
+    "file": "expand.ogg",
+    "event": "Siyahı açılır (hover)",
+    "description": "Açılan siyahı — sürətli yumşaq tıqqıltılar. Default söndürülüb.",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 230,
+    "default_enabled": false,
+    "cooldown_ms": 300
+  },
+  "collapse": {
+    "file": "collapse.ogg",
+    "event": "Siyahı bağlanır",
+    "description": "Yumşaq qatlanma səsi. Default söndürülüb.",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 212,
+    "default_enabled": false,
+    "cooldown_ms": 300
+  },
+  "sleep": {
+    "file": "sleep.ogg",
+    "event": "Uzun boşluqdan sonra yuxu",
+    "description": "Gözlər yumulur — aşağı enən yumşaq səs.",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 380,
+    "default_enabled": true,
+    "cooldown_ms": 5000
+  },
+  "wake": {
+    "file": "wake.ogg",
+    "event": "Yuxudan oyanma (yeni hadisə gəldi)",
+    "description": "Göz qırpma + yuxarı pluck.",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 300,
+    "default_enabled": true,
+    "cooldown_ms": 2000
+  },
+  "dance": {
+    "file": "dance.ogg",
+    "event": "Musiqi başladı, mascot rəqs edir",
+    "description": "Üç notlu kiçik arpecio. Default söndürülüb (musiqinin üstünə düşür).",
+    "level": "ambient",
+    "peak_db": -17.0,
+    "duration_ms": 430,
+    "default_enabled": false,
+    "cooldown_ms": 10000
+  }
+}

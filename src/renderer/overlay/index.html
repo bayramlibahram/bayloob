@@ -244,6 +244,7 @@
 <script src="../shared/ui-common.js"></script>
 <script src="../../assets/packs/meta.js"></script>
 <script src="../shared/novi.js"></script>
+<script src="../shared/sounds.js"></script>
 <script>
   // Every UI string lives here — a language switcher later only needs to swap this object
   const T = {
@@ -285,6 +286,7 @@
 
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const COOL_MS = 3000;
+  const REMIND_MS = 60_000; // an unanswered permission card gets a reminder sound this often
   const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
   const RECEIPT_MARK = { passed: ' ✓', failed: ' ✗', untested: ' ⚠' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
@@ -404,6 +406,9 @@
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #permShown = new Map();  // permId -> when its card first appeared (for the Allow cooldown)
     #coolTimer = null;
+    sounds = new SoundPlayer();
+    #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
+    #permSince = new Map(); // permId -> when it appeared or was last reminded about
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
 
@@ -413,9 +418,11 @@
       this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), progress: $('progress'), card: $('card'), list: $('list') };
       this.mascot = new MascotView(this.el.mascot);
       this.#bindEvents();
+      setInterval(() => this.#remind(), 5000);
     }
 
     setSessions(list) {
+      this.#soundFor(list);
       // A fresh transition to "done" shows the done card for a while
       for (const s of list) {
         const old = this.#prevStates.get(s.id);
@@ -426,7 +433,38 @@
       this.render();
     }
 
-    setMusic(np) { this.music = np; this.render(); }
+    setMusic(np) {
+      if (np?.playing && !this.music?.playing) { this.sounds.play('dance'); }
+      this.music = np;
+      this.render();
+    }
+
+    setSoundConfig(config) { this.sounds.configure(config); }
+
+    // One sound per update (the most important change); unanswered cards get a quiet reminder every minute
+    #soundFor(list) {
+      const cue = soundCue(this.#soundPrev, list);
+      if (cue) { this.sounds.play(cue); }
+      this.#soundPrev = list;
+      const live = new Set();
+      for (const s of list) {
+        if (!s.perm) { continue; }
+        live.add(s.perm.id);
+        if (!this.#permSince.has(s.perm.id)) { this.#permSince.set(s.perm.id, Date.now()); }
+      }
+      for (const id of this.#permSince.keys()) { if (!live.has(id)) { this.#permSince.delete(id); } }
+    }
+
+    #remind() {
+      const now = Date.now();
+      for (const [id, since] of this.#permSince) {
+        if (now - since >= REMIND_MS) {
+          this.#permSince.set(id, now); // next reminder a minute after this one
+          this.sounds.play('permission-reminder');
+          return;
+        }
+      }
+    }
 
     setOutput(lines) { this.output = lines || {}; this.render(); }
 
@@ -747,16 +785,20 @@
         this.#pick(b.dataset.id, Number(b.dataset.q), Number(b.dataset.o));
       } else if (act === 'send-answer') {
         b.disabled = true;
+        this.sounds.play('allow');
         this.#sendAnswer(b.dataset.id);
       } else if (act === 'answer-terminal') {
         b.disabled = true;
+        this.sounds.play('to-terminal');
         this.api?.decide(b.dataset.id, 'terminal');
         this.api?.focus(b.dataset.sid);
       } else if (act === 'always-allow') {
         b.disabled = true;
+        this.sounds.play('allow');
         this.api?.alwaysAllow(b.dataset.id);
       } else if (act === 'allow' || act === 'deny' || act === 'terminal') {
         b.disabled = true;
+        this.sounds.play(act === 'terminal' ? 'to-terminal' : act);
         this.api?.decide(b.dataset.id, act);
       } else if (act === 'challenge') {
         b.disabled = true;
@@ -770,6 +812,7 @@
         this.toast = null;
         this.render();
       } else if (act === 'focus') {
+        this.sounds.play('open-terminal');
         const r = this.api ? await this.api.focus(b.dataset.sid) : { ok: false };
         if (r?.ok) { this.toast = null; }
         else if (this.toast) { this.toast.hint = T.focusFailed; }
@@ -803,9 +846,10 @@
         this.#permScroll.set(e.target.dataset.perm, e.target.scrollTop);
         this.#syncPermScroll();
       }, true);
-      pill.addEventListener('mouseenter', () => { this.hovering = true; this.open(); this.api?.setMouseOver(true); });
+      pill.addEventListener('mouseenter', () => { this.hovering = true; this.open(); this.sounds.play('expand'); this.api?.setMouseOver(true); });
       pill.addEventListener('mouseleave', () => {
         this.hovering = false;
+        this.sounds.play('collapse');
         pill.classList.remove('open');
         this.api?.setMouseOver(false);
         this.render();
@@ -842,11 +886,12 @@
     window.bayloobAPI.onReceipts?.(r => view.setReceipts(r));
     window.bayloobAPI.onProgress?.(p => view.setProgress(p));
     window.bayloobAPI.onCollisions?.(c => view.setCollisions(c));
+    window.bayloobAPI.onSoundConfig?.(c => view.setSoundConfig(c));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };
   }
-  view.setSessions([]);
+  view.render(); // first paint; the first list from main is the baseline for sounds, not news
 </script>
 </body>
 </html>
