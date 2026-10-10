@@ -48,6 +48,12 @@ class OverlayWindow {
     return this;
   }
 
+  /** Switches the mascot style ('novi' | 'svg') by reloading the page. */
+  setMascot(mascot) {
+    this.mascot = mascot;
+    this.win?.loadFile(path.join(__dirname, 'index.html'), { query: { mascot } });
+  }
+
   onLoad(fn) { this.win?.webContents.on('did-finish-load', fn); }
 
   send(channel, payload) { this.win?.webContents.send(channel, payload); }

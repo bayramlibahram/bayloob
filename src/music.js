@@ -37,12 +37,18 @@ class MusicWatcher extends EventEmitter {
   }
 
   start() {
+    if (this.#timer) return this;
     this.#tick();
     this.#timer = setInterval(() => this.#tick(), this.intervalMs);
     return this;
   }
 
-  stop() { clearInterval(this.#timer); }
+  stop() {
+    clearInterval(this.#timer);
+    this.#timer = null;
+    this.#lastKey = '';   // so the current track is reported again after a restart
+    this.current = null;
+  }
 
   control(action) {
     const method = ACTIONS[action];

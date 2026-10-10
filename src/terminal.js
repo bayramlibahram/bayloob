@@ -25,9 +25,17 @@ function onPath(bin) {
 }
 
 class TerminalLauncher {
-  // BAYLOOB_TERMINAL overrides detection, e.g. "kitty" or "gnome-terminal --" (the command is appended)
+  // An override skips detection, e.g. "kitty" or "gnome-terminal --" (the command is appended)
   constructor(override = process.env.BAYLOOB_TERMINAL) {
-    this.override = override?.trim() || null;
+    this.setOverride(override);
+  }
+
+  setOverride(value) { this.override = value?.trim() || null; }
+
+  /** The terminal that would be used: the override's command, or the first one found on PATH. */
+  get detected() {
+    if (this.override) return this.override.split(/\s+/)[0];
+    return TERMINALS.find(([bin]) => onPath(bin))?.[0] || null;
   }
 
   get available() {
