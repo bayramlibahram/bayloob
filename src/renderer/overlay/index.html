@@ -156,7 +156,9 @@
   .row::before { content: ''; position: absolute; left: 6px; top: -1px; bottom: 0; border-left: 1px solid rgba(255,255,255,.12); }
   .row::after { content: ''; position: absolute; left: 6px; top: 50%; width: 8px; border-top: 1px solid rgba(255,255,255,.12); }
   .row.last::before { bottom: 50%; }
-  .row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the agent's latest output, under its name */
+  .row .out { display: block; color: #8b8b96; font-size: 11.5px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .agent { color: var(--muted); font-size: 12px; }
   .row .st { font-size: 12px; }
   .icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
@@ -320,6 +322,7 @@
     hovering = false;
     confirmStop = null;    // session id armed for stopping
     health = { ok: true, issues: [] };
+    output = {};           // session id -> latest output line (only while the list is open)
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -345,6 +348,8 @@
     }
 
     setMusic(np) { this.music = np; this.render(); }
+
+    setOutput(lines) { this.output = lines || {}; this.render(); }
 
     setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
 
@@ -513,7 +518,7 @@
       if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
-          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span></span>
+          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
           ${this.#rowControls(s)}</div>`).join('');
     }
@@ -631,6 +636,7 @@
     window.bayloobAPI.onSessions(list => view.setSessions(list));
     window.bayloobAPI.onMusic(np => view.setMusic(np));
     window.bayloobAPI.onHealth?.(h => view.setHealth(h));
+    window.bayloobAPI.onOutput?.(lines => view.setOutput(lines));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

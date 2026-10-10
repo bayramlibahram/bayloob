@@ -66,6 +66,7 @@ class SessionStore extends EventEmitter {
       perm: old?.perm || null,
       term,
       managed: launch?.name || old?.managed || null,
+      transcript: ev.transcript_path || old?.transcript || null,
       activity: old?.activity || null,
       history: old?.history || [],
       startedAt: old?.startedAt || Date.now(),

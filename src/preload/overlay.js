@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   togglePanel: () => ipcRenderer.send("toggle-panel"),
   openSettings: () => ipcRenderer.send("open-settings"),
   onHealth: cb => ipcRenderer.on("health", (_e, health) => cb(health)),
+  onOutput: cb => ipcRenderer.on("output", (_e, lines) => cb(lines)),
 });

@@ -8,6 +8,7 @@ const { AGENTS } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
+const { SessionOutput } = require("../modules/sessions/session-output");
 const { HookHealth } = require("../modules/hooks/hook-health");
 const { HookInstaller } = require("../modules/hooks/hook-installer");
 const { MusicWatcher } = require("../modules/music/music-watcher");
@@ -29,6 +30,7 @@ const IS_LINUX = process.platform === "linux";
 const DECISIONS = new Set(["allow", "deny", "terminal"]);
 const RECONCILE_MS = 5000;
 const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the agents
+const OUTPUT_MS = 2000; // refresh of the last-output lines while the pill's list is open
 const STATS_MS = 2000; // CPU/memory refresh while the panel is open
 const STATUS_EVERY_TICKS = 5; // re-read the hook status every 5th stats tick
 
@@ -80,6 +82,8 @@ class BayloobApp {
   tray = null;
   installed = detectAgents();
   #statsTimer = null;
+  output = new SessionOutput();
+  #outputTimer = null;
 
   // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
   start({ open = null } = {}) {
@@ -387,6 +391,20 @@ class BayloobApp {
     this.server.store.changed();
   }
 
+  // While the pill's list is open, send each session's latest output line; nothing is read otherwise
+  #watchOutput(open) {
+    clearInterval(this.#outputTimer);
+    this.#outputTimer = null;
+    if (!open) {
+      return;
+    }
+    const run = async () => {
+      this.overlay.send("output", await this.output.lines(this.server.store.list()));
+    };
+    run();
+    this.#outputTimer = setInterval(run, OUTPUT_MS);
+  }
+
   // Tell the overlay when Bayloob can't hear the agents (hooks missing or broken, or a busy agent nobody hears)
   #checkHealth() {
     try {
@@ -425,7 +443,10 @@ class BayloobApp {
 
     // Overlay
     ipcMain.on("pill-rect", (_e, rect) => this.overlay.fitShape(rect));
-    ipcMain.on("mouse-over-ui", (_e, over) => this.overlay.setMouseOver(over));
+    ipcMain.on("mouse-over-ui", (_e, over) => {
+      this.overlay.setMouseOver(over);
+      this.#watchOutput(!!over);
+    });
     ipcMain.on("decide", (_e, permId, decision) => {
       if (DECISIONS.has(decision)) {
         this.server.decide(String(permId), decision);
