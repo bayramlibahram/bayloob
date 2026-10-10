@@ -2,7 +2,7 @@
 // Sends fake events to a running Bayloob so you can see every state without a real agent.
 const { execFileSync } = require('child_process');
 const path = require('path');
-const hook = path.join(__dirname, 'hook.js');
+const hook = path.join(__dirname, '..', 'resources', 'hooks', 'hook.js');
 
 const steps = [
   { hook_event_name: 'SessionStart' },

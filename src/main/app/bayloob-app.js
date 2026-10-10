@@ -2,34 +2,29 @@ const { app, ipcMain, globalShortcut, Menu, shell } = require('electron');
 const { execFile, spawn } = require('child_process');
 const os = require('os');
 const path = require('path');
-const { runCli } = require('./cli');
-const { AGENTS } = require('./agents');
-const { EventServer } = require('./server');
-const { TerminalFocuser } = require('./focus');
-const { MusicWatcher } = require('./music');
-const { Notifier } = require('./notifier');
-const { OverlayWindow } = require('./overlay-window');
-const { LauncherWindow } = require('./launcher-window');
-const { PanelWindow } = require('./panel-window');
-const { SettingsWindow } = require('./settings-window');
-const { SessionLauncher } = require('./session-launcher');
-const { RecentProjects } = require('./recent-projects');
-const { Settings } = require('./settings');
-const { AgentStats } = require('./stats');
-const { TerminalLauncher } = require('./terminal');
-const { WindowService } = require('./windows');
-const { GnomeExtension } = require('./gnome-extension');
-const { WorkspaceService } = require('./workspace/workspace-service');
-const { AppActions } = require('./workspace/app-actions');
-const { TrayMenu } = require('./tray');
-const { HookInstaller } = require('../scripts/install-hooks');
+const { HOOKS_DIR, TOOLS_DIR, EXTENSION_DIR } = require('./paths');
+const { Settings } = require('../config/settings');
+const { AGENTS } = require('../modules/agents/agents');
+const { AgentStats } = require('../modules/agents/agent-stats');
+const { RecentProjects } = require('../modules/agents/recent-projects');
+const { SessionLauncher } = require('../modules/agents/session-launcher');
+const { HookInstaller } = require('../modules/hooks/hook-installer');
+const { MusicWatcher } = require('../modules/music/music-watcher');
+const { EventServer } = require('../modules/sessions/event-server');
+const { Notifier } = require('../modules/sessions/session-notifier');
+const { AppActions } = require('../modules/workspace/app-actions');
+const { WorkspaceService } = require('../modules/workspace/workspace.service');
+const { GnomeExtension } = require('../infrastructure/desktop/gnome-extension');
+const { TerminalFocuser } = require('../infrastructure/desktop/terminal-focuser');
+const { WindowService } = require('../infrastructure/desktop/window.service');
+const { TerminalLauncher } = require('../infrastructure/system/terminal-launcher');
+const { LauncherWindow } = require('../windows/launcher-window');
+const { OverlayWindow } = require('../windows/overlay-window');
+const { PanelWindow } = require('../windows/panel-window');
+const { SettingsWindow } = require('../windows/settings-window');
+const { TrayMenu } = require('../windows/tray');
 
 const IS_LINUX = process.platform === 'linux';
-// When packaged, scripts live outside the asar (resources/scripts) so bash can execute them
-const SCRIPTS_DIR = app.isPackaged
-  ? path.join(process.resourcesPath, 'scripts')
-  : path.join(__dirname, '..', 'scripts');
-const EXTENSION_DIR = path.join(SCRIPTS_DIR, '..', 'gnome-extension');
 const DECISIONS = new Set(['allow', 'deny', 'terminal']);
 const RECONCILE_MS = 5000;
 const STATS_MS = 2000;           // CPU/memory refresh while the panel is open
@@ -57,12 +52,12 @@ class BayloobApp {
   notifier = new Notifier();
   windows = new WindowService();
   extension = new GnomeExtension(EXTENSION_DIR);
-  focuser = new TerminalFocuser(SCRIPTS_DIR, this.windows);
+  focuser = new TerminalFocuser(TOOLS_DIR, this.windows);
   workspace = new WorkspaceService({ windows: this.windows });
   appActions = new AppActions({ catalog: this.workspace.catalog, windows: this.windows });
   #apps = new Map(); // app id -> app from the latest workspace snapshot
   launcher = new SessionLauncher();
-  hooks = new HookInstaller(SCRIPTS_DIR, { log: () => {} });
+  hooks = new HookInstaller(HOOKS_DIR, { log: () => {} });
   stats = new AgentStats();
   music = IS_LINUX ? new MusicWatcher() : null;
   settings = null;
@@ -350,17 +345,4 @@ class BayloobApp {
   }
 }
 
-function startApp(argv) {
-  // On Wayland an app can't place its own window or keep it always on top → run under XWayland
-  if (IS_LINUX) app.commandLine.appendSwitch('ozone-platform', 'x11');
-
-  // Only one instance at a time (avoids a port clash). `bayloob --new-session` / `--panel` while running
-  // opens the launcher / the workspace panel in the running instance.
-  if (!app.requestSingleInstanceLock()) return app.exit(0);
-  new BayloobApp().start({ open: argv.includes('--new-session') ? 'launcher' : argv.includes('--panel') ? 'panel' : null });
-}
-
-const argv = process.argv.slice(1);
-const cliExit = runCli(argv, SCRIPTS_DIR);
-if (cliExit === null) startApp(argv);
-else Promise.resolve(cliExit).then(code => process.exit(code));
+module.exports = { BayloobApp };

@@ -3,6 +3,10 @@
 
 ln -sf '/opt/Bayloob/bayloob' '/usr/bin/bayloob'
 
+# Hooks moved from resources/scripts to resources/hooks in 0.5; keep the old path working for
+# hooks that earlier versions wrote into ~/.claude/settings.json
+[ -e /opt/Bayloob/resources/scripts ] || ln -s hooks /opt/Bayloob/resources/scripts
+
 # Ubuntu 24.04+: AppArmor restricts user namespaces for unprivileged users.
 # Give Bayloob its own profile so Chromium's sandbox can start.
 if [ -f /etc/apparmor.d/abi/4.0 ]; then

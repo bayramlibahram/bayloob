@@ -4,7 +4,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ProcessTable } = require('./processes');
+const { ProcessTable } = require('../../infrastructure/system/process-table');
 
 // Launchers and runtimes that many apps share: matching on them would mislabel processes
 const GENERIC = new Set(['env', 'sh', 'bash', 'dash', 'zsh', 'fish', 'node', 'bun', 'electron', 'python', 'python3',

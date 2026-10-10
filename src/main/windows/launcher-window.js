@@ -7,7 +7,7 @@ const { PopupWindow } = require('./popup-window');
  */
 class LauncherWindow extends PopupWindow {
   constructor() {
-    super({ name: 'launcher', page: 'launcher.html', preload: 'launcher-preload.js', width: 520, height: 470, placement: 'center' });
+    super({ name: 'launcher', width: 520, height: 470, placement: 'center' });
   }
 
   pickFolder(defaultPath) {
