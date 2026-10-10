@@ -14,7 +14,8 @@ class Notifier {
   #notify(s, old) {
     if (old === s.state) return;
     if (s.state === 'waiting') {
-      const body = s.perm ? `${s.perm.tool}: ${s.perm.detail}`.slice(0, 180) : s.agent;
+      const what = s.perm?.kind === 'question' ? s.perm.questions?.[0] : s.perm?.detail;
+      const body = s.perm ? `${s.perm.tool}: ${what || ''}`.slice(0, 180) : s.agent;
       new Notification({ title: `${s.project}: needs approval`, body }).show();
     } else if (s.state === 'done' && old) {
       new Notification({ title: `${s.project}: done`, body: s.summary || s.agent, silent: true }).show();
