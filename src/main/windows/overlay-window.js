@@ -1,26 +1,36 @@
 const { app, BrowserWindow, screen } = require("electron");
 const paths = require("../app/paths");
+const { overlayPosition } = require("./overlay-position");
 
 const IS_LINUX = process.platform === "linux";
+// Electron replaces XDG_CURRENT_DESKTOP for itself; the original value says whether this is GNOME
+const IS_GNOME = /gnome/i.test(
+  process.env.ORIGINAL_XDG_CURRENT_DESKTOP || process.env.XDG_CURRENT_DESKTOP || ""
+);
 const WIDTH = 540,
   HEIGHT = 720; // window size (the visible pill is smaller, see index.html)
 
-/** The transparent always-on-top window at the top-center of the primary display. */
+/** The transparent always-on-top window at the top-center of the screen, just below the top bar. */
 class OverlayWindow {
   win = null;
 
   // mascot: 'novi' (raster, default) or 'svg' (the original vector mascot)
-  constructor({ mascot = "novi" } = {}) {
+  // topBar: async () => GNOME's top bar { x, y, width, height, visible } or null (the GNOME extension)
+  constructor({ mascot = "novi", topBar = async () => null } = {}) {
     this.mascot = mascot;
+    this.topBar = topBar;
   }
 
   create() {
-    const { bounds } = screen.getPrimaryDisplay();
+    const { x, y } = overlayPosition(screen.getPrimaryDisplay(), null, {
+      width: WIDTH,
+      gnome: IS_GNOME,
+    });
     this.win = new BrowserWindow({
       width: WIDTH,
       height: HEIGHT,
-      x: Math.round(bounds.x + (bounds.width - WIDTH) / 2),
-      y: bounds.y,
+      x,
+      y,
       frame: false,
       transparent: true,
       backgroundColor: "#00000000",
@@ -30,7 +40,7 @@ class OverlayWindow {
       hasShadow: false,
       focusable: false,
       alwaysOnTop: true,
-      type: IS_LINUX ? "dock" : undefined, // stay above the GNOME top bar
+      type: IS_LINUX ? "dock" : undefined, // above every window, not managed (moved, tiled) by the WM
       webPreferences: { preload: paths.preload("overlay") },
     });
 
@@ -49,7 +59,28 @@ class OverlayWindow {
       this.win.setIgnoreMouseEvents(true, { forward: true });
     }
     this.win.loadFile(paths.page("overlay"), { query: { mascot: this.mascot } });
+    // The exact top bar comes from the GNOME extension (async); screens and scaling can change any time
+    this.place();
+    for (const ev of ["display-metrics-changed", "display-added", "display-removed"]) {
+      screen.on(ev, () => this.place());
+    }
     return this;
+  }
+
+  /** Puts the window centred just below the top bar (see overlay-position.js). */
+  async place() {
+    const panel = await this.topBar().catch(() => null);
+    if (!this.win || this.win.isDestroyed()) {
+      return;
+    }
+    const { x, y } = overlayPosition(screen.getPrimaryDisplay(), panel, {
+      width: WIDTH,
+      gnome: IS_GNOME,
+    });
+    const [cx, cy] = this.win.getPosition();
+    if (cx !== x || cy !== y) {
+      this.win.setPosition(x, y);
+    }
   }
 
   /** Switches the mascot style ('novi' | 'svg') by reloading the page. */

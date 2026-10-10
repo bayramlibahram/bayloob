@@ -72,6 +72,19 @@ class WindowService {
     }
   }
 
+  /** GNOME's top bar { x, y, width, height, visible }, or null (no extension, or one older than v2). */
+  async panel() {
+    if (!(await this.available())) {
+      return null;
+    }
+    try {
+      const p = JSON.parse(gvariantString(await gdbus("Panel")) || "null");
+      return p && Number.isFinite(p.y) && Number.isFinite(p.height) ? p : null;
+    } catch {
+      return null;
+    }
+  }
+
   async activate(windowId) {
     if (!(await this.available())) {
       return false;

@@ -4,5 +4,5 @@
   "description": "Lets the Bayloob overlay list your windows and bring one to the front, which Wayland doesn't allow apps to do on their own. Exposes a small D-Bus interface on the session bus; no UI.",
   "shell-version": ["45", "46", "47", "48", "49", "50"],
   "url": "https://baynovix.com",
-  "version": 1
+  "version": 2
 }
