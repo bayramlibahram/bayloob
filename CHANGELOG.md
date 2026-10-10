@@ -35,6 +35,10 @@
   hover), and memory is used / total — it used to sum per-app percentages ("243 %") or show "—" by section.
 - The workspace panel opens below the desktop's top bar, like the pill.
 - Docker actions only accept real container ids (never something the CLI could read as an option).
+- A prompt sent to Codex no longer ends up as a new line in its input instead of being submitted:
+  Codex reads an Enter that arrives with typed text as part of a paste. Prompts now go in as one
+  bracketed paste, then Enter 150 ms later (Enter fails at 0 ms, works from 50 ms — measured on
+  Codex 0.154.0; Claude Code takes either).
 - Clicks in the pill no longer get lost while agents work: the list and cards used to be rebuilt
   several times a second, so a press and release could land on two different buttons. Parts are now
   replaced only when they change, and never while a mouse button is held (10/10 clicks vs 2/10 before).
