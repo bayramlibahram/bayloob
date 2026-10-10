@@ -37,6 +37,7 @@ const { WindowService } = require("../infrastructure/desktop/window.service");
 const { Git } = require("../infrastructure/system/git");
 const { AgentDiscovery } = require("../infrastructure/system/agent-discovery");
 const { SystemStats } = require("../infrastructure/system/system-stats");
+const { AgentConsole } = require("../modules/console/agent-console");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
@@ -119,6 +120,7 @@ class BayloobApp {
   git = new Git();
   discovery = new AgentDiscovery();
   system = new SystemStats(); // whole-machine CPU / memory for the panel's footer
+  agentConsole = new AgentConsole(); // turns read from agents' transcripts, for the panel's agent console
   #handoffs = new Map(); // session id -> { agent, cwd, sessionId, pid, at }: waiting to continue in tmux
   // Questions agents ask only in their terminal (folder trust, update offers…), read from tmux panes
   menus = new MenuWatcher({
@@ -1052,6 +1054,15 @@ class BayloobApp {
     ipcMain.handle("panel:docker", (_e, action, id) =>
       result(() => this.workspace.docker.act(String(action), String(id)))
     );
+    // The agent console: turns of one session, read from its transcript (read-only)
+    ipcMain.handle("panel:console", (_e, sessionId) => {
+      try {
+        this.agentConsole.forget(this.server.store.list().map(s => s.id));
+        return this.agentConsole.turns(session(sessionId));
+      } catch (e) {
+        return { unavailable: e.message };
+      }
+    });
     ipcMain.handle("panel:docker-logs", async (_e, id) => {
       try {
         return { ok: true, text: await this.workspace.docker.logs(String(id)) };

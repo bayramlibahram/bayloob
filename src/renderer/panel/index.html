@@ -197,6 +197,26 @@
   .doing { padding: 12px 0; border-bottom: 1px solid var(--line); margin-top: 12px; border-top: 1px solid var(--line); }
   .doing b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .doing span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* agent console: turns, newest at the bottom */
+  .console { display: flex; flex-direction: column; gap: 12px; max-height: 330px; overflow-y: auto; padding: 4px 2px 6px; margin-top: 4px; }
+  .turn { display: flex; flex-direction: column; gap: 5px; }
+  .turn .you { align-self: flex-end; max-width: 92%; padding: 7px 11px; border-radius: 12px 12px 4px 12px; background: rgba(139,92,255,.16);
+    color: var(--text); font-size: 12.5px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .turn .you i { color: var(--muted); }
+  .steps { display: flex; flex-direction: column; gap: 1px; }
+  .step { display: flex; align-items: center; gap: 7px; padding: 3px 4px; border-radius: 6px; font-size: 12px; min-width: 0; }
+  .step:hover { background: rgb(var(--ink) / .05); }
+  .step .si { flex: none; width: 18px; text-align: center; color: var(--muted); font: 600 11px ui-monospace, monospace; }
+  .step .st { flex: none; color: var(--soft); font-weight: 600; }
+  .step code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px ui-monospace, monospace; color: var(--softer); }
+  .step .dur { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .step .res { flex: none; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+  .step .res.ok { background: var(--done); }
+  .step .res.error { background: var(--waiting); }
+  .step .res.run { background: var(--working); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .turn .said { padding: 7px 11px; border-radius: 12px 12px 12px 4px; background: rgb(var(--ink) / .05); color: var(--softer); font-size: 12.5px;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
   .timeline { list-style: none; padding: 8px 0 0; }
   .timeline li { position: relative; display: flex; align-items: baseline; gap: 10px; padding: 5px 0 5px 22px; font-size: 12.5px; }
   .timeline li::before { content: ''; position: absolute; left: 3px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 6px rgba(139,92,255,.6); }
@@ -288,6 +308,7 @@
     taskDone: 'Task completed.',
     finishedIn: (agent, project) => `<span class="fhead"><b>${agent}</b> finished · ${project}</span>`, finishedMore: n => `+${n} more`,
     reply: 'Reply', dismissTip: 'Dismiss',
+    continued: 'Continued from earlier', nFiles: n => `${n} files`,
     sent: 'Sent ✓',
     handoff: '⇄ Continue in Bayloob', handoffTip: 'Move this conversation into tmux, so replies go straight in (you close it in its terminal once)',
     handoffStarted: 'Close it in its terminal (/exit) — Bayloob continues it in tmux',
@@ -347,6 +368,31 @@
   const RESUMABLE = new Set(['claude', 'codex']); // agents Bayloob can continue in tmux (--resume / resume)
   const emptyHtml = (icon, line, hint, size = '') =>
     `<div class="empty ${size}"><span class="ei">${icon || ''}</span><span><b>${line}</b><small>${hint}</small></span></div>`;
+  const CONSOLE_MS = 2000; // how often the selected agent's console is refreshed
+  const CONSOLE_TURNS = 8; // turns shown (the newest)
+  const STEP_ICON = { bash: '›_', read: '◔', edit: '✎', write: '＋', search: '⌕', web: '◍', todo: '☑', agent: '⧉', question: '?', tool: '•' };
+  // Consecutive reads / searches fold into one row ("Read · 3 files"); everything else stays a row each
+  function groupSteps(steps) {
+    const out = [];
+    for (const s of steps) {
+      const prev = out[out.length - 1];
+      if (prev && (s.kind === 'read' || s.kind === 'search') && prev.kind === s.kind) {
+        prev.count += 1;
+        prev.details.push(s.detail);
+        prev.result = prev.result === 'error' || s.result === 'error' ? 'error' : s.result;
+      } else {
+        out.push({ ...s, count: 1, details: [s.detail] });
+      }
+    }
+    return out;
+  }
+  function stepHtml(g, running) {
+    const detail = g.count > 1 ? T.nFiles(g.count) : g.detail;
+    const tip = g.details.filter(Boolean).join('\n');
+    const dur = g.durationMs >= 1000 ? `<span class="dur">${(g.durationMs / 1000).toFixed(g.durationMs < 10000 ? 1 : 0)}s</span>` : '';
+    const res = running ? 'run' : g.result || '';
+    return `<div class="step ${g.kind}" title="${esc(tip)}"><span class="si">${STEP_ICON[g.kind] || '•'}</span><span class="st">${esc(g.title)}</span><code>${esc(detail || '')}</code>${dur}<span class="res ${res}"></span></div>`;
+  }
   const BUSY = new Set(['thinking', 'working', 'waiting']); // a prompt sent now is queued for the end of the turn
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   const FOLDER = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
@@ -414,6 +460,8 @@
     launchable = null;
     #flashTimer = null;
     #sayTimer = null;
+    #consoles = new Map(); // session id -> { turns | unavailable, at }
+    #consoleLoading = new Set();
     #prevStates = new Map(); // session id -> state at the previous update
     finished = [];         // ids of agents that just finished, newest first (the banner shows the first)
     sayFor = null;         // session the prompt box is for (its text is cleared when the selection changes)
@@ -607,7 +655,13 @@
       if (!item) { this.el.detail.innerHTML = ''; return; }
       const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span>${T.kind[item.category] || ''}</span></div>${stateHtml(item.status)}</div>`;
       const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
+      // Keep the console's scroll: stuck to the newest step while at the bottom, left alone when scrolled up
+      const old = this.el.detail.querySelector('[data-console]');
+      const atBottom = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 8;
+      const top = old?.scrollTop || 0;
       this.el.detail.innerHTML = head + body;
+      const con = this.el.detail.querySelector('[data-console]');
+      if (con) { con.scrollTop = atBottom ? con.scrollHeight : top; }
     }
 
     #history(list) {
@@ -689,11 +743,50 @@
       const doing = s.activity || { title: T.nothingYet, detail: '' };
       const live = ACTIVE.has(s.state);
       const history = (s.history || []).slice(0, 6);
+      const con = this.#consoleFor(s);
+      // The console (turns read from the agent's transcript) when there is one; the activity timeline otherwise
+      const body = con?.turns?.length
+        ? this.#consoleHtml(con.turns, live)
+        : `<div class="doing"><b title="${esc(doing.title)}">${esc(doing.title)}</b><span title="${esc(doing.detail)}">${esc(doing.detail || projectPath(s))}</span></div>
+           <ul class="timeline">${history.map((h, i) => `<li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>`;
       return `
         ${this.collisions?.[s.id] ? `<div class="clashbox ${this.collisions[s.id].level}">⚠ ${esc(this.#clashText(this.collisions[s.id]))}<small>${T.clashFix}</small></div>` : ''}
-        <div class="doing"><b title="${esc(doing.title)}">${esc(doing.title)}</b><span title="${esc(doing.detail)}">${esc(doing.detail || projectPath(s))}</span></div>
-        <ul class="timeline">${history.map((h, i) => `<li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>
+        ${body}
         <div class="buttons"><button class="wide" data-act="terminal">${ICON_TERM}${T.openTerminal}</button></div>`;
+    }
+
+    // ---------- agent console ----------
+
+    // Cached turns for a session; fetched in the background (at most every CONSOLE_MS) and re-rendered
+    #consoleFor(s) {
+      const c = this.#consoles.get(s.id);
+      if (!c || Date.now() - c.at > CONSOLE_MS) {
+        this.#loadConsole(s.id);
+      }
+      return c;
+    }
+
+    async #loadConsole(id) {
+      if (this.#consoleLoading.has(id) || !this.api?.console) { return; }
+      this.#consoleLoading.add(id);
+      const r = await this.api.console(id).catch(() => null);
+      this.#consoleLoading.delete(id);
+      const before = JSON.stringify(this.#consoles.get(id)?.turns || null);
+      this.#consoles.set(id, { ...(r || {}), at: Date.now() });
+      if (this.current?.id === id && JSON.stringify(r?.turns || null) !== before) { this.#renderDetail(); }
+    }
+
+    #consoleHtml(turns, live) {
+      const shown = turns.slice(-CONSOLE_TURNS);
+      return `<div class="console" data-console>${shown.map((t, ti) => {
+        const last = ti === shown.length - 1;
+        const running = last && live && t.status === 'running';
+        return `<div class="turn ${running ? 'running' : ''}">
+          <div class="you" title="${esc(t.prompt)}">${t.prompt ? esc(t.prompt) : `<i>${T.continued}</i>`}</div>
+          <div class="steps">${groupSteps(t.steps).map((g, gi, all) => stepHtml(g, running && gi === all.length - 1)).join('')}</div>
+          ${t.summary ? `<div class="said" title="${esc(t.summary)}">${esc(t.summary)}</div>` : ''}
+        </div>`;
+      }).join('')}</div>`;
     }
 
     // The footer is always the whole machine — never a sum over the selected section (that read "243 %"):

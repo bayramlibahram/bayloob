@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Agent console in the workspace panel: the selected agent's turns read from its own transcript — your
+  prompt, each step (Read / Edit / Bash… with the file or command, ✓ / ✗ and duration; consecutive reads
+  folded into "Read · 3 files"), its answer — for Claude Code and Codex. Files are read incrementally
+  (a 93 MB Codex rollout: 17 ms), newest turns only; read-only.
 - Workspace panel: Docker **Logs** (last 200 lines, read-only); stop / restart ask first, in the row; 28 px
   buttons. Empty sections and "no activity" show an icon, a line and a hint; disabled buttons say why;
   sidebar counts explain themselves.
