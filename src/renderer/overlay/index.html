@@ -39,7 +39,7 @@
        rectangle plus 2 px, so a wider shadow or halo would be cut into a hard-edged, smeary band */
     box-shadow: 0 1px 0 rgb(var(--ink) / .06) inset, 0 1px 1px rgb(var(--shade) / calc(.35 * var(--shade-k)));
     overflow: hidden;
-    transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s, box-shadow .4s, border-color .4s;
+    transition: width .3s cubic-bezier(.2,.8,.2,1), border-radius .3s, box-shadow .4s, border-color .4s;
   }
   /* the state shows as light, not just text: a hairline of colour along the top edge and a soft halo
      (static — no endless animation, so an idle overlay costs nothing) */
@@ -55,7 +55,9 @@
   }
   .pill:hover .tile { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgb(var(--ink) / .08), 0 5px 14px rgb(var(--shade) / calc(.35 * var(--shade-k))); }
   .pill.multi { width: 420px; } /* room for the agent stack next to the name */
-  .pill.open, .pill.has-card { width: 480px; border-radius: 22px; }
+  .pill.open, .pill.has-card { width: 520px; border-radius: 22px; }
+  /* open, the list shows every agent: the stacked tiles step aside so the name gets the room */
+  .pill.open .count { display: none; }
   .bar { position: relative; cursor: pointer; display: flex; align-items: center; gap: 10px; height: 58px; padding: 4px 14px 0 7px; }
   /* the manager mascot sits on its own tile, like an app icon docked to the bar */
   .tile { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; transition: transform .2s, box-shadow .2s;
@@ -278,9 +280,16 @@
   @keyframes cardIn { from { opacity: 0; transform: translateY(-6px); } }
 
   /* ---------- Session list (opens on hover) ---------- */
-  .list { max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .25s; padding: 0 12px; }
-  .pill.open .list { max-height: 400px; opacity: 1; padding-bottom: 10px; }
-  .row { position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 2px 8px 18px; border-top: 1px solid var(--line); }
+  /* opens to its real height (grid rows 0fr → 1fr), so closing starts at once instead of after an
+     oversized max-height has run down; long lists scroll inside */
+  .listwrap { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .28s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+  .pill.open .listwrap { grid-template-rows: 1fr; opacity: 1; }
+  .list { min-height: 0; overflow: hidden; padding: 0 12px; }
+  .pill.open .list { overflow-y: auto; max-height: 420px; padding-bottom: 10px; }
+  .row { position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 4px 8px 20px; border-top: 1px solid var(--line);
+    border-radius: 0 10px 10px 0; transition: background .15s; }
+  .row:hover { background: rgb(var(--ink) / .035); }
+  .row .name b { font-weight: 650; }
   /* sessions are subs of the manager mascot: a tree guide links each row to the pill's mascot column */
   .row::before { content: ''; position: absolute; left: 6px; top: -1px; bottom: 0; border-left: 1px solid rgb(var(--ink) / .12); }
   .row::after { content: ''; position: absolute; left: 6px; top: 50%; width: 8px; border-top: 1px solid rgb(var(--ink) / .12); }
@@ -294,8 +303,11 @@
   .row .diff .del { color: var(--waiting); }
   .row .out { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .agent { color: var(--muted); font-size: 12px; }
-  .row .st { font-size: 12px; }
-  .icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  /* the state as a small chip in its own colour */
+  .row .st { flex: none; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: color-mix(in srgb, currentColor 12%, transparent); }
+  .row .diff.files { color: var(--muted); font-family: inherit; }
+  .icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
   .icon:hover { background: rgb(var(--ink) / .1); color: var(--text); }
   .icon svg { width: 15px; height: 15px; fill: currentColor; }
   .icon.stop:hover { color: var(--waiting); }
@@ -327,7 +339,7 @@
       <span class="plabel" id="plabel"></span>
     </div>
     <div class="card" id="card"></div>
-    <div class="list" id="list"></div>
+    <div class="listwrap"><div class="list" id="list"></div></div>
   </div>
 
 <script src="../shared/ui-common.js"></script>
@@ -373,6 +385,7 @@
     replyTo: agent => `Reply to ${agent}…`, replySend: '✓ Send', replySendTip: 'Enter, then Enter again to send',
     replyConfirm: agent => `Enter again sends it to ${agent} · Esc to edit`, replyDialog: 'Open in the prompt window',
     replyFailed: 'Could not send',
+    filesChanged: n => `${n} file${n === 1 ? '' : 's'}`,
     asksInTerminal: 'asks in the terminal', termDefault: '(terminal default)',
     menuHint: 'Bayloob picks the option you click in the terminal for you',
     soundMute: 'Sounds on — click to mute', soundUnmute: 'Sounds off — click to turn on',
@@ -401,7 +414,9 @@
   const RECEIPT_MARK = { passed: ' ✓', failed: ' ✗', untested: ' ⚠' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const DONE_TOAST_MS = 12000;
-  const PILL_OPEN_WIDTH = 480;
+  const PILL_OPEN_WIDTH = 520;
+  const HOVER_OPEN_MS = 70;
+  const HOVER_CLOSE_MS = 220;
   const STOP_CONFIRM_MS = 3000;
 
   const SLEEP_AFTER_MS = 5 * 60 * 1000;
@@ -520,6 +535,7 @@
     #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
     #permSince = new Map(); // permId -> when it appeared or was last reminded about
     #ruleTimer = null;
+    #hoverTimer = null;
     #pressing = false;     // a mouse button is down on the pill: hold re-renders until it's released
     #paintLater = false;
     #painted = new WeakMap(); // element -> the HTML last put into it
@@ -1022,7 +1038,7 @@
       if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
-          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
+          <span class="name"><b>${esc(s.project)}</b> <span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
           ${this.queues[s.id] ? `<span class="queue" title="${T.queuedTip(this.queues[s.id])}">⏳${this.queues[s.id]}</span>` : ''}
           ${this.#diffHtml(s.id)}
           ${this.#collisionHtml(s.id)}
@@ -1050,7 +1066,11 @@
     // "+42 −7" for the session's repo; nothing when it's clean or not a repo
     #diffHtml(id) {
       const d = this.diffs[id];
-      if (!d || (!d.added && !d.deleted && !d.files)) { return ''; }
+      if (!d || (!d.added && !d.deleted && !d.files && !d.untracked)) { return ''; }
+      // Files changed but no lines counted (new untracked files, binaries, renames): say how many files
+      if (!d.added && !d.deleted) {
+        return `<span class="diff files" title="${esc(T.diffTip(d))}">${T.filesChanged(d.files || d.untracked || 0)}</span>`;
+      }
       return `<span class="diff" title="${esc(T.diffTip(d))}"><span class="add">+${d.added}</span> <span class="del">−${d.deleted}</span></span>`;
     }
 
@@ -1229,13 +1249,26 @@
         this.#permScroll.set(e.target.dataset.perm, e.target.scrollTop);
         this.#syncPermScroll();
       }, true);
-      pill.addEventListener('mouseenter', () => { this.hovering = true; this.open(); this.sounds.play('expand'); this.api?.setMouseOver(true); });
+      // Opens a beat after the pointer arrives and closes a beat after it leaves: passing over the pill or
+      // slipping off its edge for a moment doesn't make it flicker
+      pill.addEventListener('mouseenter', () => {
+        this.hovering = true;
+        this.api?.setMouseOver(true);
+        clearTimeout(this.#hoverTimer);
+        if (pill.classList.contains('open')) { return; }
+        this.#hoverTimer = setTimeout(() => { this.open(); this.sounds.play('expand'); }, HOVER_OPEN_MS);
+      });
       pill.addEventListener('mouseleave', () => {
         this.hovering = false;
-        this.sounds.play('collapse');
-        pill.classList.remove('open');
         this.api?.setMouseOver(false);
-        this.render();
+        clearTimeout(this.#hoverTimer);
+        if (this.full) { return; } // full view stays until it's shrunk
+        this.#hoverTimer = setTimeout(() => {
+          if (!pill.classList.contains('open')) { return; }
+          this.sounds.play('collapse');
+          pill.classList.remove('open');
+          this.render();
+        }, HOVER_CLOSE_MS);
       });
       setInterval(() => { if (this.toast && !this.hovering && Date.now() > this.toast.until) { this.render();  }}, 1000);
       setInterval(() => this.#tickWaits(), 1000);
