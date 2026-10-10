@@ -8,10 +8,14 @@
   :root {
     --glass: rgba(18, 17, 23, 0.97);
     --field: rgba(255,255,255,0.05);
+    --raised: rgba(255,255,255,0.035);
     --line: rgba(255,255,255,0.09);
     --text: #f2f2f5;
+    --soft: #c9c7d4;
     --muted: #8b8b96;
     --brand: #8b5cff;
+    --ok: #4fd59a;
+    --warn: #ffb547;
     --error: #ff5d6c;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,164 +24,247 @@
     -webkit-font-smoothing: antialiased; }
   button, input, textarea { font: inherit; color: inherit; border: 0; background: none; outline: none; }
   button { cursor: pointer; }
+  button:focus-visible, .agent:focus-visible { outline: 2px solid color-mix(in srgb, var(--brand) 70%, transparent); outline-offset: 2px; }
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 3px; }
+  [hidden] { display: none !important; }
+  kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.06); font: 600 10.5px/16px ui-monospace, monospace; color: var(--soft); text-align: center; }
 
-  .panel { margin: 10px; padding: 16px; border-radius: 18px; background: var(--glass);
-    border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.45);
-    display: flex; flex-direction: column; gap: 12px; animation: pop .18s cubic-bezier(.2,.9,.3,1.2); }
+  /* ---------- dialog frame: header (title + steps), body (one step), footer (hint + actions) ---------- */
+  .dialog { margin: 10px; border-radius: 18px; background: var(--glass); border: 1px solid var(--line);
+    box-shadow: 0 18px 44px rgba(0,0,0,.5); display: flex; flex-direction: column; overflow: hidden;
+    animation: pop .18s cubic-bezier(.2,.9,.3,1.2); }
   @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+
+  .dh { display: flex; align-items: center; gap: 12px; padding: 14px 14px 12px 16px; border-bottom: 1px solid var(--line); }
+  .dh .m { width: 32px; height: 32px; flex: none; filter: drop-shadow(0 2px 5px rgba(0,0,0,.45)); }
+  .dh .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .dh b { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .dh .who span { color: var(--muted); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .steps { display: flex; align-items: center; gap: 4px; list-style: none; }
+  .steps li { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .steps li + li::before { content: ''; width: 14px; height: 1px; background: var(--line); margin-right: 2px; }
+  .steps li i { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font: 700 10px/1 system-ui;
+    border: 1px solid var(--line); font-style: normal; }
+  .steps li.on { color: var(--text); }
+  .steps li.on i { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .steps li.past i { background: rgba(139,92,255,.18); border-color: rgba(139,92,255,.45); color: #cdb8ff; }
+  .close { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); flex: none; }
+  .close:hover { background: rgba(255,255,255,.08); color: var(--text); }
+  .close svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
+
+  .body { padding: 14px 16px 4px; }
   .step { display: flex; flex-direction: column; gap: 12px; animation: slide .16s ease-out; }
   @keyframes slide { from { opacity: 0; transform: translateX(8px); } }
-
-  .title { display: flex; align-items: center; gap: 10px; }
-  .title .m { width: 30px; height: 30px; flex: none; filter: drop-shadow(0 2px 5px rgba(0,0,0,.45)); }
-  .title b { font-size: 15px; font-weight: 650; }
-  .title span { color: var(--muted); font-size: 12px; }
-  .title kbd { margin-left: auto; color: var(--muted); font: 11px ui-monospace, monospace; }
+  .label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   .thumb { position: relative; width: 100%; height: 100%; }
   .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-  .field { width: 100%; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
-  .field:focus { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
-  textarea.field.tall { height: 210px; font: 12.5px/1.45 ui-monospace, "Ubuntu Mono", monospace; }
-  textarea.field { resize: none; height: 92px; font-size: 14px; line-height: 1.45; }
-  input.field { font: 12px ui-monospace, "Ubuntu Mono", monospace; padding: 7px 10px; border-radius: 9px; }
+  /* ---------- step: write ---------- */
+  .composer { border-radius: 14px; background: var(--field); border: 1px solid var(--line); transition: border-color .15s, box-shadow .15s; }
+  .composer:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); box-shadow: 0 0 0 3px rgba(139,92,255,.12); }
+  .composer textarea { display: block; width: 100%; resize: none; padding: 12px 14px 6px; font-size: 14px; line-height: 1.5;
+    min-height: 72px; max-height: 240px; overflow-y: auto; }
+  .composer textarea.code { font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; }
+  .composer textarea::placeholder { color: var(--muted); }
+  .tools { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px 10px; }
+  .ghost { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 8px; color: var(--soft); font-size: 12px; font-weight: 600; }
+  .ghost:hover { background: rgba(255,255,255,.08); color: var(--text); }
+  .ghost svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .tools .count { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-  /* project line under the prompt */
-  .project { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
-  .project svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; }
-  .project input { flex: 1; }
-  #where .chip { margin-left: auto; flex: none; }
+  .project { display: flex; flex-direction: column; gap: 8px; }
+  .pathrow { display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; height: 38px; border-radius: 11px;
+    background: var(--field); border: 1px solid var(--line); }
+  .pathrow:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
+  .pathrow svg { width: 15px; height: 15px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.7; }
+  .pathrow input { flex: 1; min-width: 0; font: 12.5px ui-monospace, "Ubuntu Mono", monospace; }
+  .pathrow input::placeholder { color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--field);
-    border: 1px solid var(--line); font-size: 12px; color: #c9c7d4; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--field);
+    border: 1px solid var(--line); font-size: 12px; color: var(--soft); }
   .chip:hover { background: rgba(255,255,255,.08); }
   .chip.on { border-color: rgba(139,92,255,.5); background: rgba(139,92,255,.14); color: var(--text); }
   .chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 
-  /* step 2: agent choice */
-  .ask { color: #c9c7d4; }
   /* prompts already waiting for a busy agent */
   .queued { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-  .queued .cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
-  .queued li.item { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; border-radius: 9px;
-    background: var(--field); border: 1px solid var(--line); font-size: 12.5px; }
+  .queued li.item { display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; border-radius: 9px;
+    background: var(--raised); border: 1px solid var(--line); font-size: 12.5px; }
+  .queued li.item em { font-style: normal; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .queued li.item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d9d7e3; }
   .queued li.item button { width: 22px; height: 22px; border-radius: 6px; color: var(--muted); }
-  .queued li.item button:hover { background: rgba(255,255,255,.1); color: var(--text); }
+  .queued li.item button:hover { background: rgba(255,93,108,.15); color: var(--error); }
+
+  /* ---------- step: agent ---------- */
   .quote { padding: 9px 12px; border-left: 2px solid var(--brand); background: rgba(139,92,255,.06); border-radius: 0 10px 10px 0;
-    color: #d9d7e3; font-size: 12.5px; max-height: 64px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+    color: #d9d7e3; font-size: 12.5px; max-height: 58px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
   .quote.empty { color: var(--muted); font-style: italic; }
   .agents { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .agent { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px 12px;
     border-radius: 14px; background: var(--field); border: 1.5px solid transparent; transition: background .15s, border-color .15s, transform .1s; }
   .agent:hover { background: rgba(255,255,255,.08); }
   .agent.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+  .agent.on::after { content: '✓'; position: absolute; top: 7px; right: 9px; font-size: 11px; font-weight: 800; color: var(--c); }
   .agent:active { transform: scale(.98); }
   .agent:disabled { opacity: .35; cursor: not-allowed; }
   .agent .m { width: 46px; height: 46px; filter: drop-shadow(0 3px 7px rgba(0,0,0,.5)); }
   .agent b { font-weight: 600; }
   .agent small { color: var(--muted); font-size: 11px; }
-  .agent kbd { position: absolute; top: 7px; left: 9px; font: 10.5px ui-monospace, monospace; color: var(--muted); }
+  .agent kbd { position: absolute; top: 7px; left: 8px; }
+  .toggle { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 11px; background: var(--raised); border: 1px solid var(--line); text-align: left; }
+  .toggle:hover { background: rgba(255,255,255,.06); }
+  .toggle .txt { flex: 1; display: flex; flex-direction: column; }
+  .toggle .txt small { color: var(--muted); font-size: 11.5px; }
+  .switch { width: 32px; height: 18px; border-radius: 9px; background: rgba(255,255,255,.14); position: relative; flex: none; transition: background .2s; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .toggle[aria-pressed=true] .switch { background: var(--brand); }
+  .toggle[aria-pressed=true] .switch::after { transform: translateX(14px); }
 
-  .foot { display: flex; align-items: center; gap: 8px; }
-  .msg { flex: 1; font-size: 12px; color: var(--muted); }
+  /* ---------- step: confirm ---------- */
+  .review { border-radius: 14px; border: 1px solid var(--line); background: var(--raised); overflow: hidden; }
+  .review .row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+  .review .row + .row { border-top: 1px solid var(--line); }
+  .review .k { width: 84px; flex: none; color: var(--muted); font-size: 12px; }
+  .review .v { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+  .review .v .m { width: 22px; height: 22px; flex: none; }
+  .review .v code { font: 12.5px ui-monospace, "Ubuntu Mono", monospace; }
+  .review .v small { color: var(--muted); font-size: 11.5px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+  .badge.now { color: var(--ok); background: rgba(79,213,154,.12); }
+  .badge.queue { color: var(--warn); background: rgba(255,181,71,.12); }
+  .review .prompt { padding: 10px 14px 12px; border-top: 1px solid var(--line); }
+  .review .prompt pre { margin-top: 6px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+    font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; color: #e3e1ec; }
+  .review .prompt pre.empty { font: italic 12.5px/1.5 inherit; color: var(--muted); }
+  .review .edit { float: right; margin-top: -3px; }
+
+  /* ---------- footer ---------- */
+  .foot { display: flex; align-items: center; gap: 8px; padding: 12px 16px 14px; }
+  .msg { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .msg.error { color: var(--error); }
-  .btn { padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 600; white-space: nowrap; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 10px; background: rgba(255,255,255,.08); font-weight: 600; white-space: nowrap; }
   .btn:hover { background: rgba(255,255,255,.14); }
-  .btn.primary { background: var(--brand); color: #fff; }
+  .btn.primary { background: var(--brand); color: #fff; box-shadow: 0 4px 14px rgba(139,92,255,.35); }
   .btn.primary:hover { filter: brightness(1.1); }
-  .btn:disabled { opacity: .5; cursor: progress; }
-  [hidden] { display: none !important; }
+  .btn.primary.confirm { padding: 8px 16px; }
+  .btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .btn:disabled { opacity: .45; cursor: default; box-shadow: none; filter: none; }
 </style>
 </head>
 <body>
-  <form class="panel" id="form" autocomplete="off">
+  <form class="dialog" id="form" autocomplete="off" role="dialog" aria-labelledby="title">
+    <header class="dh">
+      <div class="m" id="who"></div>
+      <div class="who"><b id="title">Ask Bayloob</b><span id="subtitle"></span></div>
+      <ol class="steps" id="steps"></ol>
+      <button type="button" class="close" id="close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
 
-    <!-- step 1: what to do (and where) -->
-    <section class="step" id="stepPrompt">
-      <div class="title"><div class="m" id="manager"></div><b id="title">Ask Bayloob</b><span id="subtitle"></span><kbd>Esc</kbd></div>
-      <textarea class="field" id="prompt" placeholder="What should be done?"></textarea>
-      <ul class="queued" id="queued" hidden></ul>
-      <div id="projectBox">
-        <div class="project">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
-          <input class="field" id="cwd" placeholder="~/projects/my-app" spellcheck="false">
-          <button class="btn" type="button" id="browse">Browse…</button>
+    <div class="body">
+      <!-- write: what to do (and, for a new session, where) -->
+      <section class="step" id="stepPrompt">
+        <div class="composer">
+          <textarea id="prompt" rows="3" placeholder="What should be done?" spellcheck="false"></textarea>
+          <div class="tools">
+            <button type="button" class="ghost" id="paste" title="Paste what you copied — an error becomes a fix-it prompt">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Paste clipboard</button>
+            <span class="count" id="count"></span>
+          </div>
         </div>
-        <div class="chips" id="recent" style="margin-top:8px"></div>
-      </div>
-    </section>
+        <ul class="queued" id="queued" hidden></ul>
+        <div class="project" id="projectBox">
+          <div class="label">Project folder</div>
+          <div class="pathrow">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+            <input id="cwd" placeholder="~/projects/my-app" spellcheck="false">
+            <button class="ghost" type="button" id="browse">Browse…</button>
+          </div>
+          <div class="chips" id="recent"></div>
+        </div>
+      </section>
 
-    <!-- step 2: which agent runs it -->
-    <section class="step" id="stepAgent" hidden>
-      <div class="title"><div class="m" id="manager2"></div><b>Which agent should do this?</b><kbd>Esc · back</kbd></div>
-      <div class="quote" id="quote"></div>
-      <div class="agents" id="agents"></div>
-      <div class="project" id="where"></div>
-    </section>
+      <!-- agent: which agent runs it (new sessions only) -->
+      <section class="step" id="stepAgent" hidden>
+        <div class="quote" id="quote"></div>
+        <div class="agents" id="agents"></div>
+        <button type="button" class="toggle" id="worktree" aria-pressed="false">
+          <span class="txt"><span>⑂ In a new git worktree</span><small>Its own copy of the repo on a <code>bayloob/…</code> branch, so it never edits the same files as another agent</small></span>
+          <span class="switch"></span>
+        </button>
+      </section>
 
-    <div class="foot">
-      <div class="msg" id="msg"></div>
-      <button class="btn" type="button" id="paste" title="Paste what you copied — an error becomes a fix-it prompt">📋 Paste clipboard</button>
-      <button class="btn" type="button" id="back" hidden>Back</button>
-      <button class="btn primary" type="submit" id="submit">Continue</button>
+      <!-- confirm: everything that's about to happen, before it happens -->
+      <section class="step" id="stepConfirm" hidden>
+        <div class="review" id="review"></div>
+      </section>
     </div>
+
+    <footer class="foot">
+      <div class="msg" id="msg"></div>
+      <button class="btn" type="button" id="back">Cancel</button>
+      <button class="btn primary" type="submit" id="submit">Continue</button>
+    </footer>
   </form>
 
 <script src="../shared/ui-common.js"></script>
 <script>
   const T = {
-    ask: 'Ask Bayloob', send: 'Send a prompt',
-    continue: 'Continue', launch: 'Launch', sendBtn: 'Send', back: 'Back',
-    prefilled: 'Pasted the error you copied — Enter to send', emptyClipboard: 'The clipboard is empty',
-    hintPrompt: 'Enter to choose an agent · Shift+Enter for a new line',
-    hintAgent: n => `1–${n} or ← → to pick · Enter to launch`,
-    hintSend: 'Enter to send',
-    queueBtn: 'Queue', hintQueue: 'Agent is busy — Enter adds this to its queue',
+    ask: 'Ask Bayloob', askSub: 'Start a new agent session',
+    send: agent => `Prompt to ${agent}`,
+    steps: { new: ['Task', 'Agent', 'Confirm'], prompt: ['Write', 'Confirm'] },
+    next: 'Next', launch: 'Launch', sendBtn: 'Send', queueBtn: 'Add to queue', back: 'Back', cancel: 'Cancel',
+    prefilled: 'Pasted the error you copied', emptyClipboard: 'The clipboard is empty',
+    hintWrite: '<kbd>⏎</kbd> next · <kbd>⇧⏎</kbd> new line', hintAgent: n => `<kbd>1</kbd>–<kbd>${n}</kbd> or <kbd>←</kbd><kbd>→</kbd> pick · <kbd>⏎</kbd> next`,
+    hintConfirm: '<kbd>⏎</kbd> confirm · <kbd>Esc</kbd> back',
     queuedCap: n => `Waiting for this agent · ${n}`, unqueue: 'Remove from the queue',
-    noPrompt: 'No prompt: the agent starts and waits for you',
-    worktree: '⑂ In a new worktree',
-    worktreeTip: 'Run it in a fresh git worktree next to the project, on its own bayloob/… branch, so it never edits the same files as another agent',
-    pickProject: 'Pick a project folder first',
-    notInstalled: 'not installed', starting: 'Starting…', in: 'in',
+    noPrompt: 'No prompt — the agent starts and waits for you', writeFirst: 'Write the prompt first',
+    pickProject: 'Pick a project folder first', notInstalled: 'not installed', starting: 'Starting…', sending: 'Sending…',
     promptPlaceholder: 'What should be done?', followUp: 'Type a follow-up for the agent…',
-    wrong: 'Something went wrong',
+    chars: n => `${n} chars`, wrong: 'Something went wrong',
+    rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rWhen: 'Delivery', rPrompt: 'Prompt', edit: 'Edit',
+    inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
+    now: '● sent now', queued: '⏳ queued — the agent is busy; it goes out when its turn ends',
   };
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
-  const FOLDER = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
 
   /**
-   * The launcher. 'new': two steps — type what should be done (and where), press Enter, then Bayloob asks
-   * which agent should run it. 'prompt': a follow-up for a running session. `state` comes from main on show.
+   * The launcher dialog. 'new': Task → Agent → Confirm, then the session starts. 'prompt': a follow-up for a
+   * running session, Write → Confirm. Nothing is launched or sent before the confirm step. `state` comes from
+   * main on show.
    */
   class LauncherView {
     state = null;
-    step = 'prompt';       // 'prompt' | 'agent'
+    step = 'prompt';       // 'prompt' | 'agent' | 'confirm'
     agent = 'claude';
+    worktree = false;
     busy = false;
 
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { form: $('form'), stepPrompt: $('stepPrompt'), stepAgent: $('stepAgent'), title: $('title'), subtitle: $('subtitle'),
-        prompt: $('prompt'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
-        queued: $('queued'), quote: $('quote'), agents: $('agents'), where: $('where'), msg: $('msg'), back: $('back'), paste: $('paste'), submit: $('submit') };
-      $('manager').innerHTML = $('manager2').innerHTML = Agent.thumb(MANAGER);
+      this.el = { form: $('form'), who: $('who'), title: $('title'), subtitle: $('subtitle'), steps: $('steps'), close: $('close'),
+        stepPrompt: $('stepPrompt'), stepAgent: $('stepAgent'), stepConfirm: $('stepConfirm'), prompt: $('prompt'), count: $('count'),
+        paste: $('paste'), queued: $('queued'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
+        quote: $('quote'), agents: $('agents'), worktree: $('worktree'), review: $('review'), msg: $('msg'), back: $('back'), submit: $('submit') };
       this.#bind();
     }
 
     get isNew() { return this.state?.mode === 'new'; }
     get installed() { return Object.keys(this.state.agents).filter(k => this.state.agents[k].installed); }
+    get flow() { return this.isNew ? ['prompt', 'agent', 'confirm'] : ['prompt', 'confirm']; }
+    get text() { return this.el.prompt.value.trim(); }
 
     show(state) {
       this.state = state;
       this.busy = false;
+      const s = state.session;
+      this.el.who.innerHTML = Agent.thumb(this.isNew ? MANAGER : s.agent || MANAGER);
+      this.el.title.textContent = this.isNew ? T.ask : T.send(s.agentName);
+      this.el.subtitle.textContent = this.isNew ? T.askSub : s.project;
       this.el.prompt.value = state.prefill || '';
-      this.el.prompt.classList.toggle('tall', !!state.prefill);
-      this.el.title.textContent = this.isNew ? T.ask : T.send;
-      this.el.subtitle.textContent = this.isNew ? '' : `${state.session.project} · ${state.session.agentName}`;
+      this.el.prompt.classList.toggle('code', !!state.prefill);
       this.el.prompt.placeholder = this.isNew ? T.promptPlaceholder : T.followUp;
       this.el.projectBox.hidden = !this.isNew;
       if (this.isNew) {
@@ -189,6 +276,12 @@
         this.#renderRecent();
       }
       this.#go('prompt');
+      this.#grow();
+      if (state.prefill) {
+        // Show the prompt from its first line ("Fix this error:"), not scrolled to the end
+        this.el.prompt.setSelectionRange(0, 0);
+        this.el.prompt.scrollTop = 0;
+      }
     }
 
     // ---------- steps ----------
@@ -197,42 +290,73 @@
       this.step = step;
       this.el.stepPrompt.hidden = step !== 'prompt';
       this.el.stepAgent.hidden = step !== 'agent';
-      this.el.back.hidden = step !== 'agent';
-      this.el.paste.hidden = step !== 'prompt';
-      this.el.submit.disabled = false;
-      if (step === 'prompt') {
-        const busy = !this.isNew && this.state.session.busy;
-        this.el.submit.textContent = this.isNew ? T.continue : busy ? T.queueBtn : T.sendBtn;
-        this.#message(this.state.prefill ? T.prefilled : this.isNew ? T.hintPrompt : busy ? T.hintQueue : T.hintSend);
+      this.el.stepConfirm.hidden = step !== 'confirm';
+      this.#renderSteps();
+      const first = step === 'prompt';
+      this.el.back.textContent = first ? T.cancel : T.back;
+      const confirm = step === 'confirm';
+      this.el.submit.classList.toggle('confirm', confirm);
+      const arrow = '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+      const check = '<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>';
+      this.el.submit.innerHTML = confirm
+        ? `${check}${this.isNew ? T.launch : this.#willQueue ? T.queueBtn : T.sendBtn}`
+        : `${T.next}${arrow}`;
+      if (first) {
+        this.#message(this.state.prefill && this.el.prompt.value === this.state.prefill ? `${T.prefilled} · ${T.hintWrite}` : T.hintWrite, false, true);
         this.#renderQueue();
+        this.#updateCount();
         this.el.prompt.focus();
-        if (this.state.prefill) {
-          // Show the prompt from its first line ("Fix this error:"), not scrolled to the end
-          this.el.prompt.setSelectionRange(0, 0);
-          this.el.prompt.scrollTop = 0;
-        }
-      } else {
-        this.el.submit.textContent = T.launch;
-        const text = this.el.prompt.value.trim();
-        this.el.quote.textContent = text || T.noPrompt;
-        this.el.quote.classList.toggle('empty', !text);
-        this.#renderWhere();
+      } else if (step === 'agent') {
+        this.el.quote.textContent = this.text || T.noPrompt;
+        this.el.quote.classList.toggle('empty', !this.text);
         this.#renderAgents();
-        this.#message(T.hintAgent(Object.keys(this.state.agents).length));
+        this.#renderWorktree();
+        this.#message(T.hintAgent(Object.keys(this.state.agents).length), false, true);
+        this.el.submit.focus();
+      } else {
+        this.#renderReview();
+        this.#message(T.hintConfirm, false, true);
         this.el.submit.focus();
       }
       this.#fit();
     }
 
+    #next() {
+      if (this.busy) { return; }
+      if (this.step === 'prompt') {
+        if (!this.isNew && !this.text) { this.#message(T.writeFirst, true); return this.el.prompt.focus(); }
+        if (this.isNew && !this.el.cwd.value.trim()) { this.#message(T.pickProject, true); return this.el.cwd.focus(); }
+      }
+      if (this.step === 'confirm') { return this.isNew ? this.#launch() : this.#send(); }
+      this.#go(this.flow[this.flow.indexOf(this.step) + 1]);
+    }
+
+    #back() {
+      const i = this.flow.indexOf(this.step);
+      return i > 0 ? this.#go(this.flow[i - 1]) : this.api.close();
+    }
+
+    get #willQueue() { return !this.isNew && !!this.state.session.busy; }
+
     #fit() { requestAnimationFrame(() => this.api.resize?.(Math.ceil(this.el.form.getBoundingClientRect().height) + 20)); }
+
+    // ---------- render ----------
+
+    #renderSteps() {
+      const names = T.steps[this.isNew ? 'new' : 'prompt'];
+      const at = this.flow.indexOf(this.step);
+      this.el.steps.innerHTML = names.map((n, i) => `<li class="${i === at ? 'on' : i < at ? 'past' : ''}"><i>${i < at ? '✓' : i + 1}</i>${n}</li>`).join('');
+    }
 
     #renderAgents() {
       this.el.agents.innerHTML = Object.entries(this.state.agents).map(([key, a], i) => `
         <button type="button" class="agent${key === this.agent ? ' on' : ''}" data-agent="${key}" style="--c:${a.color}"
-          ${a.installed ? '' : 'disabled'}>
+          ${a.installed ? '' : 'disabled'} aria-pressed="${key === this.agent}">
           <kbd>${i + 1}</kbd><div class="m">${Agent.thumb(key)}</div><b>${esc(a.name)}</b>${a.installed ? '' : `<small>${T.notInstalled}</small>`}
         </button>`).join('');
     }
+
+    #renderWorktree() { this.el.worktree.setAttribute('aria-pressed', String(!!this.worktree)); }
 
     #renderRecent() {
       const { recent, home } = this.state;
@@ -240,6 +364,48 @@
       this.el.recent.innerHTML = recent.slice(0, 6).map(r => `
         <button type="button" class="chip${tilde(r.cwd, home) === current ? ' on' : ''}" data-cwd="${esc(r.cwd)}" title="${esc(tilde(r.cwd, home))}">
           <i style="--c:${this.state.agents[r.agent]?.color || '#ffb547'}"></i>${esc(r.name)}</button>`).join('');
+    }
+
+    // The confirmation panel: agent, where it runs, how the prompt is delivered, and the prompt itself
+    #renderReview() {
+      const rows = [];
+      if (this.isNew) {
+        const a = this.state.agents[this.agent];
+        rows.push([T.rAgent, `<div class="m">${Agent.thumb(this.agent)}</div><b>${esc(a?.name || this.agent)}</b>`]);
+        rows.push([T.rFolder, `<code>${esc(this.el.cwd.value.trim())}</code>`]);
+        rows.push([T.rWhere, this.worktree ? `${T.inWorktree} <small>${T.worktreeNote}</small>` : T.inFolder]);
+      } else {
+        const s = this.state.session;
+        rows.push([T.rAgent, `<div class="m">${Agent.thumb(s.agent || MANAGER)}</div><b>${esc(s.agentName)}</b><small>${esc(s.project)}</small>`]);
+        rows.push([T.rWhen, this.#willQueue ? `<span class="badge queue">${T.queued}</span>` : `<span class="badge now">${T.now}</span>`]);
+      }
+      const text = this.text;
+      this.el.review.innerHTML = rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('') +
+        `<div class="prompt"><span class="label">${T.rPrompt}</span><button type="button" class="ghost edit" data-edit>${T.edit}</button>
+          <pre class="${text ? '' : 'empty'}">${esc(text || T.noPrompt)}</pre></div>`;
+    }
+
+    // Prompts already waiting for this agent, each removable
+    #renderQueue() {
+      const q = this.isNew ? [] : this.state.session.queue || [];
+      this.el.queued.hidden = !q.length;
+      this.el.queued.innerHTML = q.length
+        ? `<li class="label">${T.queuedCap(q.length)}</li>` +
+          q.map((text, i) => `<li class="item"><em>${i + 1}</em><span title="${esc(text)}">${esc(text)}</span><button type="button" data-unqueue="${i}" title="${T.unqueue}" aria-label="${T.unqueue}">×</button></li>`).join('')
+        : '';
+    }
+
+    #updateCount() {
+      const n = this.el.prompt.value.length;
+      this.el.count.textContent = n > 0 ? T.chars(n) : '';
+    }
+
+    // The prompt box grows with its text, up to a limit (then it scrolls)
+    #grow() {
+      const ta = this.el.prompt;
+      ta.style.height = 'auto';
+      ta.style.height = `${Math.min(ta.scrollHeight + 2, 240)}px`;
+      this.#fit();
     }
 
     #pick(agent) {
@@ -256,64 +422,50 @@
       const at = el.selectionStart ?? el.value.length;
       el.value = el.value.slice(0, at) + text + el.value.slice(el.selectionEnd ?? at);
       el.focus();
-      this.#fit();
+      this.#updateCount();
+      this.#grow();
     }
 
-    #message(text, isError = false) {
-      this.el.msg.textContent = text;
+    #message(text, isError = false, html = false) {
+      this.el.msg[html ? 'innerHTML' : 'textContent'] = text;
       this.el.msg.className = isError ? 'msg error' : 'msg';
     }
 
-    // ---------- submit ----------
+    // ---------- actions (only from the confirm step) ----------
 
-    async #submit() {
-      if (this.busy) { return; }
-      if (!this.isNew) { return this.#send(); }
-      if (this.step === 'prompt') {
-        if (!this.el.cwd.value.trim()) { this.#message(T.pickProject, true); return this.el.cwd.focus(); }
-        return this.#go('agent');
-      }
-      this.busy = true;
-      this.el.submit.disabled = true;
-      this.#message(T.starting);
-      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.el.prompt.value.trim(), worktree: !!this.worktree });
-      this.busy = false;
-      this.el.submit.disabled = false;
-      if (res?.ok) { this.api.close(); }
-      else { this.#message(res?.error || T.wrong, true); }
-    }
-
-    // Where the agent will run, and the switch that gives it its own git worktree (a copy of the repo on a
-    // new branch) so it can't step on another agent's files
-    #renderWhere() {
-      this.el.where.innerHTML = `${FOLDER}<span>${T.in} <b style="color:var(--text)">${esc(this.el.cwd.value.trim())}</b></span>
-        <button type="button" class="chip${this.worktree ? ' on' : ''}" id="worktree" aria-pressed="${!!this.worktree}" title="${T.worktreeTip}">${T.worktree}</button>`;
-    }
-
-    // Prompts already waiting for this agent, each removable
-    #renderQueue() {
-      const q = this.isNew ? [] : this.state.session.queue || [];
-      this.el.queued.hidden = !q.length;
-      this.el.queued.innerHTML = q.length
-        ? `<li class="cap">${T.queuedCap(q.length)}</li>` +
-          q.map((text, i) => `<li class="item"><span title="${esc(text)}">${esc(text)}</span><button type="button" data-unqueue="${i}" title="${T.unqueue}">×</button></li>`).join('')
-        : '';
+    async #launch() {
+      this.#working(T.starting);
+      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.text, worktree: !!this.worktree });
+      this.#done(res);
     }
 
     async #send() {
-      const text = this.el.prompt.value.trim();
-      if (!text) { return; }
+      this.#working(T.sending);
+      const res = await this.api.sendPrompt(this.state.session.id, this.text);
+      this.#done(res);
+    }
+
+    #working(text) {
       this.busy = true;
-      this.el.submit.disabled = true;
-      const res = await this.api.sendPrompt(this.state.session.id, text);
+      this.el.submit.disabled = this.el.back.disabled = true;
+      this.#message(text);
+    }
+
+    #done(res) {
       this.busy = false;
-      this.el.submit.disabled = false;
+      this.el.submit.disabled = this.el.back.disabled = false;
       if (res?.ok) { this.api.close(); }
       else { this.#message(res?.error || T.wrong, true); }
     }
 
+    // ---------- events ----------
+
     #bind() {
-      this.el.form.addEventListener('submit', e => { e.preventDefault(); this.#submit(); });
+      this.el.form.addEventListener('submit', e => { e.preventDefault(); this.#next(); });
+      this.el.back.addEventListener('click', () => this.#back());
+      this.el.close.addEventListener('click', () => this.api.close());
+      this.el.paste.addEventListener('click', () => this.#pasteClipboard());
+      this.el.prompt.addEventListener('input', () => { this.#updateCount(); this.#grow(); });
       this.el.queued.addEventListener('click', async e => {
         const b = e.target.closest('[data-unqueue]');
         if (!b) { return; }
@@ -321,14 +473,15 @@
         this.#renderQueue();
         this.#fit();
       });
-      this.el.back.addEventListener('click', () => this.#go('prompt'));
-      this.el.paste.addEventListener('click', () => this.#pasteClipboard());
       this.el.agents.addEventListener('click', e => {
         const b = e.target.closest('[data-agent]');
         if (!b || b.disabled) { return; }
-        if (b.dataset.agent === this.agent) { return this.#submit(); // a second click on the chosen one launches
-}
+        if (b.dataset.agent === this.agent) { return this.#next(); } // a second click on the chosen one goes on
         this.#pick(b.dataset.agent);
+      });
+      this.el.worktree.addEventListener('click', () => { this.worktree = !this.worktree; this.#renderWorktree(); });
+      this.el.review.addEventListener('click', e => {
+        if (e.target.closest('[data-edit]')) { this.#go('prompt'); }
       });
       this.el.recent.addEventListener('click', e => {
         const b = e.target.closest('[data-cwd]');
@@ -342,16 +495,9 @@
         const dir = await this.api.pickFolder(this.el.cwd.value);
         if (dir) { this.el.cwd.value = tilde(dir, this.state.home); this.#renderRecent(); this.el.prompt.focus(); }
       });
-      this.el.where.addEventListener('click', e => {
-        if (!e.target.closest('#worktree')) { return; }
-        this.worktree = !this.worktree;
-        this.#renderWhere();
-      });
       document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          return this.step === 'agent' ? this.#go('prompt') : this.api.close();
-        }
+        if (!this.state) { return; }
+        if (e.key === 'Escape') { e.preventDefault(); return this.busy ? undefined : this.#back(); }
         if (this.step === 'agent') {
           const keys = Object.keys(this.state.agents);
           const n = Number(e.key);
@@ -362,13 +508,11 @@
             const i = ok.indexOf(this.agent);
             return this.#pick(ok[(i + (e.key === 'ArrowRight' ? 1 : -1) + ok.length) % ok.length]);
           }
-          if (e.key === 'Enter') { e.preventDefault(); return this.#submit(); }
-          return;
         }
-        // step 1: Enter goes on (Shift+Enter is a new line); in the folder field Enter goes on too
-        if (e.key === 'Enter' && !e.shiftKey && (e.target === this.el.prompt || e.target === this.el.cwd)) {
-          e.preventDefault();
-          this.#submit();
+        // Enter goes on (Shift+Enter is a new line in the prompt); a focused button handles its own Enter
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+          const onButton = e.target.closest?.('button') && e.target !== this.el.submit;
+          if (!onButton) { e.preventDefault(); this.#next(); }
         }
       });
     }
