@@ -386,9 +386,10 @@ class BayloobApp {
 
   // ---------- sessions ----------
 
-  async openLauncher(preset = null) {
+  // Agents to offer when starting a session: name, whether it's installed, mascot colour
+  async #agentChoices() {
     const installed = await this.installed;
-    const agents = Object.fromEntries(
+    return Object.fromEntries(
       Object.entries(AGENTS).map(([k, a]) => [
         k,
         {
@@ -398,9 +399,12 @@ class BayloobApp {
         },
       ])
     );
+  }
+
+  async openLauncher(preset = null) {
     this.launcherWindow.show({
       mode: "new",
-      agents,
+      agents: await this.#agentChoices(),
       recent: this.recent.list(),
       preset,
       home: os.homedir(),
@@ -416,6 +420,7 @@ class BayloobApp {
       prefill: looksLikeError(copied) ? errorPrompt(copied) : "",
       session: {
         id: session.id,
+        agent: session.agent,
         project: session.project,
         agentName: AGENTS[session.agent]?.name || session.agent,
         busy: PromptQueue.isBusy(session),
@@ -695,6 +700,12 @@ class BayloobApp {
 
     // Launcher
     ipcMain.handle("launcher:launch", (_e, opts) => result(() => this.launch(opts)));
+    // The panel's own "Ask Bayloob" box: which agents it can start, and where
+    ipcMain.handle("panel:launch-options", async () => ({
+      agents: await this.#agentChoices(),
+      recent: this.recent.list(),
+      home: os.homedir(),
+    }));
     // A busy agent (or one waiting on a permission) gets the prompt queued; it goes out when the turn ends
     ipcMain.handle("launcher:send-prompt", async (_e, sessionId, text) => {
       const s = session(sessionId);

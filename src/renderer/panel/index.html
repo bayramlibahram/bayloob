@@ -94,7 +94,36 @@
   .empty { color: var(--muted); padding: 30px 10px; text-align: center; line-height: 1.6; }
 
   /* detail */
-  .detail { border-left: 1px solid var(--line); padding: 16px 18px; overflow-y: auto; }
+  .detailcol { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
+  .detail { flex: 1; min-height: 0; padding: 16px 18px; overflow-y: auto; }
+  /* prompt boxes: to the selected agent (under its details) and "Ask Bayloob" for a new session (above the footer).
+     They sit outside the parts that re-render on every event, so typing is never lost. */
+  .say { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+  .say[hidden], .askpick[hidden] { display: none; }
+  .box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px;
+    background: rgba(255,255,255,.05); border: 1px solid var(--line); transition: border-color .15s; }
+  .box:focus-within { border-color: rgba(139,92,255,.55); }
+  .box textarea, .box input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: none; color: var(--text);
+    font: inherit; line-height: 1.4; max-height: 120px; }
+  .box textarea::placeholder, .box input::placeholder { color: var(--muted); }
+  .send { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--brand); color: #fff; }
+  .send:disabled { opacity: .35; cursor: default; }
+  .send .i { width: 16px; height: 16px; }
+  .say .hint, .ask .hint { font-size: 11.5px; color: var(--muted); min-height: 15px; }
+  .say .hint.ok, .ask .hint.ok { color: var(--done); }
+  .say .hint.err, .ask .hint.err { color: var(--waiting); }
+  .ask { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .ask .box { align-items: center; }
+  .ask .spark { color: #b28bff; font-size: 15px; }
+  .askpick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pick { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    border: 1px solid var(--line); background: var(--raised); color: #c9c7d4; }
+  .pick .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .pick.on { border-color: rgba(139,92,255,.6); background: rgba(139,92,255,.18); color: var(--text); }
+  .pick:disabled { opacity: .4; cursor: default; }
+  .askpick .where { flex: 1; min-width: 160px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
+  .askpick .where input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); font: inherit;
+    border-bottom: 1px dashed var(--line); padding: 2px 0; }
   .dhead { display: flex; align-items: center; gap: 12px; }
   .dhead .ic { width: 50px; height: 50px; }
   .dhead .who { flex: 1; min-width: 0; }
@@ -168,8 +197,22 @@
         </div>
         <div class="rows" id="rows"></div>
       </section>
-      <section class="detail" id="detail"></section>
+      <div class="detailcol">
+        <section class="detail" id="detail"></section>
+        <form class="say" id="say" hidden autocomplete="off">
+          <div class="box"><textarea id="sayText" rows="1" spellcheck="false"></textarea>
+            <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+          <div class="hint" id="sayHint"></div>
+        </form>
+      </div>
     </div>
+
+    <form class="ask" id="ask" autocomplete="off">
+      <div class="box"><span class="spark">✦</span><input id="askText" spellcheck="false" placeholder="Ask Bayloob — what should be done?">
+        <button type="submit" class="send" id="askSend" title="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+      <div class="askpick" id="askPick" hidden></div>
+      <div class="hint" id="askHint" hidden></div>
+    </form>
 
     <footer class="foot">
       <button type="button" class="btn" id="launch">
@@ -186,6 +229,11 @@
 <script>
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
+    sayTo: (agent, project) => `Prompt to ${agent} · ${project}…`,
+    sayHint: 'Enter sends · Shift+Enter new line', sayBusy: 'Busy — Enter adds it to the queue',
+    sent: 'Sent ✓', queued: 'Queued ⏳ — goes out when the agent finishes its turn',
+    askHint: 'Pick an agent and folder · Enter starts', startAgent: 'Start', worktree: '⑂ New worktree',
+    notInstalled: 'not installed', folder: 'Folder', starting: 'Starting…', started: 'Started ✓', pickFolder: 'Choose a project folder',
     clashConflict: (who, files) => `Editing the same files as ${who}: ${files}`,
     clashShared: who => `Working in the same folder as ${who}; uncommitted changes can break each other's tests`,
     clashFix: 'Fix: ⋮ → "Move new work to a worktree…"',
@@ -213,6 +261,9 @@
     idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const HEALTH_COLOR = { healthy: 'var(--done)', running: 'var(--thinking)', starting: 'var(--working)', unhealthy: 'var(--waiting)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
+  const BUSY = new Set(['thinking', 'working', 'waiting']); // a prompt sent now is queued for the end of the turn
+  const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
+  const FOLDER = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
   const ACTIVE = new Set(['thinking', 'working', 'waiting']);
   const SECTION_OF = { browser: 'browsers', ide: 'ides', terminal: 'applications', files: 'applications', app: 'applications', system: 'system' };
   const I = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24"${extra}>${d}</svg>`;
@@ -274,13 +325,16 @@
     launchMode = false;    // the list shows installed apps to launch
     launchable = null;
     #flashTimer = null;
+    #sayTimer = null;
+    sayFor = null;         // session the prompt box is for (its text is cleared when the selection changes)
 
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { panel: $('panel'), mascot: $('managerMascot'), status: $('status'), side: $('side'), listTitle: $('listTitle'),
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
-        openWorkspace: $('openWorkspace'), settings: $('settings') };
+        openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
+        saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
@@ -333,6 +387,7 @@
       this.#renderList();
       this.#renderDetail();
       this.#renderMeters();
+      this.#renderSay();
       this.el.openWorkspace.disabled = !(this.current?.kind === 'agent' && this.current.data.cwd);
     }
 
@@ -529,6 +584,111 @@
       this.el.search.focus();
     }
 
+    // ---------- prompts ----------
+
+    // The selected agent's prompt box: only for sessions running in tmux and not waiting on a permission
+    #renderSay() {
+      const s = !this.launchMode && this.current?.kind === 'agent' ? this.current.data : null;
+      const can = !!s?.term?.tmux && !s.perm;
+      this.el.say.hidden = !can;
+      if (!can) { return; }
+      if (this.sayFor !== s.id) {   // another session: its own empty box
+        this.sayFor = s.id;
+        this.el.sayText.value = '';
+        this.#sayHint('');
+      }
+      this.el.sayText.placeholder = T.sayTo(Agent.displayName(s.agent), s.project);
+      if (!this.el.sayHint.dataset.kind) {
+        this.el.sayHint.textContent = BUSY.has(s.state) ? T.sayBusy : T.sayHint;
+      }
+      this.el.saySend.disabled = !this.el.sayText.value.trim();
+    }
+
+    #sayHint(text, kind = '') {
+      this.el.sayHint.textContent = text;
+      this.el.sayHint.className = `hint ${kind}`;
+      this.el.sayHint.dataset.kind = kind;
+      clearTimeout(this.#sayTimer);
+      if (kind) { this.#sayTimer = setTimeout(() => { this.el.sayHint.dataset.kind = ''; this.el.sayHint.className = 'hint'; this.#renderSay(); }, 3500); }
+    }
+
+    async #send() {
+      const text = this.el.sayText.value.trim();
+      if (!text || !this.sayFor) { return; }
+      this.el.saySend.disabled = true;
+      const res = await this.api?.sendPrompt(this.sayFor, text);
+      if (res?.ok) {
+        this.el.sayText.value = '';
+        this.#grow(this.el.sayText);
+        this.#sayHint(res.queued ? T.queued : T.sent, 'ok');
+      } else {
+        this.#sayHint(res?.error || 'Could not send', 'err');
+      }
+      this.#renderSay();
+    }
+
+    #grow(ta) { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`; }
+
+    // "Ask Bayloob": type what should be done, Enter, then pick the agent and folder right here
+    async #askNext() {
+      const text = this.el.askText.value.trim();
+      if (!text) { return; }
+      if (!this.el.askPick.hidden) { return this.#askStart(); }
+      const opts = await this.api?.launchOptions();
+      if (!opts) { return; }
+      this.askOpts = opts;
+      const sel = this.current?.kind === 'agent' ? this.current.data : null;
+      const last = opts.recent?.[0];
+      const installed = Object.keys(opts.agents).filter(k => opts.agents[k].installed);
+      this.askAgent = [sel?.agent, last?.agent].find(a => a && opts.agents[a]?.installed) || installed[0] || null;
+      this.askCwd = tilde(sel?.cwd || last?.cwd || '', opts.home);
+      this.askWorktree = false;
+      this.#renderAskPick();
+      this.el.askPick.hidden = false;
+      this.#askHint(T.askHint);
+      this.#fit();
+    }
+
+    #renderAskPick() {
+      const { agents } = this.askOpts;
+      const chips = Object.entries(agents).map(([k, a]) => `<button type="button" class="pick${k === this.askAgent ? ' on' : ''}" data-agent="${esc(k)}"
+        ${a.installed ? '' : `disabled title="${T.notInstalled}"`}><span class="dot" style="--c:${esc(a.color)}"></span>${esc(a.name)}</button>`).join('');
+      this.el.askPick.innerHTML = `${chips}
+        <label class="where" title="${T.pickFolder}">${FOLDER}<input id="askCwd" value="${esc(this.askCwd)}" placeholder="${T.folder}" spellcheck="false"></label>
+        <button type="button" class="pick${this.askWorktree ? ' on' : ''}" data-worktree>${T.worktree}</button>
+        <button type="submit" class="btn on">${T.startAgent}</button>`;
+    }
+
+    #askHint(text, kind = '') {
+      this.el.askHint.hidden = !text;
+      this.el.askHint.textContent = text;
+      this.el.askHint.className = `hint ${kind}`;
+    }
+
+    async #askStart() {
+      const cwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
+      if (!this.askAgent || !cwd) { return this.#askHint(T.pickFolder, 'err'); }
+      this.#askHint(T.starting);
+      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.el.askText.value.trim(), worktree: this.askWorktree });
+      if (res?.ok) {
+        this.#askReset();
+        this.#askHint(T.started, 'ok');
+        setTimeout(() => { this.#askHint(''); this.#fit(); }, 2500);
+      } else {
+        this.#askHint(res?.error || 'Could not start the agent', 'err');
+      }
+    }
+
+    #askReset() {
+      this.el.askText.value = '';
+      this.el.askPick.hidden = true;
+      this.el.askPick.innerHTML = '';
+      this.#askHint('');
+      this.#fit();
+    }
+
+    #fit() { this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20); }
+
     #move(step) {
       const items = this.#visible();
       if (!items.length) { return; }
@@ -579,7 +739,33 @@
       this.el.launch.addEventListener('click', () => this.#toggleLaunch());
       this.el.openWorkspace.addEventListener('click', () => this.current?.kind === 'agent' && this.api?.openWorkspace(this.current.id));
       this.el.settings.addEventListener('click', () => this.api?.openSettings());
+      // Prompt to the selected agent: Enter sends, Shift+Enter is a new line
+      this.el.say.addEventListener('submit', e => { e.preventDefault(); this.#send(); });
+      this.el.sayText.addEventListener('input', () => { this.#grow(this.el.sayText); this.el.saySend.disabled = !this.el.sayText.value.trim(); });
+      this.el.sayText.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.#send(); }
+      });
+      // Ask Bayloob: Enter → pick agent + folder → Enter starts
+      this.el.ask.addEventListener('submit', e => { e.preventDefault(); this.#askNext(); });
+      this.el.askText.addEventListener('input', () => { if (!this.el.askText.value.trim() && !this.el.askPick.hidden) { this.#askReset(); } });
+      this.el.askPick.addEventListener('click', e => {
+        const a = e.target.closest('[data-agent]');
+        if (a && !a.disabled) { this.askAgent = a.dataset.agent; }
+        if (e.target.closest('[data-worktree]')) { this.askWorktree = !this.askWorktree; }
+        if (a || e.target.closest('[data-worktree]')) {
+          this.askCwd = this.el.askPick.querySelector('#askCwd')?.value || this.askCwd;
+          this.#renderAskPick();
+        }
+      });
       document.addEventListener('keydown', e => {
+        // Typing in a prompt box: only Escape is ours (leave the box / cancel the agent pick)
+        if (e.target.closest?.('#say, #ask')) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            if (!this.el.askPick.hidden) { this.#askReset(); } else { e.target.blur(); }
+          }
+          return;
+        }
         if (e.key === 'Escape') {
           if (this.launchMode || this.query) { this.launchMode = false; this.query = ''; this.el.search.value = ''; this.render(); }
           else { this.api?.close(); }
