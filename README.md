@@ -264,7 +264,7 @@ src/
     app/                        composition root: BayloobApp (wiring + IPC), cli.js, paths.js
     config/                     Settings (settings.json, env vars win)
     modules/                    one folder per feature
-      sessions/                 EventServer (hook HTTP), SessionStore, activity lines, notifications
+      sessions/                 EventServer (hook HTTP), SessionStore, activity lines
       agents/                   agent definitions, SessionLauncher (tmux), recent projects, agent stats
       workspace/                WorkspaceService, RunningApps, AppCatalog, FirefoxSession, Docker, AppActions
       hooks/                    HookInstaller (~/.claude/settings.json)
@@ -272,7 +272,7 @@ src/
     infrastructure/             adapters to the OS
       desktop/                  WindowService (GNOME extension), GnomeExtension, TerminalFocuser
       system/                   ProcessTable (/proc), TerminalLauncher
-    windows/                    OverlayWindow, PopupWindow → Launcher/Panel/Settings windows, tray
+    windows/                    OverlayWindow, PopupWindow → Launcher/Panel/Settings windows, tray, notifications
   preload/                      one contextBridge API per page
   renderer/                     overlay/, launcher/, panel/, settings/ — each an index.html
     shared/                     ui-common.js (agent palette, helpers), novi.js (mascot engine)
@@ -313,9 +313,13 @@ setting (the field is then shown read-only), which is handy for development and 
 ```bash
 bun install
 bun run dev              # run from source (adds --no-sandbox, see below)
+bun run test             # unit tests (node --test)
+bun run check            # Biome: lint + format (check:fix to apply)
 bun run test-events      # fake a full agent session, no real agent needed
 bun run dist:deb         # build the .deb
 ```
+
+How the code is organised, the layer rules and the code standard: [docs/architecture.md](docs/architecture.md).
 
 Running from source on Ubuntu 24.04+, Electron's sandbox can't start without the AppArmor profile
 the .deb installs, so `bun run dev` passes `--no-sandbox`. The packaged app keeps the sandbox on.
