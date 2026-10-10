@@ -1,5 +1,5 @@
-const { BrowserWindow, screen } = require('electron');
-const paths = require('../app/paths');
+const { BrowserWindow, screen } = require("electron");
+const paths = require("../app/paths");
 
 /**
  * Base for Bayloob's focusable popups (launcher, workspace panel, settings): frameless, transparent,
@@ -9,22 +9,25 @@ const paths = require('../app/paths');
 class PopupWindow {
   win = null;
   #ready = null;
-  #keepOpen = 0;   // > 0 while a dialog/menu of ours is open, so the resulting blur doesn't hide us
+  #keepOpen = 0; // > 0 while a dialog/menu of ours is open, so the resulting blur doesn't hide us
 
   /** opts: { name, width, height, placement: 'center' | 'top' } — `name` picks renderer/<name>/ and preload/<name>.js */
   constructor(opts) {
     this.opts = opts;
   }
 
-  get visible() { return !!this.win?.isVisible(); }
+  get visible() {
+    return !!this.win?.isVisible();
+  }
 
   #bounds() {
     const { workArea } = screen.getPrimaryDisplay();
     const { width, height, placement } = this.opts;
     return {
-      width, height,
+      width,
+      height,
       x: Math.round(workArea.x + (workArea.width - width) / 2),
-      y: placement === 'top' ? workArea.y + 6 : Math.round(workArea.y + workArea.height * 0.18),
+      y: placement === "top" ? workArea.y + 6 : Math.round(workArea.y + workArea.height * 0.18),
     };
   }
 
@@ -33,39 +36,56 @@ class PopupWindow {
       ...this.#bounds(),
       frame: false,
       transparent: true,
-      backgroundColor: '#00000000',
+      backgroundColor: "#00000000",
       resizable: false,
       skipTaskbar: true,
       alwaysOnTop: true,
       show: false,
       webPreferences: { preload: paths.preload(this.opts.name) },
     });
-    this.win.on('blur', () => { if (!this.#keepOpen) this.hide(); });
-    this.win.on('closed', () => { this.win = null; this.#ready = null; });
+    this.win.on("blur", () => {
+      if (!this.#keepOpen) {
+        this.hide();
+      }
+    });
+    this.win.on("closed", () => {
+      this.win = null;
+      this.#ready = null;
+    });
     this.#ready = this.win.loadFile(paths.page(this.opts.name));
   }
 
   async show(state) {
-    if (!this.win) this.#create();
+    if (!this.win) {
+      this.#create();
+    }
     await this.#ready;
     this.win.webContents.send(`${this.opts.name}:show`, state);
     this.win.show();
     this.win.focus();
   }
 
-  hide() { this.win?.hide(); }
+  hide() {
+    this.win?.hide();
+  }
 
-  toggle(state) { return this.visible ? this.hide() : this.show(state); }
+  toggle(state) {
+    return this.visible ? this.hide() : this.show(state);
+  }
 
   /** Sends a live update to the page while it's open. */
   send(channel, payload) {
-    if (this.visible) this.win.webContents.send(channel, payload);
+    if (this.visible) {
+      this.win.webContents.send(channel, payload);
+    }
   }
 
   fitHeight(height) {
-    if (!this.win) return;
+    if (!this.win) {
+      return;
+    }
     const [width] = this.win.getSize();
-    this.win.setResizable(true);  // some window managers ignore setSize on non-resizable windows
+    this.win.setResizable(true); // some window managers ignore setSize on non-resizable windows
     this.win.setSize(width, Math.min(Math.max(Math.round(height), 120), 900));
     this.win.setResizable(false);
   }

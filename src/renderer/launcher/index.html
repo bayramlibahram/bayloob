@@ -91,7 +91,7 @@
       <textarea class="field" id="prompt" placeholder="What should be done?"></textarea>
       <div id="projectBox">
         <div class="project">
-          <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
           <input class="field" id="cwd" placeholder="~/projects/my-app" spellcheck="false">
           <button class="btn" type="button" id="browse">Browse…</button>
         </div>
@@ -128,7 +128,7 @@
     promptPlaceholder: 'What should be done?', followUp: 'Type a follow-up for the agent…',
     wrong: 'Something went wrong',
   };
-  const tilde = (p, home) => home && p.startsWith(home) ? '~' + p.slice(home.length) : p;
+  const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   const FOLDER = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
 
   /**
@@ -165,7 +165,7 @@
       if (this.isNew) {
         const last = state.recent[0];
         this.agent = state.preset?.agent || last?.agent || this.agent;
-        if (!state.agents[this.agent]?.installed) this.agent = this.installed[0] || this.agent;
+        if (!state.agents[this.agent]?.installed) { this.agent = this.installed[0] || this.agent; }
         this.el.cwd.value = tilde(state.preset?.cwd || last?.cwd || '', state.home);
         this.#renderRecent();
       }
@@ -216,7 +216,7 @@
     }
 
     #pick(agent) {
-      if (!this.state.agents[agent]?.installed) return;
+      if (!this.state.agents[agent]?.installed) { return; }
       this.agent = agent;
       this.#renderAgents();
     }
@@ -229,8 +229,8 @@
     // ---------- submit ----------
 
     async #submit() {
-      if (this.busy) return;
-      if (!this.isNew) return this.#send();
+      if (this.busy) { return; }
+      if (!this.isNew) { return this.#send(); }
       if (this.step === 'prompt') {
         if (!this.el.cwd.value.trim()) { this.#message(T.pickProject, true); return this.el.cwd.focus(); }
         return this.#go('agent');
@@ -241,20 +241,20 @@
       const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.el.prompt.value.trim() });
       this.busy = false;
       this.el.submit.disabled = false;
-      if (res?.ok) this.api.close();
-      else this.#message(res?.error || T.wrong, true);
+      if (res?.ok) { this.api.close(); }
+      else { this.#message(res?.error || T.wrong, true); }
     }
 
     async #send() {
       const text = this.el.prompt.value.trim();
-      if (!text) return;
+      if (!text) { return; }
       this.busy = true;
       this.el.submit.disabled = true;
       const res = await this.api.sendPrompt(this.state.session.id, text);
       this.busy = false;
       this.el.submit.disabled = false;
-      if (res?.ok) this.api.close();
-      else this.#message(res?.error || T.wrong, true);
+      if (res?.ok) { this.api.close(); }
+      else { this.#message(res?.error || T.wrong, true); }
     }
 
     #bind() {
@@ -262,13 +262,14 @@
       this.el.back.addEventListener('click', () => this.#go('prompt'));
       this.el.agents.addEventListener('click', e => {
         const b = e.target.closest('[data-agent]');
-        if (!b || b.disabled) return;
-        if (b.dataset.agent === this.agent) return this.#submit(); // a second click on the chosen one launches
+        if (!b || b.disabled) { return; }
+        if (b.dataset.agent === this.agent) { return this.#submit(); // a second click on the chosen one launches
+}
         this.#pick(b.dataset.agent);
       });
       this.el.recent.addEventListener('click', e => {
         const b = e.target.closest('[data-cwd]');
-        if (!b) return;
+        if (!b) { return; }
         this.el.cwd.value = tilde(b.dataset.cwd, this.state.home);
         this.#renderRecent();
         this.el.prompt.focus();
@@ -307,8 +308,9 @@
 
   const fakeApi = { launch: async () => ({ ok: true }), sendPrompt: async () => ({ ok: true }), pickFolder: async () => null, close() {}, resize() {} };
   const view = new LauncherView(window.launcherAPI || fakeApi);
-  if (window.launcherAPI) window.launcherAPI.onShow(state => view.show(state));
-  else window.__demo = view; // opened in a plain browser
+  if (window.launcherAPI) { window.launcherAPI.onShow(state => view.show(state)); }
+  else { window.__demo = view; // opened in a plain browser
+}
 </script>
 </body>
 </html>

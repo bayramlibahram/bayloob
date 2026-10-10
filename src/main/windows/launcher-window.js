@@ -1,5 +1,5 @@
-const { dialog } = require('electron');
-const { PopupWindow } = require('./popup-window');
+const { dialog } = require("electron");
+const { PopupWindow } = require("./popup-window");
 
 /**
  * A small focusable window in the middle of the screen for typing: starting a new session or
@@ -7,12 +7,12 @@ const { PopupWindow } = require('./popup-window');
  */
 class LauncherWindow extends PopupWindow {
   constructor() {
-    super({ name: 'launcher', width: 520, height: 470, placement: 'center' });
+    super({ name: "launcher", width: 520, height: 470, placement: "center" });
   }
 
   pickFolder(defaultPath) {
     return this.keepOpenDuring(async win => {
-      const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], defaultPath });
+      const r = await dialog.showOpenDialog(win, { properties: ["openDirectory"], defaultPath });
       return r.canceled ? null : r.filePaths[0];
     });
   }

@@ -31,7 +31,7 @@
   .title kbd { margin-left: auto; color: var(--muted); font: 11px ui-monospace, monospace; }
 
   .field { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; }
-  .field > label { color: #c9c7d4; }
+  .field > label, .field > .label { color: #c9c7d4; }
   .field small { grid-column: 2; color: var(--muted); font-size: 11.5px; margin-top: -6px; }
   input[type=text] { width: 100%; padding: 8px 10px; border-radius: 10px; background: var(--field); border: 1px solid var(--line);
     font: 12px ui-monospace, "Ubuntu Mono", monospace; }
@@ -68,7 +68,7 @@
     <div class="title"><b>Settings</b><kbd>Esc</kbd></div>
 
     <div class="field">
-      <label>Mascot</label>
+      <span class="label">Mascot</span>
       <div class="seg" id="mascot"><button type="button" data-v="novi">Novi (3D)</button><button type="button" data-v="svg">Classic</button></div>
     </div>
     <div class="field">
@@ -87,8 +87,8 @@
       <small>"Open workspace" runs it with the folder, e.g. <code>code</code>. Empty opens the file manager.</small>
     </div>
     <div class="field">
-      <label>Dance to music</label>
-      <button type="button" class="switch" id="music" role="switch"></button>
+      <span class="label">Dance to music</span>
+      <button type="button" class="switch" id="music" role="switch" aria-checked="true" aria-label="Dance to music"></button>
     </div>
 
     <div class="hooks" id="hooks"></div>
@@ -139,7 +139,7 @@
       this.el.terminal.value = values.terminal;
       this.el.terminal.placeholder = T.autoTerminal(detectedTerminal);
       this.el.editor.value = values.editor;
-      for (const key of ['shortcut', 'terminal', 'editor']) this.el[key].disabled = locked.includes(key);
+      for (const key of ['shortcut', 'terminal', 'editor']) { this.el[key].disabled = locked.includes(key); }
       this.el.save.disabled = false;
       this.#renderMascot();
       this.#renderMusic();
@@ -174,7 +174,7 @@
       const ext = this.state.extension || {};
       const box = this.el.extension;
       box.hidden = !ext.gnome;
-      if (!ext.gnome) return;
+      if (!ext.gnome) { return; }
       const relogin = result?.needsRelogin || (ext.installed && !ext.state);
       const ok = !result && ext.state === 'ACTIVE' || result && !result.needsRelogin;
       const text = ok ? T.extOk : relogin ? T.extRelogin : T.extOff;
@@ -195,8 +195,8 @@
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
-      if (res?.ok) this.api.close();
-      else this.#message(res?.error || 'Could not save', 'error');
+      if (res?.ok) { this.api.close(); }
+      else { this.#message(res?.error || 'Could not save', 'error'); }
     }
 
     #bind() {
@@ -209,32 +209,32 @@
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
       this.el.extension.addEventListener('click', async e => {
         const b = e.target.closest('#enableExt');
-        if (!b) return;
+        if (!b) { return; }
         b.disabled = true;
         b.textContent = T.enabling;
         const res = await this.api?.installExtension();
-        if (res?.ok) this.#renderExtension(res);
+        if (res?.ok) { this.#renderExtension(res); }
         else { b.disabled = false; b.textContent = T.enable; this.#message(res?.error || 'Could not enable the extension', 'error'); }
       });
       this.el.hooks.addEventListener('click', async e => {
         const b = e.target.closest('#install');
-        if (!b) return;
+        if (!b) { return; }
         b.disabled = true;
         b.textContent = T.installing;
         const res = await this.api?.installHooks();
-        if (res?.ok) this.#renderHooks(T.installed);
+        if (res?.ok) { this.#renderHooks(T.installed); }
         else { b.disabled = false; b.textContent = T.install; this.#message(res?.error || 'Could not install hooks', 'error'); }
       });
       document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') this.api?.close();
+        if (e.key === 'Escape') { this.api?.close(); }
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.#save(); }
       });
     }
   }
 
   const view = new SettingsView(window.settingsAPI);
-  if (window.settingsAPI) settingsAPI.onShow(state => view.show(state));
-  else window.__demo = view;
+  if (window.settingsAPI) { settingsAPI.onShow(state => view.show(state)); }
+  else { window.__demo = view; }
 </script>
 </body>
 </html>

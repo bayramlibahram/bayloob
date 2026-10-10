@@ -143,8 +143,8 @@
       <div class="ic agent" id="managerMascot"></div>
       <span class="brand">bayloob</span><span class="sep"></span><span class="sub">Workspace control</span>
       <div class="status" id="status"></div>
-      <button class="square" id="settings" title="Settings">
-        <svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      <button type="button" class="square" id="settings" title="Settings">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
       </button>
     </header>
 
@@ -152,11 +152,11 @@
       <nav class="side" id="side"></nav>
       <section class="listcol">
         <div class="listhead">
-          <h2 id="listTitle"></h2>
-          <label class="search">
-            <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <input id="search" placeholder="Search apps…" spellcheck="false">
-          </label>
+          <h2 id="listTitle">Running apps</h2>
+          <div class="search">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="search" aria-label="Search" placeholder="Search apps…" spellcheck="false">
+          </div>
         </div>
         <div class="rows" id="rows"></div>
       </section>
@@ -164,12 +164,12 @@
     </div>
 
     <footer class="foot">
-      <button class="btn" id="launch">
-        <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Launch app
+      <button type="button" class="btn" id="launch">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Launch app
       </button>
       <div class="meters" id="meters"></div>
-      <button class="btn" id="openWorkspace">
-        <svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Open workspace
+      <button type="button" class="btn" id="openWorkspace">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Open workspace
       </button>
     </footer>
   </div>
@@ -244,8 +244,8 @@
       status: s.state, category: 'agent', data: s };
   }
   function iconHtml(item, size = '') {
-    if (item.kind === 'agent') return `<div class="ic agent ${size}">${Agent.thumb(item.data.agent)}</div>`;
-    if (item.data?.icon) return `<div class="ic ${size}"><img src="${item.data.icon}" alt=""></div>`;
+    if (item.kind === 'agent') { return `<div class="ic agent ${size}">${Agent.thumb(item.data.agent)}</div>`; }
+    if (item.data?.icon) { return `<div class="ic ${size}"><img src="${item.data.icon}" alt=""></div>`; }
     return `<div class="ic glyph ${size}">${item.kind === 'docker' ? ICONS.box : ICONS.app}</div>`;
   }
 
@@ -295,8 +295,8 @@
     #items(section = this.section) {
       const agents = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt).map(agentItem);
       const apps = (this.apps || []).map(appItem);
-      if (section === 'agents') return agents;
-      if (section === 'overview') return [...apps, ...agents];
+      if (section === 'agents') { return agents; }
+      if (section === 'overview') { return [...apps, ...agents]; }
       return apps.filter(i => SECTION_OF[i.category] === section);
     }
 
@@ -342,7 +342,7 @@
       this.el.listTitle.textContent = this.launchMode ? T.launchTitle : T.listTitle[this.section];
       this.el.search.placeholder = this.launchMode ? T.searchInstalled : T.searchApps;
       this.el.launch.classList.toggle('on', this.launchMode);
-      if (this.launchMode) return this.#renderLaunchable();
+      if (this.launchMode) { return this.#renderLaunchable(); }
       if (this.apps === null && this.section !== 'agents') { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
       const items = this.#visible();
       if (!items.length) { this.el.rows.innerHTML = `<div class="empty">${this.query ? T.noMatch(esc(this.query)) : T.empty}</div>`; return; }
@@ -379,7 +379,7 @@
     }
 
     #history(list) {
-      if (!list?.length) return `<div class="empty" style="padding:10px 0;text-align:left">${T.nothingYet}</div>`;
+      if (!list?.length) { return `<div class="empty" style="padding:10px 0;text-align:left">${T.nothingYet}</div>`; }
       return `<ul class="timeline plain">${list.slice(0, 6).map(h => `<li><span class="t" title="${esc(h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>`;
     }
 
@@ -451,12 +451,12 @@
 
     #renderMeters() {
       let cpu = null, memory = null;
-      if (this.section === 'agents' && !this.launchMode) ({ cpu, memory } = this.stats || {});
+      if (this.section === 'agents' && !this.launchMode) { ({ cpu, memory } = this.stats || {}); }
       else {
         for (const i of this.#items()) {
-          if (i.kind !== 'app') continue;
-          if (i.data.cpu != null) cpu = (cpu || 0) + i.data.cpu;
-          if (i.data.memory != null) memory = (memory || 0) + i.data.memory;
+          if (i.kind !== 'app') { continue; }
+          if (i.data.cpu != null) { cpu = (cpu || 0) + i.data.cpu; }
+          if (i.data.memory != null) { memory = (memory || 0) + i.data.memory; }
         }
       }
       this.el.meters.title = T.metersTip;
@@ -473,12 +473,12 @@
 
     async #run(promise) {
       const r = await promise;
-      if (r && r.ok === false && r.error) this.#flash(r.error);
+      if (r && r.ok === false && r.error) { this.#flash(r.error); }
     }
 
     #primary(item) {
-      if (item.kind === 'agent') return this.api?.focus(item.id);
-      if (item.kind === 'app') return this.#run(this.api?.focusApp(item.id));
+      if (item.kind === 'agent') { return this.api?.focus(item.id); }
+      if (item.kind === 'app') { return this.#run(this.api?.focusApp(item.id)); }
     }
 
     async #toggleLaunch() {
@@ -495,7 +495,7 @@
 
     #move(step) {
       const items = this.#visible();
-      if (!items.length) return;
+      if (!items.length) { return; }
       const i = Math.max(0, items.findIndex(x => x.key === this.current?.key));
       this.selected = items[(i + step + items.length) % items.length].key;
       this.render();
@@ -504,7 +504,7 @@
     #bind() {
       this.el.side.addEventListener('click', e => {
         const b = e.target.closest('[data-section]');
-        if (!b) return;
+        if (!b) { return; }
         this.section = b.dataset.section;
         this.launchMode = false;
         this.selected = null;
@@ -518,26 +518,26 @@
           return this.#run(this.api?.launchApp(launch.dataset.launch));
         }
         const row = e.target.closest('.row[data-key]');
-        if (!row) return;
+        if (!row) { return; }
         this.selected = row.dataset.key;
         const item = this.current;
         const act = e.target.closest('[data-act]')?.dataset.act;
-        if (act === 'primary') this.#primary(item);
-        if (act === 'menu') item.kind === 'agent' ? this.api?.sessionMenu(item.id) : this.api?.appMenu(item.id);
+        if (act === 'primary') { this.#primary(item); }
+        if (act === 'menu') { item.kind === 'agent' ? this.api?.sessionMenu(item.id) : this.api?.appMenu(item.id); }
         this.render();
       });
       this.el.detail.addEventListener('click', e => {
         const item = this.current;
-        if (!item) return;
+        if (!item) { return; }
         const win = e.target.closest('[data-window]');
-        if (win) return this.#run(this.api?.focusApp(item.id, win.dataset.window));
+        if (win) { return this.#run(this.api?.focusApp(item.id, win.dataset.window)); }
         const docker = e.target.closest('[data-docker]');
         if (docker) { docker.disabled = true; return this.#run(this.api?.docker(docker.dataset.docker, docker.dataset.id)); }
         const act = e.target.closest('[data-act]')?.dataset.act;
-        if (act === 'focus') this.#run(this.api?.focusApp(item.id));
-        if (act === 'newtab') this.#run(this.api?.newTab(item.id));
-        if (act === 'newwindow') this.#run(this.api?.launchApp(item.id));
-        if (act === 'terminal') this.api?.focus(item.id);
+        if (act === 'focus') { this.#run(this.api?.focusApp(item.id)); }
+        if (act === 'newtab') { this.#run(this.api?.newTab(item.id)); }
+        if (act === 'newwindow') { this.#run(this.api?.launchApp(item.id)); }
+        if (act === 'terminal') { this.api?.focus(item.id); }
       });
       this.el.search.addEventListener('input', () => { this.query = this.el.search.value; this.selected = null; this.render(); });
       this.el.launch.addEventListener('click', () => this.#toggleLaunch());
@@ -546,10 +546,10 @@
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
           if (this.launchMode || this.query) { this.launchMode = false; this.query = ''; this.el.search.value = ''; this.render(); }
-          else this.api?.close();
+          else { this.api?.close(); }
         } else if (e.key === 'ArrowDown') { e.preventDefault(); this.#move(1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); this.#move(-1); }
-        else if (e.key === 'Enter' && this.current && !this.launchMode) this.#primary(this.current);
+        else if (e.key === 'Enter' && this.current && !this.launchMode) { this.#primary(this.current); }
       });
     }
   }
