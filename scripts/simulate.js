@@ -2,6 +2,7 @@
 // Talks to a running Bayloob like the agents' hooks do, so each feature can be seen without a real agent.
 //   bun scripts/simulate.js          one session through every state (default)
 //   bun scripts/simulate.js auth     the local API refuses requests without the token
+//   bun scripts/simulate.js multi    four agents at once (stacked tiles) and a to-do list ("2 of 5")
 const { execFileSync } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
@@ -27,6 +28,50 @@ async function states() {
     console.log("→", s.hook_event_name, s.tool_name || "");
     await sleep(2000);
   }
+}
+
+const send = (agent, ev) =>
+  execFileSync(process.execPath, [hook, agent], { input: JSON.stringify(ev) });
+
+async function multi() {
+  const todos = done =>
+    Array.from({ length: 5 }, (_, i) => ({
+      content: `Step ${i + 1}`,
+      status: i < done ? "completed" : "pending",
+    }));
+  const sessions = [
+    ["claude", { session_id: "demo-shop", cwd: "/projects/shop" }],
+    ["codex", { session_id: "demo-api", cwd: "/projects/api" }],
+    ["claude", { session_id: "demo-blog", cwd: "/projects/blog" }],
+    ["claude", { session_id: "demo-docs", cwd: "/projects/docs" }],
+  ];
+  for (const [agent, s] of sessions) {
+    send(agent, { ...s, hook_event_name: "SessionStart" });
+  }
+  send("claude", {
+    ...sessions[2][1],
+    hook_event_name: "Stop",
+    last_assistant_message: "Added pagination.",
+  });
+  send("codex", { ...sessions[1][1], hook_event_name: "UserPromptSubmit" });
+  console.log("→ four sessions: the pill shows stacked tiles");
+  for (let done = 0; done <= 5; done++) {
+    const shop = sessions[0][1];
+    send("claude", { ...shop, hook_event_name: "PreToolUse", tool_name: "Edit" });
+    send("claude", {
+      ...shop,
+      hook_event_name: "PostToolUse",
+      tool_name: "TodoWrite",
+      tool_input: { todos: todos(done) },
+    });
+    console.log(`→ shop: ${done} of 5`);
+    await sleep(1500);
+  }
+  send("claude", {
+    ...sessions[0][1],
+    hook_event_name: "Stop",
+    last_assistant_message: "All five steps done.",
+  });
 }
 
 // GET /state with the given token header (or none); resolves with the HTTP status
@@ -59,7 +104,7 @@ async function auth() {
   }
 }
 
-const scenarios = { states, auth };
+const scenarios = { states, auth, multi };
 const name = process.argv[2] || "states";
 if (!scenarios[name]) {
   console.error(`Unknown scenario "${name}". Try: ${Object.keys(scenarios).join(", ")}`);

@@ -7,8 +7,8 @@ Status: **done** = works as specified · **partial** = exists, gaps listed · **
 
 | # | Feature | Status | Where in code | What's missing |
 |---|---|---|---|---|
-| F1 | Pill | partial | `src/renderer/overlay/index.html:246` (status chip), tile/chevron in the same bar | Stacked mini tiles when several agents are active (today: count `2` + the most urgent agent) |
-| F2 | Progress bar | partial | `src/main/modules/sessions/todo-progress.js:4`, `overlay/index.html:290` | `2 of 5` is only a tooltip — no visible label |
+| F1 | Pill | done | `overlay/index.html` (`#stackHtml`, `.stack`) | — (stacked tiles added after the audit) |
+| F2 | Progress bar | done | `sessions/todo-progress.js`, `overlay/index.html` (`.plabel`) | — (label added after the audit) |
 | F3 | Session list | done | `overlay/index.html:780` (diff), `sessions/token-usage.js:35`, `sessions/session-output.js:84`, queue badge `overlay/index.html:286` | — |
 | F4 | Agent colors | partial | `src/main/modules/agents/agents.js:5`; packs `src/assets/packs/{purple,coral,teal,blue,silver}` | **Grok** not in the registry (silver pack exists, CLI not installed → flags unverifiable); no "amber = other" fallback |
 | F5 | Ask Bayloob | done | `src/renderer/launcher/index.html:237` (Task → Agent → Confirm), `agents/session-launcher.js:64` (tmux, argv not shell), `infrastructure/system/git.js:45` (worktree) | tmux prefix is `bl-`, worktree `<repo>-<agent>-MMDD-HHMM` on `bayloob/<name>` (spec: `bayloob-<id>`) — naming only |
