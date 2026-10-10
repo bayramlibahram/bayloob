@@ -30,17 +30,12 @@
     "electron": "33.4.11",
     "electron-builder": "25.1.8"
   },
-  "trustedDependencies": [
-    "electron"
-  ],
+  "trustedDependencies": ["electron"],
   "build": {
     "appId": "com.baynovix.bayloob",
     "productName": "Bayloob",
     "executableName": "bayloob",
-    "files": [
-      "src/**/*",
-      "package.json"
-    ],
+    "files": ["src/**/*", "package.json"],
     "extraResources": [
       {
         "from": "resources/hooks",
@@ -60,9 +55,7 @@
       "buildResources": "build"
     },
     "linux": {
-      "target": [
-        "deb"
-      ],
+      "target": ["deb"],
       "category": "Development",
       "icon": "build/icon.png",
       "synopsis": "Status overlay for AI coding agents",
@@ -73,9 +66,7 @@
       "compression": "xz",
       "afterInstall": "build/after-install.sh",
       "afterRemove": "build/after-remove.sh",
-      "recommends": [
-        "tmux"
-      ]
+      "recommends": ["tmux"]
     },
     "publish": null
   }
