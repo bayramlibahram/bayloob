@@ -58,6 +58,12 @@ class Git {
     return dir;
   }
 
+  /** The checked-out branch ("HEAD" when detached), or null outside a repo. */
+  async branch(cwd) {
+    const out = await git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    return out === null ? null : out.trim() || null;
+  }
+
   /** { files, added, deleted, untracked } against HEAD, or null when `cwd` isn't in a repo with commits. */
   async changes(cwd) {
     const stat = await git(cwd, ["diff", "--shortstat", "HEAD"]);

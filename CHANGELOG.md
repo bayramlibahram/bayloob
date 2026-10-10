@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- **New task** dialog (Ask Bayloob, tray, global shortcut, `Ctrl+K → New task…`): ① Project (recent folders with
+  branch, uncommitted changes, stack and test command) ② Category (Single agent · Agentic workflow · Analysis &
+  operations, remembered per project) ③ Configure ④ Confirm. **Single agent** starts the session exactly as the
+  old Ask Bayloob dialog did. Workflow and Analysis show the plan (sentence, stage diagram, gates, parallel load)
+  and are stored as drafts in `~/.config/Bayloob/tasks/<id>/config.json`; Start stays disabled until the engine
+  lands. Every change is kept as a draft, so closing the dialog loses nothing ("Start over" discards it).
 - Workspace panel navigation: **Inbox** (agents waiting on you — approvals, questions, terminal-only
   questions, file clashes, finished turns — with a red count), **Agents** grouped by project, **Tasks**
   (empty until workflows land), then the machine sections and Settings. Opens on the Inbox when it has

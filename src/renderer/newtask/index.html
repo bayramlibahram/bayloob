@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>New task</title>
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="../shared/attachments.css">
+<style>
+  :root {
+    --glass: rgba(18, 17, 23, 0.98);
+    --field: rgb(var(--ink) / 0.05);
+    --raised: rgb(var(--ink) / 0.035);
+    --raised-2: rgb(var(--ink) / 0.07);
+    --line: rgb(var(--ink) / 0.09);
+    --line-strong: rgb(var(--ink) / 0.16);
+    --text: #f2f2f5;
+    --muted: #9a99a6;
+    --brand: #8b5cff;
+    --primary-bg: #7444f2;
+    --primary-fg: #ffffff;
+    --thinking: #6aa8ff;
+    --working: #ffb547;
+    --waiting: #ff6b78;
+    --done: #4fd59a;
+    --cat-single: #8b5cff;
+    --cat-workflow: #b28bff;
+    --cat-analysis: #6aa8ff;
+  }
+  :root[data-theme="light"] { --primary-bg: #6a3fe0; --cat-single: #6a3fe0; --cat-workflow: #5a32d0; --cat-analysis: #1d5fd6; --muted: #625f78; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; height: 100%; overflow: hidden;
+    font: 500 13px/1.45 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; }
+  button, input, textarea, select { font: inherit; color: inherit; border: 0; background: none; outline: none; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 2px solid color-mix(in srgb, var(--brand) 70%, transparent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .mono, code { font-family: ui-monospace, "Ubuntu Mono", monospace; }
+  .muted { color: var(--muted); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--ink) / .12); border-radius: 3px; }
+  kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--line-strong);
+    font: 600 10.5px/16px ui-monospace, monospace; color: var(--soft); text-align: center; }
+
+  .dialog { margin: 10px; max-height: 720px; display: flex; flex-direction: column; border-radius: 18px; background: var(--glass); border: 1px solid var(--line);
+    box-shadow: 0 18px 44px rgb(var(--shade) / calc(.5 * var(--shade-k))); overflow: hidden; animation: pop .18s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  .dh { display: flex; align-items: center; gap: 12px; padding: 14px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+  .dh .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .dh .t b { font-size: 15px; font-weight: 700; }
+  .dh .t span { color: var(--muted); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .steps { display: flex; align-items: center; gap: 4px; list-style: none; }
+  .steps li { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .steps li + li::before { content: ''; width: 12px; height: 1px; background: var(--line-strong); margin-right: 2px; }
+  .steps li i { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font: 700 10px/1 system-ui; border: 1px solid var(--line-strong); font-style: normal; }
+  .steps li[aria-current="step"] { color: var(--text); }
+  .steps li[aria-current="step"] i { background: var(--primary-bg); border-color: var(--primary-bg); color: var(--primary-fg); }
+  .steps li.past i { background: color-mix(in srgb, var(--brand) 18%, transparent); border-color: color-mix(in srgb, var(--brand) 45%, transparent); color: var(--brand-soft); }
+  .iconbtn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); flex: none; }
+  .iconbtn:hover { background: rgb(var(--ink) / .08); color: var(--text); }
+  .db { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; }
+  .db > * { flex-shrink: 0; }
+  .df { display: flex; align-items: center; gap: 8px; padding: 12px 18px 14px; border-top: 1px solid var(--line); }
+  .df .msg { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .df .msg.error { color: var(--waiting); }
+  .btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border-radius: 10px; background: rgb(var(--ink) / .08); font-weight: 600; white-space: nowrap; }
+  .btn:hover { background: rgb(var(--ink) / .14); }
+  .btn.primary { background: var(--primary-bg); color: var(--primary-fg); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.ghost { background: none; color: var(--soft); }
+  .btn.ghost:hover { background: rgb(var(--ink) / .07); }
+  .btn.sm { height: 26px; padding: 0 9px; font-size: 12px; border-radius: 8px; }
+  .btn:disabled { opacity: .45; filter: none; }
+  .label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; min-width: 0; }
+  .note { display: flex; gap: 8px; align-items: flex-start; padding: 8px 11px; border-radius: 10px; font-size: 12.5px; color: var(--soft);
+    background: color-mix(in srgb, var(--c, var(--working)) 10%, transparent); border: 1px solid color-mix(in srgb, var(--c, var(--working)) 32%, transparent); }
+  .note b { color: var(--text); }
+  .note .i { color: var(--c, var(--working)); margin-top: 1px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--raised-2); color: var(--soft); white-space: nowrap; }
+  .badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 5px; font: 700 10px/1 ui-monospace, monospace;
+    letter-spacing: .03em; text-transform: uppercase; color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); }
+  .badge.writes { --c: var(--working); } .badge.ro { --c: var(--thinking); } .badge.plan { --c: var(--cat-workflow); }
+  .m { width: 30px; height: 30px; flex: none; position: relative; }
+  .m.s { width: 22px; height: 22px; }
+  .thumb { position: relative; width: 100%; height: 100%; }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .stack { display: inline-flex; }
+  .stack .m + .m { margin-left: -9px; }
+
+  /* ① Project */
+  .field { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 6px 0 10px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); }
+  .field:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
+  .field input { flex: 1; min-width: 0; }
+  .field input::placeholder, textarea::placeholder { color: var(--muted); }
+  .plist { display: flex; flex-direction: column; gap: 3px; max-height: 236px; overflow-y: auto; }
+  .prow { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 11px; border: 1.5px solid transparent; text-align: left; }
+  .prow:hover { background: var(--raised-2); }
+  .prow[aria-selected="true"] { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 9%, transparent); }
+  .prow .nm { display: flex; flex-direction: column; min-width: 0; }
+  .prow .nm b { font-weight: 650; }
+  .prow .nm span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow .meta { display: flex; gap: 6px; align-items: center; }
+  .glyph { display: inline-grid; place-items: center; min-width: 22px; height: 20px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--line-strong); font: 700 9.5px/1 ui-monospace, monospace; color: var(--soft); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--done); }
+  .dot.dirty { background: var(--working); }
+  .projinfo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .projinfo div { padding: 9px 11px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .projinfo b { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .skel { display: inline-block; width: 70px; height: 12px; border-radius: 4px; background: var(--raised-2); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .5; } }
+
+  /* ② Category */
+  .cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .cat { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 16px 14px 14px; border-radius: 14px; text-align: left; border: 1.5px solid var(--line); background: var(--raised); min-height: 196px; }
+  .cat:hover:not(:disabled) { background: var(--raised-2); }
+  .cat .ci { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+  .cat .ci .i { width: 20px; height: 20px; }
+  .cat b { font-size: 14px; }
+  .cat p { color: var(--soft); font-size: 12.5px; flex: 1; }
+  .cat .safe { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+  .cat kbd { position: absolute; top: 12px; right: 12px; }
+  .cat[aria-checked="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 8%, transparent); }
+  .cat[aria-checked="true"] kbd { background: var(--c); color: var(--glass); border-color: var(--c); }
+  .cat:disabled { opacity: .5; }
+
+  /* ③ Configure */
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preset { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12.5px; font-weight: 600; color: var(--soft); }
+  .preset:hover { background: var(--raised-2); }
+  .preset[aria-pressed="true"] { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--text); }
+  .preset small { font-weight: 500; color: var(--muted); margin-left: 4px; }
+  .arows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .arow { display: grid; grid-template-columns: 30px 1fr auto 104px auto; align-items: center; gap: 10px; padding: 7px 12px; }
+  .arow + .arow { border-top: 1px solid var(--line); }
+  .arow .nm { display: flex; flex-direction: column; }
+  .arow .nm small { font-size: 11.5px; color: var(--muted); }
+  .arow .cap { font-size: 11.5px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .arow .cap.q { color: var(--working); }
+  .arow.off { opacity: .5; }
+  .arow.pick { grid-template-columns: 30px 1fr auto; text-align: left; border: 0; }
+  .arow.pick:hover:not(:disabled) { background: var(--raised-2); }
+  .arow.pick[aria-checked="true"] { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+  .arow.pick .tick { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; color: var(--primary-fg); }
+  .arow.pick[aria-checked="true"] .tick { background: var(--primary-bg); border-color: var(--primary-bg); }
+  .stepper { display: inline-flex; align-items: center; border-radius: 9px; border: 1px solid var(--line); background: var(--raised-2); }
+  .stepper button { width: 28px; height: 28px; display: grid; place-items: center; color: var(--soft); }
+  .stepper button:hover:not(:disabled) { color: var(--text); background: rgb(var(--ink) / .09); }
+  .stepper button:disabled { opacity: .35; }
+  .stepper output { min-width: 22px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  select.sel { height: 30px; padding: 0 26px 0 10px; border-radius: 8px; background-color: var(--raised-2); border: 1px solid var(--line); appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 13px) 13px, calc(100% - 9px) 13px; background-size: 4px 4px; background-repeat: no-repeat; }
+  select.sel option { background: var(--surface-solid); color: var(--text); }
+  .composer { border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
+  .composer:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
+  .composer textarea { display: block; width: 100%; resize: none; padding: 10px 12px 6px; line-height: 1.5; min-height: 64px; max-height: 200px; overflow-y: auto; }
+  .composer textarea.code { font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; }
+  .composer .atts { padding: 2px 12px 4px; }
+  .tools { display: flex; align-items: center; gap: 6px; padding: 2px 8px 7px 8px; }
+  .tools .ghost { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px; color: var(--soft); font-size: 12px; font-weight: 600; }
+  .tools .ghost:hover { background: rgb(var(--ink) / .08); color: var(--text); }
+  .tools .ghost svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .tools .count { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .toggle { display: flex; align-items: center; gap: 10px; text-align: left; }
+  .toggle .txt { flex: 1; }
+  .toggle .txt small { color: var(--muted); }
+  .switch { width: 32px; height: 18px; border-radius: 9px; background: rgb(var(--ink) / .18); position: relative; flex: none; transition: background .2s; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .toggle[aria-checked="true"] .switch { background: var(--primary-bg); }
+  .toggle[aria-checked="true"] .switch::after { transform: translateX(14px); }
+  .toggle:disabled { opacity: .5; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tchip { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12px; color: var(--soft); }
+  .tchip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--text); }
+  .sources { display: flex; flex-direction: column; gap: 4px; }
+  .sources li { list-style: none; display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; border-radius: 9px; background: var(--raised); border: 1px solid var(--line); font: 12px ui-monospace, monospace; }
+  .sources li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .expander { display: inline-flex; align-items: center; gap: 8px; color: var(--soft); font-weight: 600; align-self: flex-start; }
+  .expander:disabled { opacity: .55; }
+  .hintline { font-size: 12px; color: var(--muted); }
+  .hintline.warn { color: var(--working); }
+
+  /* ④ Confirm */
+  .sentence { font-size: 14px; line-height: 1.55; color: var(--soft); }
+  .sentence b { color: var(--text); }
+  .diagram { display: flex; align-items: center; padding: 14px 12px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); overflow-x: auto; }
+  .node { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 84px; }
+  .node .box { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 9px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--glass); min-width: 78px; }
+  .node .box.you { border-style: dashed; border-color: var(--brand); }
+  .node .box .i.big { width: 26px; height: 26px; color: var(--soft); }
+  .node small { font-size: 10.5px; color: var(--muted); text-align: center; }
+  .node b { font-size: 12px; white-space: nowrap; }
+  .link { flex: 1; min-width: 14px; height: 1px; background: var(--line-strong); position: relative; top: -10px; }
+  .gate { width: 9px; height: 9px; transform: rotate(45deg); border: 1.5px solid var(--brand); background: var(--glass); position: relative; top: -10px; margin: 0 -2px; flex: none; }
+  .glist { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .glist li { display: flex; align-items: center; gap: 9px; color: var(--soft); }
+  .glist .gate { top: 0; margin: 0 2px; }
+  .loadrow { display: grid; grid-template-columns: 120px 1fr 130px; align-items: center; gap: 12px; font-size: 12.5px; }
+  .loadrow .r { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; border-radius: 3px; background: var(--raised-2); overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; background: var(--c); }
+  .bar i.busy { opacity: .45; }
+  .bar i.q { background: repeating-linear-gradient(45deg, var(--working) 0 4px, transparent 4px 7px); }
+  .review { border-radius: 14px; border: 1px solid var(--line); background: var(--raised); overflow: hidden; }
+  .review .rr { display: flex; align-items: center; gap: 12px; padding: 9px 14px; }
+  .review .rr + .rr { border-top: 1px solid var(--line); }
+  .review .k { width: 84px; flex: none; color: var(--muted); font-size: 12px; }
+  .review .v { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; overflow-wrap: anywhere; }
+  .review .v code { font: 12.5px ui-monospace, "Ubuntu Mono", monospace; }
+  .review .v small { color: var(--muted); font-size: 11.5px; }
+  .review .prompt { padding: 10px 14px 12px; border-top: 1px solid var(--line); }
+  .review .prompt pre { margin-top: 6px; max-height: 140px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; color: var(--softer); }
+  .review .prompt pre.empty { font: italic 12.5px/1.5 inherit; color: var(--muted); }
+</style>
+</head>
+<body>
+  <section class="dialog" id="dialog" role="dialog" aria-modal="true" aria-labelledby="title">
+    <header class="dh">
+      <div class="t"><b id="title">New task</b><span id="subtitle"></span></div>
+      <ol class="steps" id="steps" aria-label="Steps"></ol>
+      <button type="button" class="iconbtn" id="close" title="Close (Esc) — your draft is kept" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
+    <div class="db" id="body"></div>
+    <footer class="df">
+      <div class="msg" id="msg" role="status" aria-live="polite"></div>
+      <button type="button" class="btn ghost" id="startOver" hidden title="Discard this draft and start again">Start over</button>
+      <button type="button" class="btn" id="back">Cancel</button>
+      <span id="nextWrap"><button type="button" class="btn primary" id="next">Next</button></span>
+    </footer>
+  </section>
+
+<script src="../shared/ui-common.js"></script>
+<script src="../shared/attachments.js"></script>
+<script src="../../shared/task-shape.js"></script>
+<script>
+  const T = {
+    title: 'New task', steps: ['Project', 'Category', 'Configure', 'Confirm'],
+    subProject: 'Where should the agents work?',
+    next: 'Next', start: 'Start', back: 'Back', cancel: 'Cancel',
+    startLater: 'Available after step 03/04 — the draft is saved',
+    hintNext: '<kbd>⏎</kbd> next · <kbd>⇧⏎</kbd> new line · <kbd>Alt ←</kbd> back',
+    hintCat: '<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick · <kbd>⏎</kbd> next',
+    hintStart: '<kbd>⏎</kbd> start · <kbd>Esc</kbd> close',
+    draftSaved: 'Draft saved — it’s here when you come back',
+    restored: 'Picked up your draft', prefilled: 'Pasted the error you copied',
+    search: 'Search recent projects, or type a folder path…', choose: 'Choose folder…', useFolder: 'Use this folder',
+    noRecent: 'No recent projects — choose a folder', noMatch: 'No recent project matches',
+    git: 'Git', stack: 'Stack', tests: 'Tests', notDetected: 'not detected', noGit: 'not a git repository', missing: 'folder not found',
+    dirty: n => `<b>${n} change${n === 1 ? '' : 's'} not committed</b> — new worktrees start from the last commit.`,
+    noGitNote: '<b>Not a git repository.</b> Single agent and Analysis work here; Agentic workflow needs git.',
+    cats: {
+      single: { title: 'Single agent', desc: 'One agent, one prompt — what Ask Bayloob does today.', safe: 'Normal permissions — you approve in the pill' },
+      workflow: { title: 'Agentic workflow', desc: 'Several agents plan, build, test and review a change. An Arbiter recommends; you merge.', safe: 'Writes in worktrees — you merge' },
+      analysis: { title: 'Analysis & operations', desc: 'Agents investigate and report. Optionally they propose commands to run.', safe: 'Read-only — commands run only when you click' },
+    },
+    lastUsed: (p, c) => `Last used for <b>${p}</b>: ${c}.`, needsGit: 'Needs a git repository',
+    agent: 'Agent', prompt: 'Prompt', promptPh: 'What should be done?', paste: 'Paste clipboard', attach: 'Attach',
+    attachTip: 'Attach files — or drop them here, or paste a screenshot (Ctrl+V)', pasteTip: 'Paste what you copied — an error becomes a fix-it prompt',
+    chars: n => `${n} chars`, emptyClipboard: 'The clipboard is empty', attaching: 'Wait — the files are still being attached',
+    worktree: 'In a new git worktree', worktreeSub: 'its own copy on a bayloob/… branch', openIn: 'Open in', notInstalled: 'Not installed',
+    builders: 'Builders · each in its own worktree', reviewers: 'Reviewers · read-only, on the current branch', analysts: 'Analysts · read-only, in parallel',
+    planner: 'Planner', reviewer: 'Reviewer', arbiter: 'Arbiter', task: 'Task', taskPh: 'Describe the change — what, where, and how to know it works.',
+    question: 'Question', questionPh: 'What should the analysts find out?',
+    free: (f, m) => `${f} free of ${m}`, queue: n => `${n} will queue`, word: { builder: 'builder', reviewer: 'reviewer', analyst: 'analyst' },
+    arbiterOk: 'A different agent — less likely to prefer its own work', arbiterSame: 'Same agent as one doing the work — it may prefer its own',
+    customize: 'Customize stages…', customizeTip: 'Available after step 04 (workflow builder)',
+    sources: 'Log sources · collected read-only into the task', sourcePh: 'e.g. journalctl -u php8.3-fpm --since "-6h"', add: 'Add',
+    opsPlan: 'Also prepare an operations plan', opsSub: 'commands are only proposed; each runs when you click',
+    gatesCap: 'Gates — where you’ll be asked', load: 'Parallel load',
+    rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rTerminal: 'Terminal', rPrompt: 'Prompt', rFiles: 'Files', edit: 'Edit',
+    inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
+    noPrompt: 'No prompt — the agent starts and waits for you', starting: 'Starting…', wrong: 'Something went wrong',
+  };
+  const ICON = {
+    single: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01"/>',
+    workflow: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H12a3 3 0 0 1 3 3v.5M8.5 18H12a3 3 0 0 0 3-3v-.5"/>',
+    analysis: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5M8.5 11h5"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', branch: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-11 7"/>',
+    shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>', alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17h.01"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>', minus: '<path d="M5 12h14"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+    next: '<path d="M5 12h14M13 6l6 6-6 6"/>', play: '<path d="M7 5v14l11-7Z"/>', check: '<path d="m5 12 5 5L20 7"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16Z"/>', test: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>', file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/>',
+    term: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>', merge: '<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 8v8M8 6c6 0 10 4 10 10"/>',
+    clip: '<path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/>', paste: '<rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/>',
+  };
+  const I = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n] || ''}</svg>`;
+  const CATS = TaskShape.CATEGORIES;
+  const CAT_COLOR = { single: 'var(--cat-single)', workflow: 'var(--cat-workflow)', analysis: 'var(--cat-analysis)' };
+  const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
+  const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
+  const list = a => a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
+  const badge = mode => mode === 'writes' ? '<span class="badge writes">writes</span>' : mode === 'plan' ? '<span class="badge plan">plan</span>' : mode === 'read-only' ? '<span class="badge ro">read-only</span>' : '';
+
+  /**
+   * The New task dialog. Single agent ends in the same launch as the old Ask Bayloob dialog; Agentic workflow
+   * and Analysis are saved as drafts (Start stays disabled until the engine exists). Every change is saved as a
+   * draft, so closing the dialog loses nothing.
+   */
+  class NewTaskView {
+    state = null;
+    step = 1;
+    cfg = null;
+    draftId = null;
+    info = null;          // the selected project's git / stack / tests
+    infos = new Map();    // cwd → info, for the recent list
+    query = '';
+    busy = false;
+    #saveTimer = 0;
+
+    constructor(api) {
+      this.api = api;
+      const $ = id => document.getElementById(id);
+      this.el = { dialog: $('dialog'), subtitle: $('subtitle'), steps: $('steps'), body: $('body'), msg: $('msg'), back: $('back'), next: $('next'),
+        nextWrap: $('nextWrap'), close: $('close'), startOver: $('startOver') };
+      // Files attached to a single agent's prompt; the chips live in the composer, which is rebuilt on render
+      this.att = new Attachments({ api: api.uploads, list: null, onChange: () => this.#fit(), onError: t => this.#message(t, true) });
+      Attachments.guardWindow();
+      this.#bind();
+    }
+
+    get agents() { return this.state.agents; }
+    get installed() { return Object.keys(this.agents).filter(a => this.agents[a].installed); }
+    get shaped() { return TaskShape.normalize(this.cfg, Object.keys(this.agents)); }
+    get hasGit() { return !!this.info?.git; }
+    free(a) { return Math.max(0, (this.state.capacity[a] || 1) - (this.state.running[a] || 0)); }
+
+    // ---------- open ----------
+
+    show(state) {
+      this.state = state;
+      this.busy = false;
+      this.query = '';
+      this.infos = new Map();
+      this.att.clear();
+      const d = state.draft;
+      if (d) {
+        this.cfg = d;
+        this.draftId = d.id;
+      } else {
+        this.cfg = this.#fresh(state);
+        this.draftId = null;
+      }
+      this.el.startOver.hidden = !d;
+      this.#loadInfo(this.cfg.project.cwd);
+      for (const r of state.recent.slice(0, 8)) { this.#loadRecent(r.cwd); }
+      // A draft or a preset goes straight to where the work is; otherwise start at the project
+      const ready = (state.preset?.cwd || state.prefill) && this.cfg.project.cwd;
+      this.#go(d || ready ? 3 : 1, d ? T.restored : state.prefill ? T.prefilled : '');
+    }
+
+    #fresh(state) {
+      const inst = this.installed;
+      const recent = state.recent[0];
+      const cwd = state.preset?.cwd || recent?.cwd || '';
+      const other = a => inst.find(x => x !== a) || a;
+      const first = inst[0] || 'claude';
+      const ids = (state.terminals || []).map(t => t.id);
+      let saved = null;
+      try { saved = localStorage.getItem(TERMINAL_KEY); } catch { /* storage unavailable */ }
+      // A prompt from the pill (voice, copied error) or a preset is for one agent; otherwise the project's last choice
+      const last = state.recent.find(r => r.cwd === cwd)?.category;
+      const category = state.prefill || state.preset ? 'single' : last || 'single';
+      const agent = [state.preset?.agent, recent?.agent].find(a => a && this.agents[a]?.installed) || first;
+      return {
+        category,
+        project: { cwd, name: cwd.split('/').pop() || '' },
+        text: state.prefill || '',
+        single: { agent, worktree: !!state.preset?.worktree, terminal: ids.includes(saved) ? saved : ids[0] || null },
+        workflow: { pattern: 'bestofn', planner: first, agents: { [first]: 2, ...(inst[1] ? { [inst[1]]: 1 } : {}) }, reviewer: other(first), arbiter: other(first) },
+        analysis: { preset: 'audit', agents: Object.fromEntries(inst.slice(0, 2).map(a => [a, 1])), arbiter: inst[2] || other(first), logSources: [], opsPlan: false },
+      };
+    }
+
+    async #loadInfo(cwd) {
+      this.info = null;
+      if (!cwd) { return this.#render(); }
+      const info = await this.#infoFor(cwd);
+      if (cwd !== this.cfg.project.cwd) { return; }
+      this.info = info;
+      if (!this.hasGit && this.cfg.category === 'workflow') { this.cfg.category = 'single'; }
+      if (!this.hasGit) { this.cfg.single.worktree = false; }
+      this.#render();
+    }
+
+    async #loadRecent(cwd) {
+      await this.#infoFor(cwd);
+      if (this.step === 1) { this.#render(); }
+    }
+
+    // One look per folder; the map holds the promise until it resolves, then the value
+    async #infoFor(cwd) {
+      if (!this.infos.has(cwd)) {
+        const p = this.api.project(cwd).catch(() => null);
+        this.infos.set(cwd, p);
+        this.infos.set(cwd, await p);
+      }
+      return this.infos.get(cwd);
+    }
+
+    // ---------- steps ----------
+
+    #go(step, note = '') {
+      this.step = step;
+      this.note = note;
+      this.#render();
+      requestAnimationFrame(() => this.el.body.querySelector('[data-focus]')?.focus());
+    }
+
+    #problems() {
+      const c = this.shaped;
+      if (this.step === 1) {
+        return !c.project.cwd ? [TaskShape.problems(c)[0]] : this.info && !this.info.exists ? [`${T.missing}: ${tilde(this.info.cwd, this.state.home)}`] : [];
+      }
+      if (this.step < 3) { return []; }
+      if (c.category === 'single' && this.att.busy) { return [T.attaching]; }
+      return TaskShape.problems(c, this.installed);
+    }
+
+    #next() {
+      if (this.busy) { return; }
+      if (this.step === 4) { return this.cfg.category === 'single' ? this.#launch() : undefined; }
+      const p = this.#problems();
+      if (p.length) { return this.#message(p[0], true); }
+      this.#go(this.step + 1);
+    }
+
+    #back() {
+      if (this.step === 1) { return this.api.close(); }
+      this.#go(this.step - 1);
+    }
+
+    #changed({ render = true } = {}) {
+      if (render) { this.#render(); }
+      clearTimeout(this.#saveTimer);
+      this.#saveTimer = setTimeout(() => this.#save(), 400);
+    }
+
+    // Every change is kept as a draft (once there's a project), so the dialog can be closed at any point
+    async #save() {
+      if (!this.cfg.project.cwd || !this.api.saveDraft) { return; }
+      const r = await this.api.saveDraft({ ...this.cfg, id: this.draftId || undefined });
+      if (r?.ok) {
+        this.draftId = r.draft.id;
+        this.el.startOver.hidden = false;
+      }
+    }
+
+    async #startOver() {
+      if (this.draftId) { await this.api.discardDraft?.(this.draftId); }
+      this.show({ ...this.state, draft: null, preset: null, prefill: '' });
+    }
+
+    async #launch() {
+      const s = this.cfg.single;
+      if (this.att.busy) { return this.#message(T.attaching, true); }
+      this.busy = true;
+      this.el.next.disabled = this.el.back.disabled = true;
+      this.#message(T.starting);
+      // Same options as the old Ask Bayloob dialog sent to launcher:launch
+      const res = await this.api.launch({ agent: s.agent, cwd: this.cfg.project.cwd, prompt: this.att.compose(this.cfg.text.trim()), worktree: !!s.worktree, terminal: s.terminal }, this.draftId);
+      this.busy = false;
+      this.el.next.disabled = this.el.back.disabled = false;
+      if (res?.ok) {
+        if (s.terminal) { try { localStorage.setItem(TERMINAL_KEY, s.terminal); } catch { /* storage unavailable */ } }
+        this.draftId = null;
+        this.api.close();
+      } else {
+        this.#message(res?.error || T.wrong, true);
+      }
+    }
+
+    // ---------- render ----------
+
+    #render() {
+      if (!this.state) { return; }
+      const c = this.cfg;
+      this.el.steps.innerHTML = T.steps.map((n, i) => `<li class="${i + 1 < this.step ? 'past' : ''}"${i + 1 === this.step ? ' aria-current="step"' : ''}><i>${i + 1 < this.step ? '✓' : i + 1}</i>${n}</li>`).join('');
+      this.el.subtitle.textContent = this.step === 1 || !c.project.cwd ? T.subProject : `${c.project.name} · ${T.cats[c.category].title}`;
+      this.el.body.innerHTML = [null, () => this.#project(), () => this.#category(), () => this.#configure(), () => this.#confirm()][this.step]();
+      if (this.step === 3 && c.category === 'single') { this.#mountComposer(); }
+      this.el.back.textContent = this.step === 1 ? T.cancel : T.back;
+      const last = this.step === 4;
+      const later = last && c.category !== 'single';
+      this.el.next.innerHTML = last ? `${I('play')}${T.start}` : `${T.next}${I('next')}`;
+      this.el.next.disabled = later || this.busy;
+      this.el.nextWrap.title = later ? T.startLater : '';
+      this.el.next.setAttribute('aria-disabled', String(later));
+      const hint = this.step === 2 ? T.hintCat : last ? (later ? `${I('info')} ${T.draftSaved}` : T.hintStart) : T.hintNext;
+      this.#message(this.note ? `${this.note} · ${hint}` : hint, false, true);
+      this.#fit();
+    }
+
+    #project() {
+      const { recent, home } = this.state;
+      const q = this.query.trim().toLowerCase();
+      const typedPath = /^[~/]/.test(this.query.trim());
+      const rows = recent.filter(r => !q || typedPath || r.name.toLowerCase().includes(q) || r.cwd.toLowerCase().includes(q)).slice(0, 8);
+      const meta = r => {
+        const info = this.infos.get(r.cwd);
+        const v = info && typeof info.then !== 'function' ? info : null;
+        return v ? `${(v.stack || []).map(s => `<span class="glyph">${esc(s)}</span>`).join('')}${v.git ? `<span class="chip">${I('branch')}${esc(v.git.branch)}</span><span class="dot${v.git.changes ? ' dirty' : ''}" title="${v.git.changes ? `${v.git.changes} uncommitted changes` : 'Clean'}"></span>` : ''}` : '';
+      };
+      const list = rows.length
+        ? rows.map(r => `<button type="button" class="prow" role="option" aria-selected="${r.cwd === this.cfg.project.cwd}" data-cwd="${esc(r.cwd)}">
+            <span class="nm"><b>${esc(r.name)}</b><span class="mono">${esc(tilde(r.cwd, home))}</span></span><span class="meta"></span><span class="meta">${meta(r)}</span></button>`).join('')
+        : `<div class="hintline">${recent.length ? T.noMatch : T.noRecent}</div>`;
+      const i = this.info;
+      const box = !this.cfg.project.cwd ? '' : !i ? `<div class="projinfo"><div><span class="label">${T.git}</span><span class="skel"></span></div><div><span class="label">${T.stack}</span><span class="skel"></span></div><div><span class="label">${T.tests}</span><span class="skel"></span></div></div>`
+        : `<div class="projinfo"><div><span class="label">${T.git}</span><b>${!i.exists ? T.missing : i.git ? `${esc(i.git.branch)} · ${i.git.changes ? `${i.git.changes} changes` : 'clean'}` : T.noGit}</b></div>
+            <div><span class="label">${T.stack}</span><b>${esc(i.stack.join(', ') || '—')}</b></div>
+            <div><span class="label">${T.tests}</span><b class="${i.test ? 'mono' : 'muted'}">${esc(i.test || T.notDetected)}</b></div></div>
+          ${i.git?.changes ? `<div class="note">${I('alert')}<span>${T.dirty(i.git.changes)}</span></div>` : ''}
+          ${i.exists && !i.git ? `<div class="note" style="--c:var(--thinking)">${I('info')}<span>${T.noGitNote}</span></div>` : ''}`;
+      return `<div class="field">${I('search')}<input id="q" data-focus value="${esc(this.query)}" placeholder="${T.search}" spellcheck="false" aria-label="${T.search}">
+          ${typedPath ? `<button type="button" class="btn sm" data-usepath>${T.useFolder}</button>` : ''}<button type="button" class="btn sm" data-browse>${I('folder')}${T.choose}</button></div>
+        <div class="plist" role="listbox" aria-label="Recent projects">${list}</div>
+        ${this.cfg.project.cwd && !recent.some(r => r.cwd === this.cfg.project.cwd) ? `<div class="prow" aria-selected="true"><span class="nm"><b>${esc(this.cfg.project.name)}</b><span class="mono">${esc(tilde(this.cfg.project.cwd, home))}</span></span></div>` : ''}
+        ${box}`;
+    }
+
+    #category() {
+      const c = this.cfg;
+      const last = this.state.recent.find(r => r.cwd === c.project.cwd)?.category;
+      return `<div class="cats" role="radiogroup" aria-label="Category">${CATS.map((k, i) => {
+          const off = k === 'workflow' && !this.hasGit;
+          return `<button type="button" class="cat" role="radio" aria-checked="${k === c.category}" data-cat="${k}" style="--c:${CAT_COLOR[k]}" ${off ? `disabled title="${T.needsGit}"` : ''} ${k === c.category ? 'data-focus' : ''}>
+            <kbd>${i + 1}</kbd><span class="ci">${I(k)}</span><b>${T.cats[k].title}</b><p>${T.cats[k].desc}</p>
+            <span class="safe">${I(k === 'single' ? 'user' : k === 'workflow' ? 'branch' : 'shield')}${off ? T.needsGit : T.cats[k].safe}</span></button>`;
+        }).join('')}</div>
+        ${last ? `<div class="hintline">${T.lastUsed(esc(c.project.name), T.cats[last].title)}</div>` : ''}`;
+    }
+
+    #configure() {
+      const c = this.cfg;
+      if (c.category === 'single') { return this.#configSingle(); }
+      return c.category === 'workflow' ? this.#configWorkflow() : this.#configAnalysis();
+    }
+
+    #configSingle() {
+      const s = this.cfg.single;
+      const terms = this.state.terminals || [];
+      return `<div class="label">${T.agent}</div>
+        <div class="arows" role="radiogroup" aria-label="${T.agent}">${Object.entries(this.agents).map(([k, a]) => `
+          <button type="button" class="arow pick${a.installed ? '' : ' off'}" role="radio" aria-checked="${k === s.agent}" data-agent="${k}" ${a.installed ? '' : `disabled title="${T.notInstalled}"`}>
+            <span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${a.installed ? T.free(this.free(k), this.state.capacity[k]) : T.notInstalled}</small></span><span class="tick">${k === s.agent ? I('check') : ''}</span></button>`).join('')}</div>
+        <div class="label">${T.prompt}</div>
+        <div class="composer" id="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.promptPh}" aria-label="${T.prompt}"></textarea>
+          <ul class="atts" id="atts" hidden></ul>
+          <div class="tools"><button type="button" class="ghost" id="attach" title="${T.attachTip}" hidden>${I('clip')}${T.attach}</button>
+            <button type="button" class="ghost" id="paste" title="${T.pasteTip}">${I('paste')}${T.paste}</button><span class="count" id="count"></span></div></div>
+        <button type="button" class="toggle" role="switch" aria-checked="${!!s.worktree}" data-worktree ${this.hasGit ? '' : `disabled title="${T.needsGit}"`}>
+          <span class="switch"></span><span class="txt">${T.worktree} <small>— ${this.hasGit ? T.worktreeSub : T.needsGit}</small></span></button>
+        ${terms.length > 1 ? `<div class="chips"><span class="label">${T.openIn}</span>${terms.map(t => `<button type="button" class="tchip" aria-pressed="${t.id === s.terminal}" data-term="${esc(t.id)}">${esc(t.name)}</button>`).join('')}</div>` : ''}`;
+    }
+
+    // Builder / reviewer / analyst rows: Novi, name, mode, free of max (or "will queue"), count stepper
+    #agentRows(bag, mode, word) {
+      return `<div class="arows">${Object.entries(this.agents).map(([k, a]) => {
+        const n = bag[k] || 0;
+        const max = this.state.capacity[k] || 1;
+        if (!a.installed) {
+          return `<div class="arow off"><span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${T.notInstalled}</small></span><span></span><span class="cap"></span>
+            <span class="stepper" title="${T.notInstalled}"><button type="button" disabled aria-label="Fewer">${I('minus')}</button><output>0</output><button type="button" disabled aria-label="More">${I('plus')}</button></span></div>`;
+        }
+        const q = Math.max(0, n - this.free(k));
+        return `<div class="arow"><span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${n ? `${n} ${word}${n > 1 ? 's' : ''}` : 'not used'}</small></span>
+          <span>${n ? badge(mode) : ''}</span><span class="cap${q ? ' q' : ''}">${q ? T.queue(q) : T.free(this.free(k), max)}</span>
+          <span class="stepper" role="group" aria-label="${esc(a.name)} count"><button type="button" data-count="${k}:-1" ${n ? '' : 'disabled'} aria-label="Fewer ${esc(a.name)}">${I('minus')}</button><output>${n}</output>
+            <button type="button" data-count="${k}:1" ${n >= max ? 'disabled' : ''} aria-label="More ${esc(a.name)}">${I('plus')}</button></span></div>`;
+      }).join('')}</div>`;
+    }
+
+    #select(key, value, label, avoid = []) {
+      const opts = this.installed.map(a => `<option value="${a}"${a === value ? ' selected' : ''}>${esc(this.agents[a].name)}</option>`).join('');
+      const same = avoid.includes(value);
+      return `<div class="row"><span class="label" style="width:76px">${label}</span><select class="sel" data-select="${key}" aria-label="${label}">${opts}</select>${badge(key.endsWith('planner') ? 'plan' : 'read-only')}
+        ${key.endsWith('arbiter') && avoid.length ? `<span class="hintline grow${same ? ' warn' : ''}">${same ? T.arbiterSame : T.arbiterOk}</span>` : ''}</div>`;
+    }
+
+    #configWorkflow() {
+      const w = this.cfg.workflow;
+      const board = w.pattern === 'board';
+      const builders = Object.keys(w.agents).filter(a => w.agents[a]);
+      return `<div class="presets" role="group" aria-label="Pattern">${Object.entries(TaskShape.PATTERNS).map(([k, p]) => `<button type="button" class="preset" aria-pressed="${k === w.pattern}" data-pattern="${k}">${p.name}<small>${p.hint}</small></button>`).join('')}</div>
+        ${board ? '' : this.#select('workflow.planner', w.planner, T.planner)}
+        <div class="label">${board ? T.reviewers : T.builders}</div>
+        ${this.#agentRows(w.agents, board ? 'read-only' : 'writes', board ? T.word.reviewer : T.word.builder)}
+        ${['pipeline', 'split'].includes(w.pattern) ? this.#select('workflow.reviewer', w.reviewer, T.reviewer) : ''}
+        ${this.#select('workflow.arbiter', w.arbiter, T.arbiter, board ? [] : builders)}
+        <div class="label">${T.task}</div>
+        <div class="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.taskPh}" aria-label="${T.task}">${esc(this.cfg.text)}</textarea></div>
+        <span title="${T.customizeTip}"><button type="button" class="expander" disabled>${I('edit')}${T.customize}</button></span>`;
+    }
+
+    #configAnalysis() {
+      const a = this.cfg.analysis;
+      return `<div class="presets" role="group" aria-label="Preset">${Object.entries(TaskShape.PRESETS).map(([k, n]) => `<button type="button" class="preset" aria-pressed="${k === a.preset}" data-preset="${k}">${n}</button>`).join('')}</div>
+        <div class="label">${T.analysts}</div>
+        ${this.#agentRows(a.agents, 'read-only', T.word.analyst)}
+        ${this.#select('analysis.arbiter', a.arbiter, T.arbiter, Object.keys(a.agents).filter(k => a.agents[k]))}
+        <div class="label">${T.question}</div>
+        <div class="composer"><textarea id="text" data-focus rows="2" spellcheck="false" placeholder="${T.questionPh}" aria-label="${T.question}">${esc(this.cfg.text)}</textarea></div>
+        ${a.preset === 'incident' ? `<div class="label">${T.sources}</div>
+          <ul class="sources">${a.logSources.map((s, i) => `<li><span>${esc(s)}</span><button type="button" class="iconbtn" data-unsource="${i}" aria-label="Remove">${I('x')}</button></li>`).join('')}</ul>
+          <div class="field"><input id="source" placeholder="${esc(T.sourcePh)}" spellcheck="false" aria-label="Log source" class="mono"><button type="button" class="btn sm" data-addsource>${I('plus')}${T.add}</button></div>` : ''}
+        <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}</small></span></button>`;
+    }
+
+    #confirm() {
+      const c = this.shaped;
+      const name = a => esc(this.agents[a]?.name || a);
+      if (c.category === 'single') {
+        const s = c.single;
+        const term = (this.state.terminals || []).find(t => t.id === s.terminal);
+        const rows = [[T.rAgent, `<span class="m s">${Agent.thumb(s.agent)}</span><b>${name(s.agent)}</b>`], [T.rFolder, `<code>${esc(tilde(c.project.cwd, this.state.home))}</code>`],
+          [T.rWhere, s.worktree ? `${T.inWorktree} <small>${T.worktreeNote}</small>` : T.inFolder], ...(term ? [[T.rTerminal, esc(term.name)]] : []),
+          ...(this.att.count ? [[T.rFiles, this.att.items.map(f => `<code title="${esc(f.path)}">${esc(f.name)}</code>`).join(' ')]] : [])];
+        const prompt = this.att.compose(c.text.trim());
+        return `<p class="sentence"><b>${name(s.agent)}</b> starts in <b>${esc(c.project.name)}</b>${prompt ? ' and gets your prompt' : ''}. Permissions come to the pill.</p>
+          <div class="review">${rows.map(([k, v]) => `<div class="rr"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}
+            <div class="prompt"><span class="label">${T.rPrompt}</span> <button type="button" class="btn ghost sm" data-edit>${T.edit}</button><pre class="${prompt ? '' : 'empty'}">${esc(prompt || T.noPrompt)}</pre></div></div>`;
+      }
+      const stages = TaskShape.stages(c);
+      const node = s => {
+        const icon = s.mode === 'you' ? I(s.id === 'runbook' ? 'term' : s.id === 'read' ? 'file' : 'merge', 'big') : s.id === 'collect' ? I('file', 'big') : s.role === 'action' ? I('test', 'big') : '';
+        const minis = s.agents.flatMap(([a, n]) => Array(Math.min(n, 4)).fill(a)).map(a => `<span class="m">${Agent.thumb(a)}</span>`).join('');
+        const sub = s.agents.length === 1 && s.agents[0][1] === 1 ? name(s.agents[0][0]) : s.note || (s.parallel ? 'in parallel' : '');
+        return `<div class="node"><div class="box${s.mode === 'you' ? ' you' : ''}">${icon || `<span class="stack">${minis}</span>`}<b>${esc(s.title)}</b>${badge(s.mode)}</div><small>${sub}</small></div>`;
+      };
+      const diagram = stages.map((s, i) => `${i ? `${stages[i - 1].gate === 'human' ? '<span class="gate" title="You are asked here"></span>' : ''}<span class="link"></span>` : ''}${node(s)}`).join('');
+      const peak = TaskShape.peak(c);
+      const loads = Object.keys(peak).map(a => {
+        const max = this.state.capacity[a] || 1;
+        const busy = Math.min(max, this.state.running[a] || 0);
+        const fit = Math.min(peak[a], this.free(a));
+        const q = peak[a] - fit;
+        const seg = (n, cls = '') => n ? `<i class="${cls}" style="width:${(n / max) * 100}%;--c:${Agent.color(a)}"></i>` : '';
+        return `<div class="loadrow"><span class="row" style="gap:6px"><span class="m s">${Agent.thumb(a)}</span>${name(a)}</span>
+          <div class="bar" role="img" aria-label="${busy} running, ${fit} new, ${q} queued of ${max}">${seg(busy, 'busy')}${seg(fit)}${q ? `<i class="q" style="width:${(q / max) * 100}%"></i>` : ''}</div>
+          <span class="r">${busy + fit}/${max}${q ? ` · <span style="color:var(--working)">${T.queue(q)}</span>` : ''}</span></div>`;
+      }).join('');
+      return `<p class="sentence">${this.#sentence(c)}</p>
+        <div class="diagram" role="img" aria-label="Stages: ${esc(stages.map(s => s.title).join(', '))}">${diagram}</div>
+        <div class="label">${T.gatesCap}</div><ul class="glist">${TaskShape.gates(c).map(g => `<li><span class="gate"></span>${esc(g)}</li>`).join('')}</ul>
+        <div class="label">${T.load}</div>${loads}`;
+    }
+
+    #sentence(c) {
+      const name = a => esc(this.agents[a]?.name || a);
+      const lst = bag => list(TaskShape.used(bag).map(([a, n]) => `${name(a)} ×${n}`));
+      if (c.category === 'analysis') {
+        const a = c.analysis;
+        const n = TaskShape.total(a.agents);
+        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report.${a.opsPlan ? ' Then it proposes an <b>operations plan</b> — each command runs only when you click.' : ''}`;
+      }
+      const w = c.workflow;
+      const n = TaskShape.total(w.agents);
+      if (w.pattern === 'board') {
+        return `<b>${n} reviewer${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) read the current branch of <b>${esc(c.project.name)}</b>. Nothing is changed. Arbiter: <b>${name(w.arbiter)}</b> merges and ranks the findings.`;
+      }
+      return `<b>${n} agent${n > 1 ? 's' : ''}</b> will build${n > 1 ? ' in parallel' : ''} (${lst(w.agents)}), each in its own worktree. Arbiter: <b>${name(w.arbiter)}</b>. You’ll be asked: <b>after the plan</b> and <b>before merge</b>.`;
+    }
+
+    // The single agent's prompt box is rebuilt on every render: refill it and hook up paste, drop and attach
+    #mountComposer() {
+      const ta = document.getElementById('text');
+      ta.value = this.cfg.text;
+      ta.classList.toggle('code', !!this.state.prefill && this.cfg.text === this.state.prefill);
+      this.att.list = document.getElementById('atts');
+      this.att.render();
+      const attach = document.getElementById('attach');
+      attach.hidden = !this.att.available;
+      attach.addEventListener('click', () => this.att.pick());
+      document.getElementById('paste').addEventListener('click', () => this.#pasteClipboard());
+      this.att.bindDrop(document.getElementById('composer'));
+      this.att.bindPaste(ta);
+      this.#count();
+      this.#grow(ta);
+    }
+
+    async #pasteClipboard() {
+      const text = await this.api.clipboard?.();
+      if (!text) { return this.#message(T.emptyClipboard, true); }
+      const ta = document.getElementById('text');
+      const at = ta.selectionStart ?? ta.value.length;
+      ta.value = ta.value.slice(0, at) + text + ta.value.slice(ta.selectionEnd ?? at);
+      this.cfg.text = ta.value;
+      ta.focus();
+      this.#count();
+      this.#grow(ta);
+      this.#changed({ render: false });
+    }
+
+    #count() {
+      const n = this.cfg.text.length;
+      const el = document.getElementById('count');
+      if (el) { el.textContent = n ? T.chars(n) : ''; }
+    }
+
+    #grow(ta) {
+      ta.style.height = 'auto';
+      ta.style.height = `${Math.min(ta.scrollHeight + 2, 200)}px`;
+      this.#fit();
+    }
+
+    #message(text, isError = false, html = false) {
+      this.el.msg[html ? 'innerHTML' : 'textContent'] = text;
+      this.el.msg.className = isError ? 'msg error' : 'msg';
+    }
+
+    #fit() { requestAnimationFrame(() => this.api.resize?.(Math.ceil(this.el.dialog.getBoundingClientRect().height) + 20)); }
+
+    #setProject(cwd) {
+      const clean = String(cwd || '').trim().replace(/\/+$/, '');
+      if (!clean) { return; }
+      const abs = clean.replace(/^~(?=$|\/)/, this.state.home);
+      this.cfg.project = { cwd: abs, name: abs.split('/').pop() || abs };
+      // Each project remembers its last category
+      const last = this.state.recent.find(r => r.cwd === abs)?.category;
+      if (last && !this.state.prefill) { this.cfg.category = last; }
+      this.query = '';
+      this.#loadInfo(abs);
+      this.#changed();
+    }
+
+    // ---------- events ----------
+
+    #bind() {
+      this.el.next.addEventListener('click', () => this.#next());
+      this.el.back.addEventListener('click', () => this.#back());
+      this.el.close.addEventListener('click', () => this.api.close());
+      this.el.startOver.addEventListener('click', () => this.#startOver());
+      const body = this.el.body;
+      body.addEventListener('click', async e => {
+        const b = e.target.closest('button');
+        if (!b || b.disabled) { return; }
+        const d = b.dataset;
+        const c = this.cfg;
+        if (d.cwd) { return this.#setProject(d.cwd); }
+        if (d.usepath !== undefined) { return this.#setProject(this.query); }
+        if (d.browse !== undefined) {
+          const dir = await this.api.pickFolder(c.project.cwd || this.state.home);
+          return dir && this.#setProject(dir);
+        }
+        if (d.cat) { c.category = d.cat; return this.#changed(); }
+        if (d.agent) { c.single.agent = d.agent; return this.#changed(); }
+        if (d.worktree !== undefined) { c.single.worktree = !c.single.worktree; return this.#changed(); }
+        if (d.term) { c.single.terminal = d.term; return this.#changed(); }
+        if (d.pattern) { c.workflow.pattern = d.pattern; return this.#changed(); }
+        if (d.preset) { c.analysis.preset = d.preset; return this.#changed(); }
+        if (d.ops !== undefined) { c.analysis.opsPlan = !c.analysis.opsPlan; return this.#changed(); }
+        if (d.edit !== undefined) { return this.#go(3); }
+        if (d.count) {
+          const [a, delta] = d.count.split(':');
+          const bag = c.category === 'analysis' ? c.analysis.agents : c.workflow.agents;
+          bag[a] = Math.max(0, Math.min(this.state.capacity[a] || 1, (bag[a] || 0) + Number(delta)));
+          return this.#changed();
+        }
+        if (d.addsource !== undefined) { return this.#addSource(); }
+        if (d.unattach) { return this.att.remove(Number(d.unattach)); }
+        if (d.unsource) { c.analysis.logSources.splice(Number(d.unsource), 1); return this.#changed(); }
+      });
+      body.addEventListener('input', e => {
+        if (e.target.id === 'q') { this.query = e.target.value; const pos = e.target.selectionStart; this.#render(); const q = document.getElementById('q'); q.focus(); q.setSelectionRange(pos, pos); return; }
+        if (e.target.id === 'text') { this.cfg.text = e.target.value; this.#count(); this.#grow(e.target); this.#changed({ render: false }); }
+      });
+      body.addEventListener('change', e => {
+        const key = e.target.dataset.select;
+        if (key) { const [group, field] = key.split('.'); this.cfg[group][field] = e.target.value; this.#changed(); }
+      });
+      document.addEventListener('keydown', e => {
+        if (!this.state) { return; }
+        if (e.key === 'Escape') { e.preventDefault(); return this.busy ? undefined : this.api.close(); }
+        if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); return this.#back(); }
+        if (this.step === 2 && ['1', '2', '3'].includes(e.key)) {
+          const k = CATS[Number(e.key) - 1];
+          if (!(k === 'workflow' && !this.hasGit)) { e.preventDefault(); this.cfg.category = k; return this.#changed(); }
+        }
+        if (e.target.id === 'source' && e.key === 'Enter') { e.preventDefault(); return this.#addSource(); }
+        // Enter (or Ctrl+Enter) goes on; Shift+Enter is a new line; a focused button handles its own Enter
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+          if (e.target.closest?.('button') && e.target !== this.el.next) { return; }
+          e.preventDefault();
+          if (this.step === 1 && /^[~/]/.test(this.query.trim())) { return this.#setProject(this.query); }
+          this.#next();
+        }
+      });
+    }
+
+    #addSource() {
+      const input = document.getElementById('source');
+      const v = input?.value.trim();
+      if (!v) { return; }
+      this.cfg.analysis.logSources.push(v);
+      this.#changed();
+      requestAnimationFrame(() => document.getElementById('source')?.focus());
+    }
+  }
+
+  const view = new NewTaskView(window.newTaskAPI || { project: async () => null, close() {}, resize() {} });
+  if (window.newTaskAPI) { window.newTaskAPI.onShow(state => view.show(state)); }
+  else { window.__demo = view; } // opened in a plain browser or the screenshot script
+</script>
+</body>
+</html>

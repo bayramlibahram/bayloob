@@ -41,10 +41,14 @@ const { AgentConsole } = require("../modules/console/agent-console");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
 const { SpeechEngine } = require("../modules/voice/speech-engine");
 const { UploadStore } = require("../modules/uploads/upload-store");
+const { TaskStore } = require("../modules/tasks/task-store");
+const { ProjectInfo } = require("../modules/tasks/project-info");
+const { CAPACITY } = require("../../shared/task-shape");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
 const { LauncherWindow } = require("../windows/launcher-window");
+const { NewTaskWindow } = require("../windows/new-task-window");
 const { OverlayWindow } = require("../windows/overlay-window");
 const { PanelWindow } = require("../windows/panel-window");
 const { SettingsWindow } = require("../windows/settings-window");
@@ -97,6 +101,7 @@ function detectAgents() {
 class BayloobApp {
   overlay = new OverlayWindow({ topBar: () => this.windows.panel() });
   launcherWindow = new LauncherWindow();
+  newTask = new NewTaskWindow();
   panel = new PanelWindow();
   uploads = new UploadStore();
   settingsWindow = new SettingsWindow();
@@ -203,6 +208,8 @@ class BayloobApp {
     nativeTheme.themeSource = this.settings.get("theme");
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.uploads.prune();
+    this.tasks = new TaskStore(path.join(data, "tasks"));
+    this.projects = new ProjectInfo({ git: this.git });
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
     this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
     // A rule allowed something without a card: say so briefly, so nothing passes unseen
@@ -581,8 +588,31 @@ class BayloobApp {
     );
   }
 
-  // prefill: a first prompt to start from (e.g. "Fix this error:" with a copied stack trace)
+  // The New task dialog (Ask Bayloob): Single agent starts a session as before; Workflow / Analysis are
+  // stored as drafts until the engine exists. preset { agent, cwd, worktree } and prefill as for the launcher.
   async openLauncher(preset = null, prefill = "") {
+    const sessions = this.server.store.list();
+    const running = Object.fromEntries(
+      Object.keys(AGENTS).map(a => [a, sessions.filter(s => s.agent === a).length])
+    );
+    // A preset or a prefilled prompt starts fresh; otherwise the dialog picks up the last draft
+    const draft = preset || prefill ? null : this.tasks.latestDraft();
+    const recent = this.recent.list();
+    this.newTask.show({
+      agents: await this.#agentChoices(),
+      capacity: CAPACITY,
+      running,
+      recent: recent.map(r => ({ ...r, category: this.tasks.lastCategory(r.cwd) })),
+      terminals: this.launcher.terminal.list(),
+      preset,
+      prefill,
+      draft,
+      home: os.homedir(),
+    });
+  }
+
+  // The earlier 3-step launcher for a new session (kept; the New task dialog replaced it as the entry point)
+  async openClassicLauncher(preset = null, prefill = "") {
     this.launcherWindow.show({
       mode: "new",
       agents: await this.#agentChoices(),
@@ -1052,7 +1082,7 @@ class BayloobApp {
 
     // Files attached to a prompt (launcher and panel): copied into the cache, the agent gets their paths
     const popupOf = sender =>
-      [this.launcherWindow, this.panel].find(p => p.win?.webContents === sender);
+      [this.launcherWindow, this.newTask, this.panel].find(p => p.win?.webContents === sender);
     ipcMain.handle("uploads:pick", async e => {
       const paths = await popupOf(e.sender)?.pickFiles();
       return this.uploads.addFiles(paths || []);
@@ -1072,6 +1102,35 @@ class BayloobApp {
       return looksLikeError(text) ? errorPrompt(text) : text;
     });
     ipcMain.on("launcher:resize", (_e, height) => this.launcherWindow.fitHeight(Number(height)));
+
+    // New task dialog
+    ipcMain.handle("newtask:project", (_e, cwd) => this.projects.read(expandHome(cwd)));
+    ipcMain.handle("newtask:save-draft", (_e, config) => {
+      try {
+        const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
+        this.tasks.rememberCategory(saved.project.cwd, saved.category);
+        return { ok: true, draft: saved };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    });
+    ipcMain.handle("newtask:discard-draft", (_e, id) => this.tasks.discard(String(id)));
+    ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
+      const cwd = expandHome(String(opts?.cwd || "").trim());
+      const res = await result(() => this.launch({ ...opts, cwd }));
+      if (res.ok) {
+        this.tasks.rememberCategory(cwd, "single");
+        if (draftId) {
+          this.tasks.discard(String(draftId));
+        }
+      }
+      return res;
+    });
+    ipcMain.handle("newtask:pick-folder", (_e, current) =>
+      this.newTask.pickFolder(current ? expandHome(current) : os.homedir())
+    );
+    ipcMain.on("newtask:close", () => this.newTask.hide());
+    ipcMain.on("newtask:resize", (_e, height) => this.newTask.fitHeight(Number(height)));
 
     // Workspace panel
     ipcMain.handle("panel:open-workspace", (_e, sessionId) =>
