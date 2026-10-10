@@ -19,6 +19,8 @@ const { AgentStats } = require('./stats');
 const { TerminalLauncher } = require('./terminal');
 const { WindowService } = require('./windows');
 const { GnomeExtension } = require('./gnome-extension');
+const { WorkspaceService } = require('./workspace/workspace-service');
+const { AppActions } = require('./workspace/app-actions');
 const { TrayMenu } = require('./tray');
 const { HookInstaller } = require('../scripts/install-hooks');
 
@@ -56,6 +58,9 @@ class BayloobApp {
   windows = new WindowService();
   extension = new GnomeExtension(EXTENSION_DIR);
   focuser = new TerminalFocuser(SCRIPTS_DIR, this.windows);
+  workspace = new WorkspaceService({ windows: this.windows });
+  appActions = new AppActions({ catalog: this.workspace.catalog, windows: this.windows });
+  #apps = new Map(); // app id -> app from the latest workspace snapshot
   launcher = new SessionLauncher();
   hooks = new HookInstaller(SCRIPTS_DIR, { log: () => {} });
   stats = new AgentStats();
@@ -171,21 +176,38 @@ class BayloobApp {
   async togglePanel() {
     if (this.panel.visible) return this.panel.hide();
     await this.panel.show({ sessions: this.server.store.list(), status: this.#status() });
-    this.#startStats();
+    this.#startPanelUpdates();
   }
 
-  // Sample agent CPU/memory only while the panel is open
-  #startStats() {
+  // While the panel is open: agent CPU/memory, the running apps and, now and then, the hook status
+  #startPanelUpdates() {
     clearInterval(this.#statsTimer);
     this.stats.reset();
     let tick = 0;
-    const run = () => {
+    const run = async () => {
       if (!this.panel.visible) return clearInterval(this.#statsTimer);
       this.panel.send('panel:stats', this.stats.sample(this.server.store.list()));
+      const snap = await this.workspace.snapshot().catch(() => null);
+      if (snap) {
+        this.#apps = new Map(snap.apps.map(a => [a.id, a]));
+        this.panel.send('panel:workspace', snap);
+      }
       if (++tick % STATUS_EVERY_TICKS === 0) this.panel.send('panel:status', this.#status());
     };
     run();
     this.#statsTimer = setInterval(run, STATS_MS);
+  }
+
+  async appMenu(appId) {
+    const app = this.#apps.get(appId);
+    if (!app) return;
+    const isApp = app.id !== 'docker';
+    const menu = Menu.buildFromTemplate([
+      { label: 'Focus window', enabled: app.windows.length > 0, click: () => this.appActions.focus(app).catch(() => {}) },
+      { label: 'New window', enabled: isApp, click: () => this.appActions.launch(app.id).catch(() => {}) },
+      ...(app.category === 'browser' ? [{ label: 'New tab', click: () => this.appActions.newTab(app.id).catch(() => {}) }] : []),
+    ]);
+    await this.panel.keepOpenDuring(win => new Promise(resolve => menu.popup({ window: win, callback: resolve })));
   }
 
   openWorkspace(session) {
@@ -299,6 +321,12 @@ class BayloobApp {
     // Workspace panel
     ipcMain.handle('panel:open-workspace', (_e, sessionId) => this.openWorkspace(session(sessionId)));
     ipcMain.on('panel:session-menu', (_e, sessionId) => this.sessionMenu(session(sessionId)));
+    ipcMain.on('panel:app-menu', (_e, appId) => this.appMenu(String(appId)));
+    ipcMain.handle('panel:focus-app', (_e, appId, windowId) => result(() => this.appActions.focus(this.#apps.get(String(appId)), windowId)));
+    ipcMain.handle('panel:launch-app', (_e, appId) => result(() => this.appActions.launch(String(appId))));
+    ipcMain.handle('panel:new-tab', (_e, appId) => result(() => this.appActions.newTab(String(appId))));
+    ipcMain.handle('panel:docker', (_e, action, id) => result(() => this.workspace.docker.act(String(action), String(id))));
+    ipcMain.handle('panel:launchable', () => this.workspace.launchable());
     ipcMain.on('panel:open-settings', () => this.openSettings());
     ipcMain.on('panel:close', () => this.panel.hide());
     ipcMain.on('panel:resize', (_e, height) => this.panel.fitHeight(Number(height)));

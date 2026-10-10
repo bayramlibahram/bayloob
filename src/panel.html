@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>Bayloob workspace</title>
 <style>
   :root {
@@ -22,8 +22,9 @@
   html, body { background: transparent; height: 100%; overflow: hidden;
     font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
     -webkit-font-smoothing: antialiased; user-select: none; }
-  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
-  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  button, input { font: inherit; color: inherit; border: 0; background: none; outline: none; }
+  button { cursor: pointer; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   svg:not(.i) { width: 16px; height: 16px; fill: currentColor; flex: none; } /* ICON_TERM from ui-common.js */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 3px; }
@@ -35,11 +36,15 @@
 
   .thumb { position: relative; width: 100%; height: 100%; }
   .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .m { flex: none; filter: drop-shadow(0 2px 6px rgba(0,0,0,.45)); }
+  .ic { flex: none; display: grid; place-items: center; }
+  .ic > img { width: 100%; height: 100%; object-fit: contain; }
+  .ic.glyph { border-radius: 10px; background: var(--raised); border: 1px solid var(--line); color: var(--muted); }
+  .ic.glyph svg { width: 55%; height: 55%; }
+  .ic.agent { filter: drop-shadow(0 2px 6px rgba(0,0,0,.45)); }
 
   /* header */
   .head { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
-  .head .m { width: 38px; height: 38px; }
+  .head .ic { width: 38px; height: 38px; }
   .head .brand { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
   .head .sep { width: 1px; height: 22px; background: var(--line); }
   .head .sub { color: var(--muted); }
@@ -47,89 +52,120 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--idle)); flex: none; }
   .status .dot { box-shadow: 0 0 8px var(--c); }
   .square { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--muted);
-    border: 1px solid var(--line); background: var(--raised); transition: color .15s, background .15s; }
+    border: 1px solid var(--line); background: var(--raised); transition: color .15s, background .15s; flex: none; }
   .square:hover { color: var(--text); background: rgba(255,255,255,.09); }
 
-  /* body */
-  .body { display: grid; grid-template-columns: 1.55fr 1fr; min-height: 280px; }
-  .col { padding: 14px 12px 12px; }
-  .col + .col { border-left: 1px solid var(--line); padding: 14px 18px; }
-  h2 { font-size: 12.5px; font-weight: 600; color: #c9c7d4; margin: 0 6px 10px; }
-  .col + .col h2 { margin-left: 0; }
+  /* layout */
+  .main { display: grid; grid-template-columns: 196px 1fr 360px; height: 470px; }
+  .side { padding: 12px 10px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+  .nav { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; color: #c9c7d4; text-align: left; transition: background .12s; }
+  .nav:hover { background: rgba(255,255,255,.04); }
+  .nav.on { background: rgba(139,92,255,.14); color: var(--text); }
+  .nav span { flex: 1; }
+  .nav em { font-style: normal; font-size: 11px; color: var(--muted); }
 
-  .sessions { display: flex; flex-direction: column; gap: 2px; max-height: 330px; overflow-y: auto; }
-  .row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 12px; cursor: pointer;
-    border: 1px solid transparent; transition: background .12s; }
+  .main > * { min-height: 0; } /* let the columns scroll instead of growing past the panel */
+  .listcol { display: flex; flex-direction: column; min-width: 0; padding: 12px 10px 10px; }
+  .listhead { display: flex; align-items: center; gap: 12px; padding: 0 6px 10px; }
+  .listhead h2 { font-size: 15px; font-weight: 650; flex: 1; }
+  .search { display: flex; align-items: center; gap: 8px; width: 210px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); }
+  .search input { flex: 1; min-width: 0; color: var(--text); }
+  .search input::placeholder { color: var(--muted); }
+  .rows { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .12s; }
   .row:hover { background: rgba(255,255,255,.03); }
   .row.sel { background: rgba(139,92,255,.09); border-color: rgba(139,92,255,.22); }
-  .row .m { width: 40px; height: 40px; }
+  .row .ic { width: 38px; height: 38px; }
   .row .who { flex: 1; min-width: 0; }
-  .row .who b { display: block; font-weight: 600; font-size: 13.5px; }
+  .row .who b { display: block; font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .who span { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .state { display: flex; align-items: center; gap: 7px; width: 132px; font-size: 12.5px; color: var(--c); }
-  .row .square { width: 32px; height: 32px; }
-  .kebab { width: 26px; height: 32px; border-radius: 8px; color: var(--muted); display: grid; place-items: center; }
+  .state { display: flex; align-items: center; gap: 7px; width: 118px; font-size: 12.5px; color: var(--c); flex: none; }
+  .row .square { width: 30px; height: 30px; }
+  .kebab { width: 24px; height: 30px; border-radius: 8px; color: var(--muted); display: grid; place-items: center; flex: none; }
   .kebab:hover { color: var(--text); background: rgba(255,255,255,.07); }
   .empty { color: var(--muted); padding: 30px 10px; text-align: center; line-height: 1.6; }
 
-  /* current activity */
-  .who-big { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-  .who-big .m { width: 40px; height: 40px; }
-  .who-big b { font-size: 15px; font-weight: 650; }
-  .who-big .state { width: auto; margin-left: 12px; }
-  .doing { padding: 12px 0; border-bottom: 1px solid var(--line); }
-  .doing b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .doing span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .timeline { list-style: none; padding: 10px 0 4px; max-height: 150px; overflow-y: auto; }
-  .timeline li { position: relative; display: flex; align-items: baseline; gap: 10px; padding: 5px 0 5px 22px; font-size: 12.5px; }
-  .timeline li::before { content: ''; position: absolute; left: 3px; top: 9px; width: 9px; height: 9px; border-radius: 50%;
-    background: var(--brand); box-shadow: 0 0 6px rgba(139,92,255,.6); }
-  .timeline li.now::before { background: transparent; border: 1.5px solid var(--brand); box-shadow: none; }
-  .timeline li + li::after { content: ''; position: absolute; left: 7px; top: -9px; height: 16px; border-left: 1px solid rgba(255,255,255,.14); }
-  .timeline .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .timeline .ago { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
-  .wide { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; padding: 10px;
-    border-radius: 10px; border: 1px solid var(--line); background: var(--raised); font-weight: 600; transition: background .15s; }
+  /* detail */
+  .detail { border-left: 1px solid var(--line); padding: 16px 18px; overflow-y: auto; }
+  .dhead { display: flex; align-items: center; gap: 12px; }
+  .dhead .ic { width: 50px; height: 50px; }
+  .dhead .who { flex: 1; min-width: 0; }
+  .dhead b { display: block; font-size: 17px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dhead span { color: var(--muted); font-size: 12.5px; }
+  .dhead .state { width: auto; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .tile { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+  h3 { font-size: 13px; font-weight: 600; color: #c9c7d4; margin: 16px 0 8px; }
+  .items { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 12.5px; }
+  .item + .item { border-top: 1px solid var(--line); }
+  .item.click { cursor: pointer; } .item.click:hover { background: rgba(255,255,255,.04); }
+  .item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .m { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .item .mini { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); }
+  .item .mini:hover { color: var(--text); background: rgba(255,255,255,.08); }
+  .buttons { display: flex; gap: 8px; margin-top: 12px; }
+  .wide { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 9px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--raised); font-weight: 600; transition: background .15s; }
   .wide:hover { background: rgba(255,255,255,.08); }
   .wide:disabled { opacity: .4; cursor: default; }
+  .note { margin-top: 12px; padding: 9px 11px; border-radius: 10px; background: rgba(255,181,71,.08); border: 1px solid rgba(255,181,71,.2); color: #e8cf9e; font-size: 12px; }
+  .doing { padding: 12px 0; border-bottom: 1px solid var(--line); margin-top: 12px; border-top: 1px solid var(--line); }
+  .doing b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doing span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .timeline { list-style: none; padding: 8px 0 0; }
+  .timeline li { position: relative; display: flex; align-items: baseline; gap: 10px; padding: 5px 0 5px 22px; font-size: 12.5px; }
+  .timeline li::before { content: ''; position: absolute; left: 3px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 6px rgba(139,92,255,.6); }
+  .timeline li.now::before { background: transparent; border: 1.5px solid var(--brand); box-shadow: none; }
+  .timeline li + li::after { content: ''; position: absolute; left: 7px; top: -9px; height: 16px; border-left: 1px solid rgba(255,255,255,.14); }
+  .timeline.plain li::before { background: none; border: 1.5px solid var(--muted); box-shadow: none; }
+  .timeline.plain li + li::after { display: none; }
+  .timeline .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ago { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 
   /* footer */
   .foot { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); }
-  .btn { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--raised); font-weight: 600; transition: background .15s; }
+  .btn { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); font-weight: 600; transition: background .15s; }
   .btn:hover { background: rgba(255,255,255,.08); }
+  .btn.on { background: rgba(139,92,255,.16); border-color: rgba(139,92,255,.3); }
   .btn:disabled { opacity: .4; cursor: default; }
   .meters { flex: 1; display: flex; justify-content: center; align-items: center; gap: 16px; color: var(--muted); font-size: 12.5px; }
   .meters b { color: var(--text); font-weight: 600; margin-left: 4px; }
   .meters .sep { width: 1px; height: 16px; background: var(--line); }
   .meter { display: flex; align-items: center; gap: 7px; }
+  .flash { color: #e8cf9e; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
   <div class="panel" id="panel">
     <header class="head">
-      <div class="m" id="managerMascot"></div>
-      <span class="brand">bayloob</span><span class="sep"></span><span class="sub">Workspace overview</span>
+      <div class="ic agent" id="managerMascot"></div>
+      <span class="brand">bayloob</span><span class="sep"></span><span class="sub">Workspace control</span>
       <div class="status" id="status"></div>
       <button class="square" id="settings" title="Settings">
         <svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
       </button>
     </header>
 
-    <div class="body">
-      <section class="col">
-        <h2>Sessions</h2>
-        <div class="sessions" id="sessions"></div>
+    <div class="main">
+      <nav class="side" id="side"></nav>
+      <section class="listcol">
+        <div class="listhead">
+          <h2 id="listTitle"></h2>
+          <label class="search">
+            <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="search" placeholder="Search apps…" spellcheck="false">
+          </label>
+        </div>
+        <div class="rows" id="rows"></div>
       </section>
-      <section class="col">
-        <h2>Current activity</h2>
-        <div id="activity"></div>
-      </section>
+      <section class="detail" id="detail"></section>
     </div>
 
     <footer class="foot">
-      <button class="btn" id="newSession">
-        <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New session
+      <button class="btn" id="launch">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Launch app
       </button>
       <div class="meters" id="meters"></div>
       <button class="btn" id="openWorkspace">
@@ -142,79 +178,147 @@
 <script>
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
-    state: { idle: 'Idle', thinking: 'Thinking', working: 'Working', waiting: 'Needs approval', done: 'Done' },
     connected: 'Connected', noEvents: 'Waiting for agents', noHooks: 'Hooks not installed',
     connectedTip: at => at ? `Hooks installed · last event ${timeAgo(at)}` : 'Hooks installed · no events yet',
-    noHooksTip: 'Run "bayloob --install-hooks" or open Settings to connect Claude Code',
-    empty: 'No agent sessions yet.<br>Start one with <b>New session</b>, or run an agent in any terminal.',
-    pick: 'Select a session to see what it is doing.',
-    nothingYet: 'Nothing yet',
-    openTerminal: 'Open terminal', more: 'More actions',
-    cpu: 'CPU', memory: 'Memory', metersTip: 'All watched agents and the processes they started',
+    noHooksTip: 'Open Settings to install the Claude Code hooks',
+    sections: { overview: 'Overview', agents: 'AI agents', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
+    listTitle: { overview: 'Running apps', agents: 'AI agents', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
+    launchTitle: 'Launch app', searchApps: 'Search apps…', searchInstalled: 'Search installed apps…',
+    status: { active: 'Active', running: 'Running', healthy: 'Healthy', unhealthy: 'Unhealthy', stopped: 'Stopped',
+      idle: 'Idle', thinking: 'Thinking', working: 'Working', waiting: 'Needs approval', done: 'Done' },
+    kind: { browser: 'Browser', ide: 'IDE', terminal: 'Terminal', files: 'Files', app: 'Application', system: 'System tool', agent: 'AI agent' },
+    empty: 'Nothing here right now.', noMatch: q => `No apps match “${q}”.`,
+    loading: 'Looking at what’s running…',
+    windows: 'Windows', projects: 'Projects', containers: 'Containers', recent: 'Recent activity', nothingYet: 'Nothing yet',
+    focus: 'Focus window', newTab: 'New tab', newWindow: 'New window', openTerminal: 'Open terminal', more: 'More actions', open: 'Open',
+    tabs: n => `${n} tab${n === 1 ? '' : 's'}`, wins: n => `${n} window${n === 1 ? '' : 's'}`, sessions: n => `${n} session${n === 1 ? '' : 's'}`,
+    unhealthyN: n => `${n} unhealthy`, allHealthy: 'All healthy',
+    needsExtension: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows.',
+    start: 'Start', stop: 'Stop', restart: 'Restart', launched: name => `Launching ${name}…`,
+    cpu: 'CPU', memory: 'Memory', metersTip: 'Apps in this view and the processes they started',
   };
-  const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+  const STATUS_COLOR = { active: 'var(--done)', running: 'var(--thinking)', healthy: 'var(--done)', unhealthy: 'var(--waiting)', stopped: 'var(--idle)',
+    idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+  const HEALTH_COLOR = { healthy: 'var(--done)', running: 'var(--thinking)', starting: 'var(--working)', unhealthy: 'var(--waiting)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const ACTIVE = new Set(['thinking', 'working', 'waiting']);
-  const TIMELINE_MAX = 6;
-  const ICON_DOTS = '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
-  const ICON_CPU = '<svg class="i" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>';
-  const ICON_MEM = '<svg class="i" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>';
+  const SECTION_OF = { browser: 'browsers', ide: 'ides', terminal: 'applications', files: 'applications', app: 'applications', system: 'system' };
+  const I = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24"${extra}>${d}</svg>`;
+  const ICONS = {
+    overview: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/>'),
+    agents: I('<circle cx="12" cy="10" r="6"/><path d="M9 10h.01M15 10h.01M8 20c1.2-1.5 2.5-2 4-2s2.8.5 4 2"/>'),
+    browsers: I('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/>'),
+    ides: I('<path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>'),
+    applications: I('<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>'),
+    system: I('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>'),
+    app: I('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>'),
+    box: I('<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5Z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/>'),
+    chevron: I('<path d="m9 6 6 6-6 6"/>'),
+    dots: I('<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>'),
+    cpu: I('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>'),
+    mem: I('<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>'),
+    tab: I('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M8 5v4"/>'),
+    win: I('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 7h14"/>'),
+    clock: I('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    plus: I('<path d="M12 5v14M5 12h14"/>'),
+    play: I('<path d="M7 4v16l13-8Z"/>'), stop: I('<rect x="6" y="6" width="12" height="12" rx="2"/>'),
+    restart: I('<path d="M4 4v6h6"/><path d="M20 12a8 8 0 0 1-13.7 5.7M4 10a8 8 0 0 1 14.5-3.5"/>'),
+    focus: I('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 12h8M12 8v8"/>'),
+    check: I('<path d="m5 12 4.5 4.5L19 7"/>'),
+  };
 
-  // "baynovix / website": the last two parts of the session's folder
   const projectPath = s => {
     const parts = String(s.cwd || '').split('/').filter(Boolean);
     return parts.length >= 2 ? parts.slice(-2).join(' / ') : (s.project || '');
   };
-  const stateHtml = state => `<span class="state" style="--c:${COLORS[state]}"><span class="dot"></span>${T.state[state] || state}</span>`;
+  const stateHtml = status => `<span class="state" style="--c:${STATUS_COLOR[status] || 'var(--idle)'}"><span class="dot"></span>${T.status[status] || status}</span>`;
+  const pct = v => v == null ? '—' : `${Math.round(v)}%`;
 
-  /** The workspace overview panel: sessions on the left, the selected session's activity on the right. */
+  /** One row's data, whatever it is: an installed app, Docker, or an agent session. */
+  function appItem(a) {
+    return { key: `app:${a.id}`, kind: a.id === 'docker' ? 'docker' : 'app', id: a.id, name: a.name, subtitle: a.subtitle,
+      status: a.status, category: a.category, data: a };
+  }
+  function agentItem(s) {
+    return { key: `agent:${s.id}`, kind: 'agent', id: s.id, name: Agent.displayName(s.agent), subtitle: projectPath(s),
+      status: s.state, category: 'agent', data: s };
+  }
+  function iconHtml(item, size = '') {
+    if (item.kind === 'agent') return `<div class="ic agent ${size}">${Agent.thumb(item.data.agent)}</div>`;
+    if (item.data?.icon) return `<div class="ic ${size}"><img src="${item.data.icon}" alt=""></div>`;
+    return `<div class="ic glyph ${size}">${item.kind === 'docker' ? ICONS.box : ICONS.app}</div>`;
+  }
+
+  /** The workspace control panel: sections on the left, the section's list, and the selected item's details. */
   class PanelView {
     sessions = [];
+    apps = null;           // null until the first workspace snapshot arrives
+    extension = false;
     stats = null;
     status = null;
-    selected = null;
+    section = 'overview';
+    selected = null;       // item key
+    query = '';
+    launchMode = false;    // the list shows installed apps to launch
+    launchable = null;
+    #flashTimer = null;
 
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { panel: $('panel'), mascot: $('managerMascot'), status: $('status'), sessions: $('sessions'),
-        activity: $('activity'), meters: $('meters'), newSession: $('newSession'), openWorkspace: $('openWorkspace'), settings: $('settings') };
+      this.el = { panel: $('panel'), mascot: $('managerMascot'), status: $('status'), side: $('side'), listTitle: $('listTitle'),
+        search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
+        openWorkspace: $('openWorkspace'), settings: $('settings') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       this.#bind();
-      setInterval(() => this.#renderActivity(), 30_000); // keep "2m ago" fresh
+      setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
     }
+
+    // ---------- data in ----------
 
     show(state) {
       this.sessions = state.sessions || [];
       this.status = state.status || null;
-      this.stats = null;
-      // Start on the session that most needs attention
-      if (!this.sessions.some(s => s.id === this.selected)) this.selected = this.#mostUrgent()?.id ?? null;
+      this.launchMode = false;
+      this.query = '';
+      this.el.search.value = '';
       this.render();
+      this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20);
     }
-
-    setSessions(list) {
-      this.sessions = list;
-      if (!list.some(s => s.id === this.selected)) this.selected = this.#mostUrgent()?.id ?? null;
-      this.render();
-    }
-
+    setSessions(list) { this.sessions = list; this.render(); }
+    setWorkspace(snap) { this.apps = snap.apps; this.extension = snap.extension; this.render(); }
     setStats(stats) { this.stats = stats; this.#renderMeters(); }
     setStatus(status) { this.status = status; this.#renderStatus(); }
 
-    get current() { return this.sessions.find(s => s.id === this.selected) || null; }
+    // ---------- model ----------
 
-    #mostUrgent() {
-      return [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt)[0];
+    #items(section = this.section) {
+      const agents = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt).map(agentItem);
+      const apps = (this.apps || []).map(appItem);
+      if (section === 'agents') return agents;
+      if (section === 'overview') return [...apps, ...agents];
+      return apps.filter(i => SECTION_OF[i.category] === section);
     }
+
+    #visible() {
+      const q = this.query.trim().toLowerCase();
+      return this.#items().filter(i => !q || `${i.name} ${i.subtitle}`.toLowerCase().includes(q));
+    }
+
+    get current() {
+      const items = this.#visible();
+      return items.find(i => i.key === this.selected) || items[0] || null;
+    }
+
+    // ---------- render ----------
 
     render() {
       this.#renderStatus();
-      this.#renderSessions();
-      this.#renderActivity();
+      this.#renderSide();
+      this.#renderList();
+      this.#renderDetail();
       this.#renderMeters();
-      this.el.openWorkspace.disabled = !this.current?.cwd;
-      this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20);
+      this.el.openWorkspace.disabled = !(this.current?.kind === 'agent' && this.current.data.cwd);
     }
 
     #renderStatus() {
@@ -227,76 +331,225 @@
       this.el.status.innerHTML = `<span class="dot"></span>${label}`;
     }
 
-    #renderSessions() {
-      if (!this.sessions.length) { this.el.sessions.innerHTML = `<div class="empty">${T.empty}</div>`; return; }
-      this.el.sessions.innerHTML = this.sessions.map(s => `
-        <div class="row${s.id === this.selected ? ' sel' : ''}" data-sid="${esc(s.id)}">
-          <div class="m">${Agent.thumb(s.agent)}</div>
-          <div class="who"><b>${esc(Agent.displayName(s.agent))}</b><span>${esc(projectPath(s))}</span></div>
-          ${stateHtml(s.state)}
-          <button class="square" data-act="focus" title="${T.openTerminal}">${ICON_TERM}</button>
-          <button class="kebab" data-act="menu" title="${T.more}">${ICON_DOTS}</button>
+    #renderSide() {
+      this.el.side.innerHTML = Object.entries(T.sections).map(([key, label]) => {
+        const n = this.#items(key).length;
+        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}">${ICONS[key]}<span>${label}</span>${n ? `<em>${n}</em>` : ''}</button>`;
+      }).join('');
+    }
+
+    #renderList() {
+      this.el.listTitle.textContent = this.launchMode ? T.launchTitle : T.listTitle[this.section];
+      this.el.search.placeholder = this.launchMode ? T.searchInstalled : T.searchApps;
+      this.el.launch.classList.toggle('on', this.launchMode);
+      if (this.launchMode) return this.#renderLaunchable();
+      if (this.apps === null && this.section !== 'agents') { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
+      const items = this.#visible();
+      if (!items.length) { this.el.rows.innerHTML = `<div class="empty">${this.query ? T.noMatch(esc(this.query)) : T.empty}</div>`; return; }
+      const sel = this.current?.key;
+      this.el.rows.innerHTML = items.map(i => `
+        <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
+          ${iconHtml(i)}
+          <div class="who"><b>${esc(i.name)}</b><span>${esc(i.subtitle || '')}</span></div>
+          ${stateHtml(i.status)}
+          <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
+          <button class="kebab" data-act="menu" title="${T.more}"${i.kind === 'docker' ? ' style="visibility:hidden"' : ''}>${ICONS.dots}</button>
         </div>`).join('');
     }
 
-    #renderActivity() {
-      const s = this.current;
-      if (!s) { this.el.activity.innerHTML = `<div class="empty">${this.sessions.length ? T.pick : ''}</div>`; return; }
+    #renderLaunchable() {
+      if (!this.launchable) { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
+      const q = this.query.trim().toLowerCase();
+      const list = this.launchable.filter(a => !q || a.name.toLowerCase().includes(q)).slice(0, 80);
+      if (!list.length) { this.el.rows.innerHTML = `<div class="empty">${T.noMatch(esc(this.query))}</div>`; return; }
+      this.el.rows.innerHTML = list.map(a => `
+        <div class="row" data-launch="${esc(a.id)}">
+          ${iconHtml({ kind: 'app', data: a })}
+          <div class="who"><b>${esc(a.name)}</b><span>${T.kind[a.category] || ''}</span></div>
+          <button class="square" data-act="launch" title="${T.open}">${ICONS.chevron}</button>
+        </div>`).join('');
+    }
+
+    #renderDetail() {
+      const item = this.launchMode ? null : this.current;
+      if (!item) { this.el.detail.innerHTML = ''; return; }
+      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span>${T.kind[item.category] || ''}</span></div>${stateHtml(item.status)}</div>`;
+      const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
+      this.el.detail.innerHTML = head + body;
+    }
+
+    #history(list) {
+      if (!list?.length) return `<div class="empty" style="padding:10px 0;text-align:left">${T.nothingYet}</div>`;
+      return `<ul class="timeline plain">${list.slice(0, 6).map(h => `<li><span class="t" title="${esc(h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>`;
+    }
+
+    #appDetail(a) {
+      const d = a.details || {};
+      const tiles = a.category === 'browser' && d.tabs !== undefined
+        ? [[ICONS.tab, T.tabs(d.tabs)], [ICONS.win, T.wins(d.browserWindows.length)], [ICONS.cpu, formatBytes(a.memory)]]
+        : a.category === 'terminal' && d.sessions
+          ? [[ICONS.tab, T.sessions(d.sessions)], [ICONS.win, T.wins(a.windows.length)], [ICONS.cpu, formatBytes(a.memory)]]
+          : [[ICONS.win, T.wins(a.windows.length)], [ICONS.mem, formatBytes(a.memory)], [ICONS.cpu, pct(a.cpu)]];
+
+      // Browser windows come from its session (with tab counts); others from the GNOME extension
+      let windows = '';
+      if (a.category === 'browser' && d.browserWindows?.length) {
+        windows = d.browserWindows.map(bw => {
+          const gw = a.windows.find(w => w.title.startsWith(bw.title));
+          return `<div class="item${gw ? ' click' : ''}"${gw ? ` data-window="${esc(gw.id)}"` : ''}>${ICONS.tab}<span class="t">${esc(bw.title)}</span><span class="m">${T.tabs(bw.tabs)}</span></div>`;
+        }).join('');
+      } else if (a.windows.length) {
+        windows = a.windows.map(w => `<div class="item click" data-window="${esc(w.id)}">${ICONS.win}<span class="t">${esc(w.title)}</span>${w.focused ? '<span class="m">focused</span>' : ''}</div>`).join('');
+      }
+      const projects = d.projects?.length
+        ? `<h3>${T.projects}</h3><div class="items">${d.projects.map(p => `<div class="item">${ICONS.ides}<span class="t">${esc(p)}</span></div>`).join('')}</div>` : '';
+      const second = a.category === 'browser'
+        ? `<button class="wide" data-act="newtab">${ICONS.plus}${T.newTab}</button>`
+        : `<button class="wide" data-act="newwindow">${ICONS.plus}${T.newWindow}</button>`;
+      return `
+        <div class="tiles">${tiles.map(([ic, txt]) => `<div class="tile">${ic}${esc(txt)}</div>`).join('')}</div>
+        ${projects}
+        ${windows ? `<h3>${T.windows}</h3><div class="items">${windows}</div>` : ''}
+        ${!this.extension ? `<div class="note">${T.needsExtension}</div>` : ''}
+        <div class="buttons">
+          <button class="wide" data-act="focus"${a.windows.length ? '' : ' disabled'}>${ICONS.focus}${T.focus}</button>
+          ${second}
+        </div>
+        <h3>${T.recent}</h3>${this.#history(a.history)}`;
+    }
+
+    #dockerDetail(a) {
+      const cs = a.details.containers;
+      const running = cs.filter(c => c.state === 'running').length;
+      const unhealthy = cs.filter(c => c.health === 'unhealthy').length;
+      const rows = cs.map(c => {
+        const on = c.state === 'running';
+        const actions = on
+          ? `<button class="mini" data-docker="restart" data-id="${esc(c.id)}" title="${T.restart}">${ICONS.restart}</button><button class="mini" data-docker="stop" data-id="${esc(c.id)}" title="${T.stop}">${ICONS.stop}</button>`
+          : `<button class="mini" data-docker="start" data-id="${esc(c.id)}" title="${T.start}">${ICONS.play}</button>`;
+        return `<div class="item"><span class="dot" style="--c:${HEALTH_COLOR[c.health] || 'var(--idle)'}" title="${esc(c.status)}"></span><span class="t" title="${esc(c.image)}">${esc(c.name)}</span><span class="m">${esc(c.health)}</span>${actions}</div>`;
+      }).join('');
+      return `
+        <div class="tiles">
+          <div class="tile">${ICONS.box}${cs.length} total</div>
+          <div class="tile">${ICONS.play}${running} running</div>
+          <div class="tile">${unhealthy ? ICONS.restart : ICONS.check}${unhealthy ? T.unhealthyN(unhealthy) : T.allHealthy}</div>
+        </div>
+        <h3>${T.containers}</h3><div class="items">${rows}</div>
+        <h3>${T.recent}</h3>${this.#history(a.history)}`;
+    }
+
+    #agentDetail(s) {
       const doing = s.activity || { title: T.nothingYet, detail: '' };
-      const history = (s.history || []).slice(0, TIMELINE_MAX);
       const live = ACTIVE.has(s.state);
-      this.el.activity.innerHTML = `
-        <div class="who-big"><div class="m">${Agent.thumb(s.agent)}</div><b>${esc(Agent.displayName(s.agent))}</b>${stateHtml(s.state)}</div>
+      const history = (s.history || []).slice(0, 6);
+      return `
         <div class="doing"><b title="${esc(doing.title)}">${esc(doing.title)}</b><span title="${esc(doing.detail)}">${esc(doing.detail || projectPath(s))}</span></div>
-        <ul class="timeline">${history.map((h, i) => `
-          <li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}
-        </ul>
-        <button class="wide" data-act="focus" data-sid="${esc(s.id)}">${ICON_TERM} ${T.openTerminal}</button>`;
+        <ul class="timeline">${history.map((h, i) => `<li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>
+        <div class="buttons"><button class="wide" data-act="terminal">${ICON_TERM}${T.openTerminal}</button></div>`;
     }
 
     #renderMeters() {
-      const st = this.stats;
-      const cpu = st?.cpu == null ? '—' : `${Math.round(st.cpu)}%`;
-      const mem = st ? formatBytes(st.memory) : '—';
+      let cpu = null, memory = null;
+      if (this.section === 'agents' && !this.launchMode) ({ cpu, memory } = this.stats || {});
+      else {
+        for (const i of this.#items()) {
+          if (i.kind !== 'app') continue;
+          if (i.data.cpu != null) cpu = (cpu || 0) + i.data.cpu;
+          if (i.data.memory != null) memory = (memory || 0) + i.data.memory;
+        }
+      }
       this.el.meters.title = T.metersTip;
-      this.el.meters.innerHTML = `<span class="meter">${ICON_CPU}${T.cpu}<b>${cpu}</b></span><span class="sep"></span><span class="meter">${ICON_MEM}${T.memory}<b>${mem}</b></span>`;
+      this.el.meters.innerHTML = `<span class="meter">${ICONS.cpu}${T.cpu}<b>${pct(cpu)}</b></span><span class="sep"></span><span class="meter">${ICONS.mem}${T.memory}<b>${memory == null ? '—' : formatBytes(memory)}</b></span>`;
     }
 
-    #select(id) {
-      if (id === this.selected) return;
-      this.selected = id;
-      this.#renderSessions();
-      this.#renderActivity();
-      this.el.openWorkspace.disabled = !this.current?.cwd;
+    #flash(text) {
+      clearTimeout(this.#flashTimer);
+      this.el.meters.innerHTML = `<span class="flash">${esc(text)}</span>`;
+      this.#flashTimer = setTimeout(() => this.#renderMeters(), 3500);
+    }
+
+    // ---------- actions ----------
+
+    async #run(promise) {
+      const r = await promise;
+      if (r && r.ok === false && r.error) this.#flash(r.error);
+    }
+
+    #primary(item) {
+      if (item.kind === 'agent') return this.api?.focus(item.id);
+      if (item.kind === 'app') return this.#run(this.api?.focusApp(item.id));
+    }
+
+    async #toggleLaunch() {
+      this.launchMode = !this.launchMode;
+      this.query = '';
+      this.el.search.value = '';
+      if (this.launchMode && !this.launchable) {
+        this.render();
+        this.launchable = await this.api?.launchable() || [];
+      }
+      this.render();
+      this.el.search.focus();
     }
 
     #move(step) {
-      if (!this.sessions.length) return;
-      const i = this.sessions.findIndex(s => s.id === this.selected);
-      this.#select(this.sessions[(i + step + this.sessions.length) % this.sessions.length].id);
+      const items = this.#visible();
+      if (!items.length) return;
+      const i = Math.max(0, items.findIndex(x => x.key === this.current?.key));
+      this.selected = items[(i + step + items.length) % items.length].key;
+      this.render();
     }
 
     #bind() {
-      this.el.sessions.addEventListener('click', e => {
-        const row = e.target.closest('.row');
+      this.el.side.addEventListener('click', e => {
+        const b = e.target.closest('[data-section]');
+        if (!b) return;
+        this.section = b.dataset.section;
+        this.launchMode = false;
+        this.selected = null;
+        this.render();
+      });
+      this.el.rows.addEventListener('click', e => {
+        const launch = e.target.closest('[data-launch]');
+        if (launch) {
+          const app = this.launchable.find(a => a.id === launch.dataset.launch);
+          this.#flash(T.launched(app?.name || ''));
+          return this.#run(this.api?.launchApp(launch.dataset.launch));
+        }
+        const row = e.target.closest('.row[data-key]');
         if (!row) return;
+        this.selected = row.dataset.key;
+        const item = this.current;
         const act = e.target.closest('[data-act]')?.dataset.act;
-        this.#select(row.dataset.sid);
-        if (act === 'focus') this.api?.focus(row.dataset.sid);
-        if (act === 'menu') this.api?.sessionMenu(row.dataset.sid);
+        if (act === 'primary') this.#primary(item);
+        if (act === 'menu') item.kind === 'agent' ? this.api?.sessionMenu(item.id) : this.api?.appMenu(item.id);
+        this.render();
       });
-      this.el.activity.addEventListener('click', e => {
-        const b = e.target.closest('[data-act=focus]');
-        if (b) this.api?.focus(b.dataset.sid);
+      this.el.detail.addEventListener('click', e => {
+        const item = this.current;
+        if (!item) return;
+        const win = e.target.closest('[data-window]');
+        if (win) return this.#run(this.api?.focusApp(item.id, win.dataset.window));
+        const docker = e.target.closest('[data-docker]');
+        if (docker) { docker.disabled = true; return this.#run(this.api?.docker(docker.dataset.docker, docker.dataset.id)); }
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (act === 'focus') this.#run(this.api?.focusApp(item.id));
+        if (act === 'newtab') this.#run(this.api?.newTab(item.id));
+        if (act === 'newwindow') this.#run(this.api?.launchApp(item.id));
+        if (act === 'terminal') this.api?.focus(item.id);
       });
-      this.el.newSession.addEventListener('click', () => this.api?.newSession());
-      this.el.openWorkspace.addEventListener('click', () => this.current && this.api?.openWorkspace(this.current.id));
+      this.el.search.addEventListener('input', () => { this.query = this.el.search.value; this.selected = null; this.render(); });
+      this.el.launch.addEventListener('click', () => this.#toggleLaunch());
+      this.el.openWorkspace.addEventListener('click', () => this.current?.kind === 'agent' && this.api?.openWorkspace(this.current.id));
       this.el.settings.addEventListener('click', () => this.api?.openSettings());
       document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') this.api?.close();
-        else if (e.key === 'ArrowDown') { e.preventDefault(); this.#move(1); }
+        if (e.key === 'Escape') {
+          if (this.launchMode || this.query) { this.launchMode = false; this.query = ''; this.el.search.value = ''; this.render(); }
+          else this.api?.close();
+        } else if (e.key === 'ArrowDown') { e.preventDefault(); this.#move(1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); this.#move(-1); }
-        else if (e.key === 'Enter' && this.current) this.api?.focus(this.current.id);
+        else if (e.key === 'Enter' && this.current && !this.launchMode) this.#primary(this.current);
       });
     }
   }
@@ -307,6 +560,7 @@
     panelAPI.onSessions(list => view.setSessions(list));
     panelAPI.onStats(stats => view.setStats(stats));
     panelAPI.onStatus(status => view.setStatus(status));
+    panelAPI.onWorkspace(snap => view.setWorkspace(snap));
   } else {
     window.__demo = view; // opened in a plain browser: drive it from the console
   }
