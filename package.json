@@ -1,0 +1,69 @@
+{
+  "name": "bayloob",
+  "productName": "Bayloob",
+  "version": "0.3.0",
+  "description": "A local status overlay for AI coding agents (Claude Code, Codex, Gemini CLI)",
+  "homepage": "https://baynovix.com",
+  "author": {
+    "name": "Baynovix",
+    "email": "info@baynovix.com"
+  },
+  "license": "MIT",
+  "main": "src/main.js",
+  "packageManager": "bun@1.4.0",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --no-sandbox",
+    "install-hooks": "bun scripts/install-hooks.js",
+    "test-events": "bun scripts/simulate.js",
+    "dist:deb": "electron-builder --linux deb"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "25.1.8"
+  },
+  "trustedDependencies": [
+    "electron"
+  ],
+  "build": {
+    "appId": "com.baynovix.bayloob",
+    "productName": "Bayloob",
+    "executableName": "bayloob",
+    "files": [
+      "src/**/*",
+      "scripts/install-hooks.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": [
+          "bayloob-hook",
+          "hook.js",
+          "x11-focus.py"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "linux": {
+      "target": [
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "build/icon.png",
+      "synopsis": "Status overlay for AI coding agents",
+      "maintainer": "Baynovix <info@baynovix.com>"
+    },
+    "deb": {
+      "packageName": "bayloob",
+      "compression": "xz",
+      "afterInstall": "build/after-install.sh",
+      "afterRemove": "build/after-remove.sh"
+    },
+    "publish": null
+  }
+}

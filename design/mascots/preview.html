@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bayloob mascot variants</title>
+<style>
+  :root { --idle:#8b8b96; --thinking:#6aa8ff; --working:#ffb547; --waiting:#ff5d6c; --done:#4fd59a; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #2c3039; color: #f2f2f5; font: 500 12px/1.3 -apple-system, "Segoe UI", system-ui, sans-serif; padding: 14px; }
+  h2 { font-size: 13px; margin: 14px 0 6px; color: #c9ccd6; }
+  .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .cell { background: rgba(14,14,18,.95); border-radius: 0 0 16px 16px; height: 50px; display: flex; align-items: center; gap: 8px; padding: 4px 10px 0; }
+  .cell small { color: #8b8b96; }
+  [data-s=idle]{--accent:var(--idle)} [data-s=thinking]{--accent:var(--thinking)} [data-s=working]{--accent:var(--working)}
+  [data-s=waiting]{--accent:var(--waiting)} [data-s=done]{--accent:var(--done)}
+  .m { position: relative; width: 34px; height: 34px; flex: none; }
+
+  /* ================= A) DAMLA — jele blob ================= */
+  .blob .b { position: absolute; inset: 4px 2px 1px; border-radius: 52% 48% 44% 56% / 58% 54% 46% 42%;
+    background: radial-gradient(circle at 34% 28%, #d4fff4 0%, #5fdcc0 40%, #239a8c 100%);
+    box-shadow: inset -2px -3px 4px rgba(0,40,40,.35), 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .blob .e { position: absolute; top: 11px; width: 8px; height: 9px; border-radius: 50%; background: #fff; overflow: hidden; }
+  .blob .e.l { left: 8px; } .blob .e.r { right: 8px; }
+  .blob .e i { position: absolute; left: 2px; top: 3px; width: 4px; height: 5px; border-radius: 50%; background: #14262a; transition: transform .3s; }
+  .blob .mo { position: absolute; left: 50%; top: 22px; width: 7px; height: 3px; margin-left: -3.5px; border: 2px solid #14403d; border-top: 0; border-radius: 0 0 5px 5px; opacity: 0; }
+  .blob[data-s=idle] .b { animation: morph 3.5s ease-in-out infinite; }
+  .blob[data-s=idle] .e { animation: blink 4s infinite; }
+  .blob[data-s=thinking] .e i { transform: translate(1px,-2px); animation: lookA 2s ease-in-out infinite; }
+  .blob[data-s=working] .b { animation: squish .45s ease-in-out infinite; }
+  .blob[data-s=working] .e { height: 6px; top: 13px; } .blob[data-s=working] .e i { top: 2px; }
+  .blob[data-s=waiting] { animation: shake .4s infinite; }
+  .blob[data-s=waiting] .e { width: 9px; height: 11px; top: 9px; } .blob[data-s=waiting] .e i { width: 3px; height: 3px; left: 3px; top: 4px; }
+  .blob[data-s=done] .e { height: 4px; top: 13px; border-radius: 4px 4px 0 0; } .blob[data-s=done] .e i { display: none; }
+  .blob[data-s=done] .mo { opacity: 1; }
+  .blob[data-s=done] { animation: hopBig .8s cubic-bezier(.3,1.6,.5,1) infinite; }
+
+  /* ================= B) CAT ================= */
+  .cat .ear { position: absolute; top: 2px; width: 12px; height: 13px; background: #ecdcc4;
+    clip-path: polygon(50% 0, 100% 100%, 0 100%); transition: transform .3s; }
+  .cat .ear::after { content: ""; position: absolute; left: 3px; right: 3px; top: 5px; bottom: 0; background: #f3a7a7; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .cat .ear.l { left: 3px; transform: rotate(-12deg); transform-origin: 50% 100%; }
+  .cat .ear.r { right: 3px; transform: rotate(12deg); transform-origin: 50% 100%; }
+  .cat .h { position: absolute; inset: 8px 2px 2px; border-radius: 46% 46% 42% 42% / 50% 50% 50% 50%;
+    background: radial-gradient(circle at 38% 30%, #fffaf2, #f4e7d4 50%, #d9c3a5); box-shadow: inset -2px -3px 4px rgba(80,50,20,.25); }
+  .cat .e { position: absolute; top: 9px; width: 4px; height: 7px; border-radius: 50%; background: #2b2118; transition: all .25s; }
+  .cat .e.l { left: 7px; } .cat .e.r { right: 7px; }
+  .cat .n { position: absolute; left: 50%; top: 15px; margin-left: -2.5px; border: 2.5px solid transparent; border-top: 3px solid #e98a8a; }
+  .cat .w { position: absolute; top: 16px; width: 6px; height: 1px; background: rgba(60,40,20,.45); }
+  .cat .w.l { left: -1px; } .cat .w.r { right: -1px; }
+  .cat .mo { position: absolute; left: 50%; top: 18px; margin-left: -4px; font: 700 9px/1 sans-serif; color: #2b2118; opacity: 0; }
+  .cat .bell { position: absolute; left: 50%; bottom: -1px; margin-left: -3px; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .cat[data-s=idle] .e { animation: blink 4.5s infinite; }
+  .cat[data-s=idle] .ear.l { animation: twitch 5s infinite; }
+  .cat[data-s=thinking] .e { animation: lookB 2s ease-in-out infinite; }
+  .cat[data-s=thinking] .bell { animation: pulse 1s infinite; }
+  .cat[data-s=working] .inner { animation: bob .5s ease-in-out infinite; }
+  .cat[data-s=working] .e { height: 4px; top: 11px; }
+  .cat[data-s=working] .ear.l { transform: rotate(-4deg); } .cat[data-s=working] .ear.r { transform: rotate(4deg); }
+  .cat[data-s=waiting] { animation: shake .4s infinite; }
+  .cat[data-s=waiting] .ear.l { transform: rotate(-55deg) translateY(3px); } .cat[data-s=waiting] .ear.r { transform: rotate(55deg) translateY(3px); }
+  .cat[data-s=waiting] .e { width: 6px; height: 7px; top: 9px; }
+  .cat[data-s=waiting] .bell { animation: pulse .4s steps(2) infinite; }
+  .cat[data-s=done] .e { height: 2px; top: 12px; border-radius: 2px; }
+  .cat[data-s=done] .mo { opacity: 1; } .cat[data-s=done] .n { top: 14px; }
+  .cat .inner { position: absolute; inset: 0; }
+
+  /* ================= C) PIXEL SCREEN ================= */
+  .pix .s { position: absolute; inset: 3px 1px; border-radius: 8px; background: #0b0d12;
+    border: 2px solid #cfd3de; box-shadow: 0 0 0 1px #6c7180, inset 0 0 8px color-mix(in srgb, var(--accent) 35%, transparent); overflow: hidden; }
+  .pix .s::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px); }
+  .pix .e { position: absolute; top: 8px; width: 5px; height: 6px; background: var(--accent); box-shadow: 0 0 5px var(--accent); transition: all .2s; }
+  .pix .e.l { left: 7px; } .pix .e.r { right: 7px; }
+  .pix .bar { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 2px; background: color-mix(in srgb, var(--accent) 25%, transparent); overflow: hidden; opacity: 0; }
+  .pix .bar::before { content: ""; position: absolute; top: 0; bottom: 0; width: 40%; background: var(--accent); animation: load 1s linear infinite; }
+  .pix .x { position: absolute; left: 0; right: 0; top: 4px; text-align: center; font: 900 15px/1 ui-monospace, monospace; color: var(--accent); text-shadow: 0 0 6px var(--accent); opacity: 0; }
+  .pix .smile { position: absolute; left: 50%; top: 17px; width: 10px; height: 4px; margin-left: -5px; border: 2px solid var(--accent); border-top: 0; opacity: 0; filter: drop-shadow(0 0 3px var(--accent)); }
+  .pix[data-s=idle] .e { animation: blink 4s infinite; }
+  .pix[data-s=thinking] .e { height: 3px; top: 9px; animation: lookC 1.6s steps(3) infinite; }
+  .pix[data-s=thinking] .bar { opacity: 1; }
+  .pix[data-s=working] .e { height: 2px; width: 7px; top: 10px; }
+  .pix[data-s=working] .e.l { left: 6px; } .pix[data-s=working] .e.r { right: 6px; }
+  .pix[data-s=working] .bar { opacity: 1; } .pix[data-s=working] .bar::before { animation-duration: .5s; }
+  .pix[data-s=waiting] .e { opacity: 0; } .pix[data-s=waiting] .x { opacity: 1; animation: pulse .5s steps(2) infinite; }
+  .pix[data-s=waiting] { animation: shake .4s infinite; }
+  .pix[data-s=done] .e { width: 5px; height: 2px; top: 9px; } .pix[data-s=done] .smile { opacity: 1; }
+
+  /* ===== shared keyframes ===== */
+  @keyframes blink { 0%,90%,100% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
+  @keyframes morph { 50% { border-radius: 46% 54% 52% 48% / 50% 58% 42% 50%; transform: scale(1.04,.96); } }
+  @keyframes squish { 50% { transform: scale(1.1,.88) translateY(2px); } }
+  @keyframes hopBig { 0%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
+  @keyframes shake { 25% { transform: translateX(-1.5px); } 75% { transform: translateX(1.5px); } }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @keyframes bob { 50% { transform: translateY(-2px) rotate(-3deg); } }
+  @keyframes twitch { 0%,88%,100% { transform: rotate(-12deg); } 92% { transform: rotate(-28deg); } }
+  @keyframes lookA { 50% { transform: translate(-1px,-2px); } }
+  @keyframes lookB { 0%,100% { transform: translateX(-1px); } 50% { transform: translateX(1.5px); } }
+  @keyframes lookC { 0% { transform: translateX(-2px); } 50% { transform: translateX(0); } 100% { transform: translateX(2px); } }
+  @keyframes load { from { left: -40%; } to { left: 100%; } }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+<script>
+  const STATES = [['idle','idle'],['thinking','thinking'],['working','working'],['waiting','approval'],['done','done']];
+  const MASCOTS = {
+    'A — Damla (jele blob)': s => `<div class="m blob" data-s="${s}"><div class="b"></div><div class="e l"><i></i></div><div class="e r"><i></i></div><div class="mo"></div></div>`,
+    'B — Cat': s => `<div class="m cat" data-s="${s}"><div class="inner"><div class="ear l"></div><div class="ear r"></div><div class="h"></div><div class="e l"></div><div class="e r"></div><div class="n"></div><div class="w l"></div><div class="w r"></div><div class="mo">ω</div></div><div class="bell"></div></div>`,
+    'C — Piksel ekran (robot)': s => `<div class="m pix" data-s="${s}"><div class="s"><div class="e l"></div><div class="e r"></div><div class="x">!</div><div class="smile"></div><div class="bar"></div></div></div>`,
+  };
+  document.getElementById('root').innerHTML = Object.entries(MASCOTS).map(([name, html]) =>
+    `<h2>${name}</h2><div class="row">${STATES.map(([s, t]) => `<div class="cell" data-s="${s}">${html(s)}<small>${t}</small></div>`).join('')}</div>`).join('');
+</script>
+</body>
+</html>

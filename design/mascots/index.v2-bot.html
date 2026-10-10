@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bayloob</title>
+<style>
+  :root {
+    --glass: rgba(14, 14, 18, 0.92);
+    --line: rgba(255,255,255,0.08);
+    --text: #f2f2f5;
+    --muted: #8b8b96;
+    --idle: #8b8b96;
+    --thinking: #6aa8ff;
+    --working: #ffb547;
+    --waiting: #ff5d6c;
+    --done: #4fd59a;
+    --accent: var(--idle);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; height: 100%;
+    font: 500 12px/1.3 -apple-system, "Segoe UI", system-ui, sans-serif; color: var(--text);
+    user-select: none; -webkit-font-smoothing: antialiased; }
+  body { display: flex; justify-content: center; align-items: flex-start; }
+
+  /* ---------- Pill (the part attached to the notch) ---------- */
+  .pill {
+    margin-top: 0;
+    width: 250px; min-height: 44px;
+    background: var(--glass);
+    border-radius: 0 0 20px 20px;
+    border: 1px solid var(--line); border-top: none;
+    box-shadow: 0 8px 28px rgba(0,0,0,.35);
+    overflow: hidden;
+    transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
+  }
+  .pill.open { width: 360px; border-radius: 0 0 24px 24px; }
+  .bar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 4px 14px 0 10px; }
+  .label { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .label b { font-weight: 600; }
+  .label span { color: var(--muted); }
+  .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Bayloob mascot: a one-lens propeller bot ---------- */
+  .bayloob { position: relative; width: 34px; height: 34px; flex: none; }
+  .bayloob .bot { position: absolute; inset: 0; transform-origin: 50% 100%; }
+  .bayloob .shaft { position: absolute; left: 50%; top: 3px; width: 2px; height: 5px; margin-left: -1px; background: #8a94a6; }
+  .bayloob .rotor { position: absolute; left: 50%; top: 1px; width: 18px; height: 3px; margin-left: -9px;
+    border-radius: 3px; background: linear-gradient(90deg, #7d889b, #d6dce6 50%, #7d889b); }
+  .bayloob .chassis { position: absolute; left: 4px; right: 4px; top: 8px; bottom: 2px; border-radius: 8px 8px 10px 10px;
+    background: linear-gradient(160deg, #eef1f6 0%, #c4ccd8 55%, #9aa5b6 100%);
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), inset 0 1px 0 #fff, 0 2px 6px rgba(0,0,0,.45); }
+  .bayloob .bolt { position: absolute; top: 18px; width: 3px; height: 7px; border-radius: 2px; background: #7d889b; }
+  .bayloob .bolt.l { left: 2px; } .bayloob .bolt.r { right: 2px; }
+  .bayloob .lens { position: absolute; left: 50%; top: 11px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%;
+    background: #181c24; border: 2px solid #6b768a; overflow: hidden; transition: transform .2s; }
+  .bayloob .iris { position: absolute; inset: 2px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 6px var(--accent), inset 0 0 3px rgba(0,0,0,.5); transition: transform .3s, background .3s; }
+  .bayloob .iris::after { content: ""; position: absolute; left: 2px; top: 2px; width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,.85); }
+  .bayloob .grill { position: absolute; left: 50%; bottom: 4px; width: 8px; height: 3px; margin-left: -4px;
+    background: repeating-linear-gradient(90deg, #7d889b 0 1px, transparent 1px 3px); }
+
+  /* idle: the lens "breathes", blinks now and then, the propeller sways slowly */
+  .bayloob[data-s=idle] .iris { animation: breathe 3s ease-in-out infinite; }
+  .bayloob[data-s=idle] .lens { animation: blink 5s infinite; }
+  .bayloob[data-s=idle] .rotor { animation: sway 3s ease-in-out infinite; }
+  /* thinking: the eye looks around, the propeller spins slowly */
+  .bayloob[data-s=thinking] .iris { animation: look 2.2s ease-in-out infinite; }
+  .bayloob[data-s=thinking] .rotor { animation: spin .5s linear infinite; }
+  /* working: the propeller spins fast, the bot bobs in the air */
+  .bayloob[data-s=working] .rotor { animation: spin .12s linear infinite; }
+  .bayloob[data-s=working] .bot { animation: hover .6s ease-in-out infinite; }
+  .bayloob[data-s=working] .iris { transform: scale(.75); }
+  /* waiting: the propeller stops, the lens blinks red, shaking */
+  .bayloob[data-s=waiting] .bot { animation: shake .4s ease-in-out infinite; }
+  .bayloob[data-s=waiting] .iris { animation: pulse .5s steps(2) infinite; transform: scale(1.1); }
+  /* done: a "smiling" eye (cut from below), one jump */
+  .bayloob[data-s=done] .iris { transform: scaleY(.5) translateY(4px); }
+  .bayloob[data-s=done] .bot { animation: joy .7s cubic-bezier(.3,1.6,.5,1) 1; }
+  .bayloob[data-s=done] .rotor { animation: spin .3s linear 3; }
+
+  @keyframes breathe { 50% { transform: scale(.85); } }
+  @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+  @keyframes look { 0%,100% { transform: translate(-3px,-1px) scale(.85); } 50% { transform: translate(3px,-1px) scale(.85); } }
+  @keyframes spin { 0% { transform: scaleX(1); } 50% { transform: scaleX(.15); } 100% { transform: scaleX(1); } }
+  @keyframes sway { 50% { transform: scaleX(.8); } }
+  @keyframes pulse { 50% { opacity: .3; box-shadow: none; } }
+  @keyframes hover { 50% { transform: translateY(-2px); } }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-1.5px) rotate(-3deg); } 75% { transform: translateX(1.5px) rotate(3deg); } }
+  @keyframes joy { 0% { transform: translateY(0); } 40% { transform: translateY(-5px) scale(.95,1.06); } 100% { transform: translateY(0); } }
+
+  /* ---------- Session list (opens on hover) ---------- */
+  .list { max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .25s; padding: 0 12px; }
+  .pill.open .list { max-height: 200px; opacity: 1; padding-bottom: 10px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-top: 1px solid var(--line); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .agent { color: var(--muted); font-size: 11px; }
+  .row .st { font-size: 11px; }
+  .empty { color: var(--muted); padding: 8px 4px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+  <div class="pill" id="pill">
+    <div class="bar">
+      <div class="bayloob" id="bayloob" data-s="idle">
+        <div class="bot">
+          <div class="shaft"></div><div class="rotor"></div>
+          <div class="chassis"></div>
+          <div class="bolt l"></div><div class="bolt r"></div>
+          <div class="lens"><div class="iris"></div></div>
+          <div class="grill"></div>
+        </div>
+      </div>
+      <div class="label" id="label"><b>Bayloob</b> <span>waiting…</span></div>
+      <div class="count" id="count"></div>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+
+<script>
+  const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+  const TEXT = { idle: 'idle', thinking: 'thinking', working: 'working', waiting: 'needs approval', done: 'done' };
+  // The most important state wins
+  const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
+
+  const $ = id => document.getElementById(id);
+  const pill = $('pill'), bayloob = $('bayloob');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function render(list) {
+    const top = [...list].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt)[0];
+    const state = top ? top.state : 'idle';
+    if (bayloob.dataset.s !== state) bayloob.dataset.s = state;   // restarts the animation on change
+    document.documentElement.style.setProperty('--accent', COLORS[state]);
+
+    $('label').innerHTML = top
+      ? `<b>${esc(top.project)}</b> <span>${TEXT[state]}${top.tool ? ' · ' + esc(top.tool) : ''}</span>`
+      : `<b>Bayloob</b> <span>sessiya yoxdur</span>`;
+    $('count').textContent = list.length > 1 ? list.length : '';
+
+    $('list').innerHTML = list.length
+      ? list.map(s => `<div class="row">
+          <span class="dot" style="background:${COLORS[s.state]}"></span>
+          <span class="name">${esc(s.project)} <span class="agent">${esc(s.agent)}</span></span>
+          <span class="st" style="color:${COLORS[s.state]}">${TEXT[s.state]}</span></div>`).join('')
+      : '<div class="empty">No active agent sessions</div>';
+  }
+
+  pill.addEventListener('mouseenter', () => { pill.classList.add('open'); window.bayloobAPI?.setMouseOver(true); });
+  pill.addEventListener('mouseleave', () => { pill.classList.remove('open'); window.bayloobAPI?.setMouseOver(false); });
+
+  if (window.bayloobAPI) {
+    window.bayloobAPI.onSessions(render);
+    render([]);
+  } else {
+    // Opened in a browser: demo mode cycles through the states
+    const demo = ['idle', 'thinking', 'working', 'waiting', 'done']; let i = 0;
+    const tick = () => {
+      const st = demo[i++ % demo.length];
+      render([
+        { id: 'a', agent: 'claude', project: 'ngogrant', state: st, tool: st === 'working' ? 'Edit' : null, updatedAt: Date.now() },
+        { id: 'b', agent: 'codex', project: 'qhtaz-api', state: 'idle', updatedAt: 0 },
+      ]);
+    };
+    tick(); setInterval(tick, 2500);
+    pill.classList.add('open');
+  }
+</script>
+</body>
+</html>

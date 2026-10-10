@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bayloob</title>
+<style>
+  :root {
+    --glass: rgba(14, 14, 18, 0.94);
+    --card: rgba(255,255,255,0.045);
+    --line: rgba(255,255,255,0.08);
+    --text: #f2f2f5;
+    --muted: #8b8b96;
+    --idle: #8b8b96;
+    --thinking: #6aa8ff;
+    --working: #ffb547;
+    --waiting: #ff5d6c;
+    --done: #4fd59a;
+    --brand: #8b4dff;
+    --accent: var(--idle);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; height: 100%;
+    font: 500 12px/1.35 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
+    user-select: none; -webkit-font-smoothing: antialiased; }
+  body { display: flex; justify-content: center; align-items: flex-start; }
+  button { font: inherit; color: inherit; border: 0; cursor: pointer; background: none; }
+
+  /* ---------- Pill ---------- */
+  .pill {
+    width: 250px; min-height: 44px;
+    background: var(--glass);
+    border-radius: 0 0 20px 20px;
+    border: 1px solid var(--line); border-top: none;
+    box-shadow: 0 8px 28px rgba(0,0,0,.35);
+    overflow: hidden;
+    transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
+  }
+  .pill.open, .pill.has-card { width: 380px; border-radius: 0 0 24px 24px; }
+  .bar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 4px 14px 0 10px; }
+  .label { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .label b { font-weight: 600; }
+  .label span { color: var(--muted); }
+  .label .note { color: #c9a4ff; }
+  .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Mascot (based on the Baynovix logo) ---------- */
+  .mascot { position: relative; width: 34px; height: 34px; flex: none; --ring: var(--accent); }
+  .mascot.mini { width: 20px; height: 20px; }
+  .mascot[data-s=idle], .mascot[data-s=dance] { --ring: var(--brand); }
+  .mascot svg { width: 100%; height: 100%; overflow: visible; display: block;
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ring) 70%, transparent)) drop-shadow(0 2px 3px rgba(0,0,0,.5));
+    transform-origin: 50% 90%; }
+  .mascot.mini svg { filter: drop-shadow(0 0 2px color-mix(in srgb, var(--ring) 60%, transparent)); }
+  .mascot .lid, .mascot .eye, .mascot .joy { transform-box: fill-box; transform-origin: center; }
+  .mascot .lid { transition: transform .3s cubic-bezier(.3,1.5,.5,1); }
+  .mascot .visor-frame { stroke: var(--ring); transition: stroke .3s; }
+  .mascot .eye { fill: #f3eaff; transition: transform .2s; }
+  .mascot .joy { opacity: 0; stroke: #f3eaff; transition: opacity .2s; }
+
+  .mascot[data-s=idle] svg { animation: breathe 3.2s ease-in-out infinite; }
+  .mascot[data-s=idle] .eye { animation: blink 4.5s infinite; }
+  .mascot[data-s=thinking] .eyes { animation: scan 2.2s ease-in-out infinite; }
+  .mascot[data-s=thinking] .visor-frame { animation: glow 1.2s ease-in-out infinite; }
+  .mascot[data-s=working] .lid { animation: chomp .45s ease-in-out infinite; }
+  .mascot[data-s=working] .eye { transform: scaleY(.45); }
+  .mascot[data-s=waiting] .lid { transform: translate(-2px,-7px) rotate(-6deg); }
+  .mascot[data-s=waiting] .eye { transform: scale(1.15,1.2); }
+  .mascot[data-s=waiting] svg { animation: shake .4s ease-in-out infinite; }
+  .mascot[data-s=waiting] .visor-frame { animation: glow .5s steps(2) infinite; }
+  .mascot[data-s=done] .eye, .mascot[data-s=dance] .eye { opacity: 0; }
+  .mascot[data-s=done] .joy, .mascot[data-s=dance] .joy { opacity: 1; }
+  .mascot[data-s=done] svg { animation: joy .7s cubic-bezier(.3,1.6,.5,1) 1; }
+  /* dance: music is playing — sways, the lid bobs to the beat, notes float up */
+  .mascot[data-s=dance] svg { animation: groove .5s ease-in-out infinite alternate; }
+  .mascot[data-s=dance] .lid { animation: chomp .5s ease-in-out infinite; }
+  .mascot .notes { position: absolute; inset: 0; pointer-events: none; display: none; }
+  .mascot[data-s=dance] .notes { display: block; }
+  .mascot .notes i { position: absolute; font-style: normal; font-size: 10px; color: #c9a4ff; opacity: 0;
+    text-shadow: 0 0 4px rgba(176,73,249,.8); animation: float 2s ease-out infinite; }
+  .mascot .notes i:nth-child(1) { left: 26px; top: 2px; }
+  .mascot .notes i:nth-child(2) { left: 30px; top: 10px; animation-delay: .7s; }
+  .mascot .notes i:nth-child(3) { left: -4px; top: 6px; animation-delay: 1.3s; }
+
+  @keyframes breathe { 50% { transform: scale(1.03, .97); } }
+  @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+  @keyframes scan { 0%,100% { transform: translate(-5px, 2px); } 50% { transform: translate(5px, -2px); } }
+  @keyframes glow { 50% { stroke-opacity: .35; } }
+  @keyframes chomp { 50% { transform: translate(-1px,-5px) rotate(-3deg); } }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-1.5px); } 75% { transform: translateX(1.5px); } }
+  @keyframes joy { 0% { transform: translateY(0); } 40% { transform: translateY(-5px) scale(.95,1.06); } 100% { transform: translateY(0); } }
+  @keyframes groove { from { transform: rotate(-7deg) translateY(0); } to { transform: rotate(7deg) translateY(-2px); } }
+  @keyframes float { 0% { opacity: 0; transform: translateY(4px) scale(.7); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px) scale(1); } }
+
+  /* ---------- Cards: permission and "done" ---------- */
+  .card { margin: 2px 10px 10px; padding: 10px 12px; border-radius: 14px; background: var(--card);
+    border: 1px solid var(--line); display: none; animation: cardIn .3s cubic-bezier(.2,.9,.3,1.2); }
+  .pill.has-card .card { display: block; }
+  .card.perm { border-color: color-mix(in srgb, var(--waiting) 45%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--waiting) 10%, transparent), var(--card)); }
+  .card.done { border-color: color-mix(in srgb, var(--done) 40%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--done) 9%, transparent), var(--card)); }
+  .card .head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+  .card .head b { color: var(--text); font-weight: 600; }
+  .card .head .adot { width: 7px; height: 7px; border-radius: 50%; }
+  .chip { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    background: rgba(255,181,71,.14); color: var(--working); margin-right: 6px; }
+  .code { font: 11px/1.45 ui-monospace, "Ubuntu Mono", "DejaVu Sans Mono", monospace; color: #e9e6f5;
+    background: rgba(0,0,0,.35); border-radius: 8px; padding: 6px 8px; margin-top: 6px;
+    max-height: 48px; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .summary { color: #d9d7e3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .actions { display: flex; gap: 6px; margin-top: 9px; justify-content: flex-end; }
+  .btn { padding: 5px 11px; border-radius: 999px; background: rgba(255,255,255,.08); font-size: 11.5px; font-weight: 600;
+    transition: background .15s, transform .1s; }
+  .btn:hover { background: rgba(255,255,255,.15); }
+  .btn:active { transform: scale(.96); }
+  .btn.primary { background: #f2f2f5; color: #121216; }
+  .btn.primary:hover { background: #fff; }
+  .btn.allow { background: var(--done); color: #08130d; }
+  .btn.deny { color: var(--waiting); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .more { color: var(--muted); font-size: 11px; margin-right: auto; align-self: center; }
+  .hint { color: var(--waiting); font-size: 11px; margin-top: 6px; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(-6px); } }
+
+  /* ---------- Session list (opens on hover) ---------- */
+  .list { max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .25s; padding: 0 12px; }
+  .pill.open .list { max-height: 260px; opacity: 1; padding-bottom: 10px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-top: 1px solid var(--line); }
+  .row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .agent { color: var(--muted); font-size: 11px; }
+  .row .st { font-size: 11px; }
+  .icon { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  .icon:hover { background: rgba(255,255,255,.1); color: var(--text); }
+  .icon svg { width: 13px; height: 13px; fill: currentColor; }
+  .empty { color: var(--muted); padding: 8px 2px; border-top: 1px solid var(--line); }
+  .music { display: flex; align-items: center; gap: 8px; padding: 7px 2px 2px; border-top: 1px solid var(--line); }
+  .music .art { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 11px;
+    background: linear-gradient(135deg, #B049F9, #601ADA); }
+  .music .t { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .music .t span { color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="pill" id="pill">
+    <div class="bar">
+      <div class="mascot" id="mascot" data-s="idle"></div>
+      <div class="label" id="label"><b>Bayloob</b> <span>starting…</span></div>
+      <div class="count" id="count"></div>
+    </div>
+    <div class="card" id="card"></div>
+    <div class="list" id="list"></div>
+  </div>
+
+<script>
+  // Every UI string lives here — a language switcher later only needs to swap this object
+  const T = {
+    state: { idle: 'idle', thinking: 'thinking', working: 'working', waiting: 'needs approval', done: 'done' },
+    starting: 'starting…', noSessions: 'no sessions', noActive: 'No active agent sessions',
+    sessions: n => `${n} sessions`,
+    permAsks: 'wants permission', finished: 'finished', taskDone: 'Task completed.',
+    queued: n => `+${n} queued`,
+    hidden: n => `⚠ ${n} more characters not shown — review in the terminal`,
+    deny: 'Deny', terminal: 'In terminal', terminalTip: 'Decide in the terminal', allow: 'Allow',
+    allowBlocked: 'Part of this command is hidden, so it can only be approved in the terminal',
+    dismiss: 'Dismiss', openTerminal: 'Open terminal',
+    focusFailed: 'Could not bring this terminal to the front (see README → "Open terminal").',
+    prev: 'Previous', playPause: 'Play / pause', next: 'Next',
+  };
+
+  const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+  const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
+  const DONE_TOAST_MS = 12000;
+  const PILL_OPEN_WIDTH = 380;
+
+  // Every agent gets its own colors — same shape, different body. Claude = Baynovix violet.
+  const AGENTS = {
+    claude: { name: 'Claude Code', top: ['#d07bff', '#a24bf7', '#7a2cec'], bot: ['#8a45f5', '#5a24e0', '#2f12a8'] },
+    codex:  { name: 'Codex',       top: ['#8ff5df', '#3fd3b6', '#16a48c'], bot: ['#2fc7ae', '#139582', '#0b5e58'] },
+    gemini: { name: 'Gemini CLI',  top: ['#a9cbff', '#6a9ef8', '#3f72e6'], bot: ['#5b8ff5', '#3461d6', '#1c3a9c'] },
+    cursor: { name: 'Cursor',      top: ['#ffffff', '#dde2ea', '#b6bdca'], bot: ['#c3c9d4', '#9099aa', '#5d6577'] },
+    other:  { name: null,          top: ['#ffd88a', '#ffb547', '#f08a1c'], bot: ['#f5a23a', '#d9771a', '#9c4c0c'] },
+  };
+
+  const ICON_TERM = '<svg viewBox="0 0 16 16"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm1.3 3.2 2.3 1.8-2.3 1.8.8 1 3.5-2.8-3.5-2.8-.8 1ZM8 10.5h4.5v-1.2H8v1.2Z"/></svg>';
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  class Agent {
+    static key(agent) {
+      const k = String(agent || '').toLowerCase();
+      return AGENTS[k] ? k : 'other';
+    }
+    static palette(agent) { return AGENTS[Agent.key(agent)]; }
+    static displayName(agent) { return Agent.palette(agent).name || agent; }
+  }
+
+  /** Builds the hexagon mascot SVG in an agent's colors. Each copy gets unique gradient ids. */
+  class Mascot {
+    static #seq = 0;
+
+    static svg(agent) {
+      const u = 'm' + (++Mascot.#seq), p = Agent.palette(agent);
+      const stops = c => c.map((col, i) => `<stop offset="${[0, .48, 1][i]}" stop-color="${col}"/>`).join('');
+      const hex = '50,14 82,32 82,68 50,86 18,68 18,32';
+      return `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>
+        <linearGradient id="${u}t" x1="0" y1="0" x2="1" y2="1">${stops(p.top)}</linearGradient>
+        <linearGradient id="${u}b" x1="0" y1="0" x2="1" y2="1">${stops(p.bot)}</linearGradient>
+        <linearGradient id="${u}v" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a0a33"/><stop offset=".7" stop-color="#0d0520"/><stop offset="1" stop-color="#3b2a8a"/></linearGradient>
+        <clipPath id="${u}ct"><polygon points="-10,-10 110,-10 110,22 -10,66"/></clipPath>
+        <clipPath id="${u}cb"><polygon points="-10,74 110,30 110,110 -10,110"/></clipPath></defs>
+        <polygon points="${hex}" fill="url(#${u}b)" stroke="url(#${u}b)" stroke-width="12" stroke-linejoin="round" clip-path="url(#${u}cb)"/>
+        <g class="lid"><polygon points="${hex}" fill="url(#${u}t)" stroke="url(#${u}t)" stroke-width="12" stroke-linejoin="round" clip-path="url(#${u}ct)"/>
+          <path d="M22,30 L50,15 L66,24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2.5" stroke-linecap="round"/></g>
+        <g transform="rotate(-24 50 51)"><rect class="visor-frame" x="16" y="35" width="68" height="32" rx="9" fill="url(#${u}v)" stroke-width="3"/>
+          <path d="M62,39 h12 a6,6 0 0 1 6,6" fill="none" stroke="rgba(160,140,255,.45)" stroke-width="2" stroke-linecap="round"/></g>
+        <g class="eyes"><rect class="eye" x="35" y="43" width="9" height="14" rx="4.5"/><rect class="eye" x="54" y="40" width="9" height="14" rx="4.5"/>
+          <path class="joy" d="M34,53 q5,-8 10,0 M53,50 q5,-8 10,0" fill="none" stroke-width="3.5" stroke-linecap="round"/></g></svg>`;
+    }
+  }
+
+  /** The pill: top bar, permission / "done" card and the session list that opens on hover. */
+  class OverlayView {
+    sessions = [];
+    music = null;
+    toast = null;          // { sid, until, hint } — the "done" card
+    hovering = false;
+    #mainAgent = null;
+    #prevStates = new Map();
+
+    constructor(api) {
+      this.api = api;
+      const $ = id => document.getElementById(id);
+      this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), card: $('card'), list: $('list') };
+      this.#bindEvents();
+    }
+
+    setSessions(list) {
+      // A fresh transition to "done" shows the done card for a while
+      for (const s of list) {
+        const old = this.#prevStates.get(s.id);
+        if (s.state === 'done' && old && old !== 'done') this.toast = { sid: s.id, until: Date.now() + DONE_TOAST_MS };
+      }
+      this.#prevStates = new Map(list.map(s => [s.id, s.state]));
+      this.sessions = list;
+      this.render();
+    }
+
+    setMusic(np) { this.music = np; this.render(); }
+
+    open() { this.el.pill.classList.add('open'); }
+
+    render() {
+      const top = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt)[0];
+      const state = top ? top.state : 'idle';
+      const dancing = this.music?.playing && (state === 'idle' || state === 'done');
+      document.documentElement.style.setProperty('--accent', COLORS[state]);
+      this.#setMascot(top ? top.agent : 'claude', dancing ? 'dance' : state);
+
+      this.el.label.innerHTML = this.#labelHtml(top, state);
+      const n = this.sessions.length;
+      this.el.count.textContent = n > 1 ? n : '';
+      this.el.count.title = n > 1 ? T.sessions(n) : '';
+
+      this.#expireToast();
+      const perms = this.sessions.filter(s => s.perm).sort((a, b) => Number(a.perm.id) - Number(b.perm.id));
+      const card = perms.length ? this.#permCard(perms[0], perms.length - 1) : this.toast ? this.#doneCard() : null;
+      this.el.card.className = card ? `card ${card.kind}` : 'card';
+      this.el.card.innerHTML = card ? card.html : '';
+      this.el.pill.classList.toggle('has-card', !!card);
+
+      this.el.list.innerHTML = this.#listHtml() + this.#musicHtml();
+    }
+
+    #setMascot(agent, state) {
+      if (agent !== this.#mainAgent) {
+        this.#mainAgent = agent;
+        this.el.mascot.innerHTML = Mascot.svg(agent) + '<div class="notes"><i>♪</i><i>♫</i><i>♪</i></div>';
+      }
+      if (this.el.mascot.dataset.s !== state) this.el.mascot.dataset.s = state; // restarts the animation on change
+    }
+
+    #labelHtml(top, state) {
+      if (top && state !== 'idle') {
+        return `<b>${esc(top.project)}</b> <span>${T.state[state]}${top.tool ? ' · ' + esc(top.tool) : ''}</span>`;
+      }
+      if (this.music?.title) {
+        return `<span class="note">♪</span> <b>${esc(this.music.title)}</b> <span>· ${esc(this.music.artist)}</span>`;
+      }
+      return top ? `<b>${esc(top.project)}</b> <span>${T.state[state]}</span>` : `<b>Bayloob</b> <span>${T.noSessions}</span>`;
+    }
+
+    #expireToast() {
+      const t = this.toast;
+      if (!t) return;
+      const stillDone = this.sessions.some(s => s.id === t.sid && s.state === 'done');
+      if (!stillDone || (Date.now() > t.until && !this.hovering)) this.toast = null;
+    }
+
+    #cardHead(s, verb) {
+      const dot = Agent.palette(s.agent).top[1];
+      return `<div class="head"><span class="adot" style="background:${dot}"></span><b>${esc(Agent.displayName(s.agent))}</b> · ${esc(s.project)} · ${verb}</div>`;
+    }
+
+    #permCard(s, queued) {
+      const { id, tool, detail, hidden } = s.perm;
+      const pid = esc(id);
+      return { kind: 'perm', html: `
+        ${this.#cardHead(s, T.permAsks)}
+        <div><span class="chip">${esc(tool)}</span></div>
+        ${detail ? `<div class="code">${esc(detail)}</div>` : ''}
+        ${hidden ? `<div class="hint">${T.hidden(hidden)}</div>` : ''}
+        <div class="actions">
+          ${queued ? `<span class="more">${T.queued(queued)}</span>` : ''}
+          <button class="btn deny" data-act="deny" data-id="${pid}">${T.deny}</button>
+          <button class="btn" data-act="terminal" data-id="${pid}" title="${T.terminalTip}">${T.terminal}</button>
+          <button class="btn allow" data-act="allow" data-id="${pid}" ${hidden ? `disabled title="${T.allowBlocked}"` : ''}>${T.allow}</button>
+        </div>` };
+    }
+
+    #doneCard() {
+      const s = this.sessions.find(x => x.id === this.toast.sid);
+      return { kind: 'done', html: `
+        ${this.#cardHead(s, T.finished)}
+        <div class="summary">${esc(s.summary || T.taskDone)}</div>
+        ${this.toast.hint ? `<div class="hint">${esc(this.toast.hint)}</div>` : ''}
+        <div class="actions">
+          <button class="btn" data-act="dismiss">${T.dismiss}</button>
+          <button class="btn primary" data-act="focus" data-sid="${esc(s.id)}">${T.openTerminal}</button>
+        </div>` };
+    }
+
+    #listHtml() {
+      if (!this.sessions.length) return `<div class="empty">${T.noActive}</div>`;
+      return this.sessions.map(s => `<div class="row">
+          <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${Mascot.svg(s.agent)}</div>
+          <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span></span>
+          <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
+          <button class="icon" data-act="focus" data-sid="${esc(s.id)}" title="${T.openTerminal}">${ICON_TERM}</button></div>`).join('');
+    }
+
+    #musicHtml() {
+      const m = this.music;
+      if (!m?.title) return '';
+      return `<div class="music">
+        <div class="art">♪</div>
+        <div class="t"><b>${esc(m.title)}</b> <span>${esc(m.artist)}${m.app ? ' · ' + esc(m.app) : ''}</span></div>
+        <button class="icon" data-act="music" data-m="prev" title="${T.prev}">⏮</button>
+        <button class="icon" data-act="music" data-m="toggle" title="${T.playPause}">${m.playing ? '⏸' : '▶'}</button>
+        <button class="icon" data-act="music" data-m="next" title="${T.next}">⏭</button></div>`;
+    }
+
+    async #onClick(e) {
+      const b = e.target.closest('[data-act]');
+      if (!b || b.disabled) return;
+      const act = b.dataset.act;
+      if (act === 'allow' || act === 'deny' || act === 'terminal') {
+        b.disabled = true;
+        this.api?.decide(b.dataset.id, act);
+      } else if (act === 'dismiss') {
+        this.toast = null;
+        this.render();
+      } else if (act === 'focus') {
+        const r = this.api ? await this.api.focus(b.dataset.sid) : { ok: false };
+        if (r?.ok) this.toast = null;
+        else if (this.toast) this.toast.hint = T.focusFailed;
+        this.render();
+      } else if (act === 'music') {
+        this.api?.music(b.dataset.m);
+      }
+    }
+
+    #bindEvents() {
+      const { pill } = this.el;
+      pill.addEventListener('click', e => this.#onClick(e));
+      pill.addEventListener('mouseenter', () => { this.hovering = true; this.open(); this.api?.setMouseOver(true); });
+      pill.addEventListener('mouseleave', () => {
+        this.hovering = false;
+        pill.classList.remove('open');
+        this.api?.setMouseOver(false);
+        this.render();
+      });
+      setInterval(() => { if (this.toast && !this.hovering && Date.now() > this.toast.until) this.render(); }, 1000);
+
+      if (!this.api) return;
+      // Report the pill's bounds whenever they change (on Linux the window shape follows them)
+      const sendRect = () => {
+        const r = pill.getBoundingClientRect();
+        this.api.setPillRect({ x: r.left, y: r.top, w: r.width, h: r.height });
+      };
+      new ResizeObserver(sendRect).observe(pill);
+      // Give the full open size up front so the shape doesn't clip the opening animation
+      pill.addEventListener('mouseenter', () => {
+        const r = pill.getBoundingClientRect();
+        this.api.setPillRect({ x: Math.min(r.left, (innerWidth - PILL_OPEN_WIDTH) / 2), y: r.top, w: PILL_OPEN_WIDTH, h: r.height + 300 });
+      });
+      sendRect();
+    }
+  }
+
+  const view = new OverlayView(window.bayloobAPI);
+  if (window.bayloobAPI) {
+    window.bayloobAPI.onSessions(list => view.setSessions(list));
+    window.bayloobAPI.onMusic(np => view.setMusic(np));
+  } else {
+    // Opened in a plain browser: demo mode, driven from the console via window.__demo
+    window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };
+  }
+  view.setSessions([]);
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Bayloob hook — no dependencies (no node, no curl), just bash /dev/tcp.
+# Claude Code / Gemini pass the event JSON on stdin.   Codex passes it as the last argument.
+# Usage: bayloob-hook <agent> [json]
+agent="${1:-claude}"
+port="${BAYLOOB_PORT:-7777}"
+
+if [ -n "$2" ]; then body="$2"; else body="$(cat)"; fi
+[ -z "$body" ] && exit 0
+
+# If Bayloob isn't running the connection fails immediately — we never block the agent
+{ exec 3<>"/dev/tcp/127.0.0.1/$port"; } 2>/dev/null || exit 0
+
+enc() { printf '%s' "$1" | od -An -tx1 | tr -d ' \n' | sed 's/../%&/g'; }
+
+# For "Open terminal": fingerprints of the terminal this hook is running in
+q="agent=$(enc "$agent")&cwd=$(enc "$PWD")&pid=$PPID"
+q+="&term=$(enc "${TERM_PROGRAM:-}")&winid=$(enc "${WINDOWID:-}")"
+q+="&kitty=$(enc "${KITTY_WINDOW_ID:-}")&kittysock=$(enc "${KITTY_LISTEN_ON:-}")"
+q+="&wez=$(enc "${WEZTERM_PANE:-}")&tmux=$(enc "${TMUX_PANE:-}")"
+
+path="/ev"
+# Permission request: wait for the user's answer in Bayloob and hand the decision back to the agent
+if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PermissionRequest\" ]]; then path="/perm"; fi
+
+len="$(LC_ALL=C; printf '%s' "${#body}")"   # byte length, not character length
+printf 'POST %s?%s HTTP/1.0\r\nHost: 127.0.0.1:%s\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s' \
+  "$path" "$q" "$port" "$len" "$body" >&3
+
+if [ "$path" = "/perm" ]; then
+  resp="$(cat <&3)"                     # blocks until the server replies and closes
+  out="${resp#*$'\r\n\r\n'}"
+  [ -n "$out" ] && printf '%s' "$out"   # empty → the agent shows its normal terminal prompt
+else
+  read -r -t 1 -u 3 _ 2>/dev/null
+fi
+exec 3>&-
+exit 0
