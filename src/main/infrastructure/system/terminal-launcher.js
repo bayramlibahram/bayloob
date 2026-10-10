@@ -18,6 +18,21 @@ const TERMINALS = [
   ["xterm", cmd => ["-e", ...cmd]],
 ];
 
+// Names to show when the user picks a terminal
+const NAMES = {
+  kitty: "kitty",
+  wezterm: "WezTerm",
+  ghostty: "Ghostty",
+  alacritty: "Alacritty",
+  ptyxis: "Ptyxis",
+  "gnome-terminal": "GNOME Terminal",
+  konsole: "Konsole",
+  "xfce4-terminal": "Xfce Terminal",
+  tilix: "Tilix",
+  "x-terminal-emulator": "System default",
+  xterm: "xterm",
+};
+
 function onPath(bin) {
   return (process.env.PATH || "").split(path.delimiter).some(dir => {
     try {
@@ -51,7 +66,22 @@ class TerminalLauncher {
     return this.override ? true : TERMINALS.some(([bin]) => onPath(bin));
   }
 
-  #resolve(cmd) {
+  /** Terminals that can be chosen: [{ id, name }], the default first (Settings' command, or auto). */
+  list() {
+    const found = TERMINALS.filter(([bin]) => onPath(bin)).map(([bin]) => ({
+      id: bin,
+      name: NAMES[bin] || bin,
+    }));
+    return this.override ? [{ id: "custom", name: this.override }, ...found] : found;
+  }
+
+  // choice: a terminal id from list() for this one window; anything else means the default
+  #resolve(cmd, choice) {
+    const chosen =
+      choice && choice !== "custom" && TERMINALS.find(([bin]) => bin === choice && onPath(bin));
+    if (chosen) {
+      return [chosen[0], chosen[1](cmd)];
+    }
     if (this.override) {
       const [bin, ...args] = this.override.split(/\s+/);
       return [bin, [...args, ...cmd]];
@@ -60,9 +90,9 @@ class TerminalLauncher {
     return found ? [found[0], found[1](cmd)] : null;
   }
 
-  /** Opens `cmd` (an argv array) in a new terminal window. Returns the terminal used. */
-  open(cmd, { cwd } = {}) {
-    const resolved = this.#resolve(cmd);
+  /** Opens `cmd` (an argv array) in a new terminal window — `terminal` if given and installed. Returns the terminal used. */
+  open(cmd, { cwd, terminal } = {}) {
+    const resolved = this.#resolve(cmd, terminal);
     if (!resolved) {
       throw new Error(
         "No terminal emulator found. Set BAYLOOB_TERMINAL, e.g. BAYLOOB_TERMINAL=kitty"

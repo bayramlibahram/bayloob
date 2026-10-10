@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Ask Bayloob: pick the terminal a new session opens in ("Open in: Ptyxis · xterm…" — the installed
+  ones, the Settings command first); the confirm step names it, and the choice is remembered.
 - The pill floats just below the desktop's top bar instead of covering it: placed from the GNOME
   extension's new `Panel()` method (extension v2 — reinstall it and log in again), else from a work area
   that reserves a bar, else 32 px down on GNOME (`BAYLOOB_TOP_OFFSET`). Fully rounded, nearly solid,

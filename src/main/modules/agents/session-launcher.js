@@ -62,7 +62,8 @@ class SessionLauncher {
 
   /** Starts `agent` in `cwd` (optionally with a first prompt) and opens it in a terminal window. */
   // role: what the session is for ("challenger" reviews another agent's work); readOnly: no file changes
-  async launch({ agent, cwd, prompt = "", readOnly = false, role = null }) {
+  // terminal: which terminal emulator opens it (an id from TerminalLauncher.list(); default otherwise)
+  async launch({ agent, cwd, prompt = "", readOnly = false, role = null, terminal = null }) {
     cwd = cwd.replace(/^~(?=$|\/)/, os.homedir());
     if (!fs.statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
       throw new Error(`Not a folder: ${cwd}`);
@@ -84,16 +85,15 @@ class SessionLauncher {
       "#{pane_id}",
       ...viaLoginShell(agentCommand(agent, prompt.trim(), { readOnly })),
     ]);
-    this.attach(name);
+    this.attach(name, terminal);
     return { name, paneId, agent, cwd, role };
   }
 
   /** Opens a terminal window attached to the tmux session. */
-  attach(name) {
-    return this.terminal.open(["tmux", "attach-session", "-t", name]);
+  attach(name, terminal = null) {
+    return this.terminal.open(["tmux", "attach-session", "-t", name], { terminal });
   }
 
-  /** Types `text` into the agent's input and submits it. */
   /**
    * Types `text` into the agent's input and submits it. Multi-line text goes in as a bracketed paste,
    * so its newlines stay newlines instead of submitting early; Enter is sent once at the end.

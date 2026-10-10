@@ -118,6 +118,8 @@
   .toggle:hover { background: rgb(var(--ink) / .06); }
   .toggle .txt { flex: 1; display: flex; flex-direction: column; }
   .toggle .txt small { color: var(--muted); font-size: 11.5px; }
+  .terms { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .terms .label { margin-right: 4px; }
   .switch { width: 32px; height: 18px; border-radius: 9px; background: rgb(var(--ink) / .14); position: relative; flex: none; transition: background .2s; }
   .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .2s; }
   .toggle[aria-pressed=true] .switch { background: var(--brand); }
@@ -195,6 +197,7 @@
           <span class="txt"><span>⑂ In a new git worktree</span><small>Its own copy of the repo on a <code>bayloob/…</code> branch, so it never edits the same files as another agent</small></span>
           <span class="switch"></span>
         </button>
+        <div class="terms" id="terms"></div>
       </section>
 
       <!-- confirm: everything that's about to happen, before it happens -->
@@ -225,11 +228,13 @@
     pickProject: 'Pick a project folder first', notInstalled: 'not installed', starting: 'Starting…', sending: 'Sending…',
     promptPlaceholder: 'What should be done?', followUp: 'Type a follow-up for the agent…',
     chars: n => `${n} chars`, wrong: 'Something went wrong',
+    openIn: 'Open in', rTerminal: 'Terminal',
     rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rWhen: 'Delivery', rPrompt: 'Prompt', edit: 'Edit',
     inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
     now: '● sent now',
     paste: '📋 copied · paste with Ctrl+Shift+V (not in tmux)', pasteBtn: 'Copy & open terminal', queued: '⏳ queued — the agent is busy; it goes out when its turn ends',
   };
+  const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer: just a convenience
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
 
   /**
@@ -250,7 +255,7 @@
       this.el = { form: $('form'), who: $('who'), title: $('title'), subtitle: $('subtitle'), steps: $('steps'), close: $('close'),
         stepPrompt: $('stepPrompt'), stepAgent: $('stepAgent'), stepConfirm: $('stepConfirm'), prompt: $('prompt'), count: $('count'),
         paste: $('paste'), queued: $('queued'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
-        quote: $('quote'), agents: $('agents'), worktree: $('worktree'), review: $('review'), msg: $('msg'), back: $('back'), submit: $('submit') };
+        quote: $('quote'), agents: $('agents'), worktree: $('worktree'), terms: $('terms'), review: $('review'), msg: $('msg'), back: $('back'), submit: $('submit') };
       this.#bind();
     }
 
@@ -276,6 +281,11 @@
         if (!state.agents[this.agent]?.installed) { this.agent = this.installed[0] || this.agent; }
         this.el.cwd.value = tilde(state.preset?.cwd || last?.cwd || '', state.home);
         this.worktree = !!state.preset?.worktree;
+        // The terminal: the one picked last time if it's still installed, else the default (first)
+        const ids = (state.terminals || []).map(t => t.id);
+        let saved = null;
+        try { saved = localStorage.getItem(TERMINAL_KEY); } catch { /* storage unavailable */ }
+        this.terminal = ids.includes(saved) ? saved : ids[0] || null;
         this.#renderRecent();
       }
       this.#go('prompt');
@@ -314,6 +324,7 @@
         this.el.quote.classList.toggle('empty', !this.text);
         this.#renderAgents();
         this.#renderWorktree();
+        this.#renderTerms();
         this.#message(T.hintAgent(Object.keys(this.state.agents).length), false, true);
         this.el.submit.focus();
       } else {
@@ -362,6 +373,15 @@
         </button>`).join('');
     }
 
+    // "Open in: [Ptyxis] [xterm]" — only when there's a choice to make
+    #renderTerms() {
+      const list = this.state.terminals || [];
+      this.el.terms.hidden = list.length < 2;
+      const chips = list.map(t =>
+        `<button type="button" class="chip${t.id === this.terminal ? ' on' : ''}" data-term="${esc(t.id)}" aria-pressed="${t.id === this.terminal}">${esc(t.name)}</button>`).join('');
+      this.el.terms.innerHTML = `<span class="label">${T.openIn}</span>${chips}`;
+    }
+
     #renderWorktree() { this.el.worktree.setAttribute('aria-pressed', String(!!this.worktree)); }
 
     #renderRecent() {
@@ -380,6 +400,8 @@
         rows.push([T.rAgent, `<div class="m">${Agent.thumb(this.agent)}</div><b>${esc(a?.name || this.agent)}</b>`]);
         rows.push([T.rFolder, `<code>${esc(this.el.cwd.value.trim())}</code>`]);
         rows.push([T.rWhere, this.worktree ? `${T.inWorktree} <small>${T.worktreeNote}</small>` : T.inFolder]);
+        const term = (this.state.terminals || []).find(t => t.id === this.terminal);
+        if (term) { rows.push([T.rTerminal, esc(term.name)]); }
       } else {
         const s = this.state.session;
         rows.push([T.rAgent, `<div class="m">${Agent.thumb(s.agent || MANAGER)}</div><b>${esc(s.agentName)}</b><small>${esc(s.project)}</small>`]);
@@ -442,7 +464,10 @@
 
     async #launch() {
       this.#working(T.starting);
-      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.text, worktree: !!this.worktree });
+      const res = await this.api.launch({ agent: this.agent, cwd: this.el.cwd.value.trim(), prompt: this.text, worktree: !!this.worktree, terminal: this.terminal });
+      if (res?.ok && this.terminal) {
+        try { localStorage.setItem(TERMINAL_KEY, this.terminal); } catch { /* storage unavailable */ }
+      }
       this.#done(res);
     }
 
@@ -487,6 +512,10 @@
         this.#pick(b.dataset.agent);
       });
       this.el.worktree.addEventListener('click', () => { this.worktree = !this.worktree; this.#renderWorktree(); });
+      this.el.terms.addEventListener('click', e => {
+        const b = e.target.closest('[data-term]');
+        if (b) { this.terminal = b.dataset.term; this.#renderTerms(); }
+      });
       this.el.review.addEventListener('click', e => {
         if (e.target.closest('[data-edit]')) { this.#go('prompt'); }
       });

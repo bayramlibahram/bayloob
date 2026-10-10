@@ -558,6 +558,7 @@ class BayloobApp {
       mode: "new",
       agents: await this.#agentChoices(),
       recent: this.recent.list(),
+      terminals: this.launcher.terminal.list(),
       preset,
       prefill,
       home: os.homedir(),
