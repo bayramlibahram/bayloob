@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   setPillRect: r => ipcRenderer.send("pill-rect", r),
   setMouseOver: over => ipcRenderer.send("mouse-over-ui", over),
   decide: (permId, decision) => ipcRenderer.send("decide", permId, decision),
+  answer: (permId, answers) => ipcRenderer.send("answer", permId, answers),
   focus: sessionId => ipcRenderer.invoke("focus", sessionId),
   music: action => ipcRenderer.send("music", action),
   openLauncher: () => ipcRenderer.send("open-launcher"),

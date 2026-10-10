@@ -413,6 +413,13 @@ class BayloobApp {
         this.server.decide(String(permId), decision);
       }
     });
+    // Answers to an agent's question: { question text: [labels] }, strings only
+    ipcMain.on("answer", (_e, permId, answers) => {
+      const clean = Object.fromEntries(
+        Object.entries(answers || {}).map(([q, a]) => [String(q), [].concat(a).map(String)])
+      );
+      this.server.answer(String(permId), clean);
+    });
     ipcMain.handle("focus", (_e, sessionId) => this.focus(session(sessionId)));
     ipcMain.on("music", (_e, action) => this.music?.control(action));
     ipcMain.on("open-launcher", () => this.openLauncher());

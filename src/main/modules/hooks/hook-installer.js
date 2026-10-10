@@ -18,7 +18,8 @@ const EVENTS = [
 ];
 const WITH_MATCHER = new Set(["PreToolUse", "PostToolUse", "PermissionRequest"]);
 // The permission hook waits for a click in Bayloob; Bayloob hands the decision back to the terminal after 280 s
-const TIMEOUTS = { PermissionRequest: 300 };
+// PreToolUse waits too, but only for AskUserQuestion (answered from the pill); other tools return at once
+const TIMEOUTS = { PermissionRequest: 300, PreToolUse: 300 };
 const DEFAULT_TIMEOUT = 2;
 const IS_WINDOWS = process.platform === "win32";
 

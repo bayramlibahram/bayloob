@@ -6,6 +6,7 @@ const {
   describeTool,
   permDetail,
   decisionBody,
+  encodeAnswers,
 } = require("../src/main/modules/sessions/event-server");
 
 test("hook events map to mascot states", () => {
@@ -66,12 +67,36 @@ test("permission details are never cut silently", () => {
   assert.equal(describeTool({ file_path: "/a/b.js" }), "/a/b.js");
 });
 
-test("AskUserQuestion is a question, not a permission", () => {
+test("AskUserQuestion is a question with its options, not a permission", () => {
   const q = permDetail("AskUserQuestion", {
-    questions: [{ question: "Which one?" }, { question: "Commit?" }],
+    questions: [
+      {
+        question: "Which one?",
+        header: "Pick",
+        multiSelect: false,
+        options: [{ label: "A", description: "first" }, { label: "B" }],
+      },
+    ],
   });
   assert.equal(q.kind, "question");
-  assert.deepEqual(q.questions, ["Which one?", "Commit?"]);
+  assert.deepEqual(q.questions[0].options, [
+    { label: "A", description: "first" },
+    { label: "B", description: "" },
+  ]);
+});
+
+test("questions are answered through PreToolUse, multi-select joined with commas", () => {
+  assert.deepEqual(encodeAnswers({ "Which one?": ["A"], "Sections?": ["Intro", "End"] }), {
+    "Which one?": "A",
+    "Sections?": "Intro, End",
+  });
+  const out = JSON.parse(
+    decisionBody("allow", { questions: [], answers: { "Which one?": "A" } }, "PreToolUse")
+  ).hookSpecificOutput;
+  assert.equal(out.hookEventName, "PreToolUse");
+  assert.equal(out.permissionDecision, "allow");
+  assert.deepEqual(out.updatedInput.answers, { "Which one?": "A" });
+  assert.equal(decisionBody("terminal", null, "PreToolUse"), "");
 });
 
 test("decisions are encoded the way Claude Code expects", () => {

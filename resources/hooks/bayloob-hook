@@ -22,6 +22,8 @@ q+="&wez=$(enc "${WEZTERM_PANE:-}")&tmux=$(enc "${TMUX_PANE:-}")"
 path="/ev"
 # Permission request: wait for the user's answer in Bayloob and hand the decision back to the agent
 if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PermissionRequest\" ]]; then path="/perm"; fi
+# A question from the agent: wait for the answer picked in Bayloob (PreToolUse can carry the answers)
+if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" && $body =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"AskUserQuestion\" ]]; then path="/perm"; fi
 
 len="$(LC_ALL=C; printf '%s' "${#body}")"   # byte length, not character length
 printf 'POST %s?%s HTTP/1.0\r\nHost: 127.0.0.1:%s\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s' \

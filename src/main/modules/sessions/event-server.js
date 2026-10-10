@@ -79,13 +79,18 @@ const short = (s, n) => {
 // so nobody approves a command whose tail they haven't seen.
 function permDetail(tool, input) {
   if (QUESTION_TOOLS.has(tool)) {
-    const questions = (input?.questions || []).map(q => String(q?.question || "")).filter(Boolean);
-    return {
-      kind: "question",
-      questions: questions.length ? questions : [describeTool(input)],
-      detail: "",
-      hidden: 0,
-    };
+    const questions = (input?.questions || [])
+      .filter(q => q?.question)
+      .map(q => ({
+        question: String(q.question),
+        header: String(q.header || ""),
+        multiSelect: !!q.multiSelect,
+        options: (q.options || []).map(o => ({
+          label: String(o?.label ?? ""),
+          description: String(o?.description ?? ""),
+        })),
+      }));
+    return { kind: "question", questions, detail: "", hidden: 0 };
   }
   const full = describeTool(input).trim();
   return full.length > DETAIL_MAX
@@ -93,23 +98,42 @@ function permDetail(tool, input) {
     : { detail: full, hidden: 0 };
 }
 
-function decisionBody(decision) {
-  const reply = behavior =>
-    JSON.stringify({
-      hookSpecificOutput: { hookEventName: "PermissionRequest", decision: behavior },
-    });
-  if (decision === "allow") {
-    return reply({ behavior: "allow" });
+// Multi-select answers are sent as one comma-separated string, like Claude Code's own question UI
+function encodeAnswers(answers) {
+  return Object.fromEntries(
+    Object.entries(answers || {}).map(([q, a]) => [q, Array.isArray(a) ? a.join(", ") : String(a)])
+  );
+}
+
+// `updatedInput` replaces the tool's input when allowing — used to hand AskUserQuestion its answers
+// PermissionRequest and PreToolUse hooks answer in different shapes. Questions use PreToolUse, the
+// documented way to hand AskUserQuestion its answers; everything else uses PermissionRequest.
+function decisionBody(decision, updatedInput = null, event = "PermissionRequest") {
+  if (decision === "terminal") {
+    return ""; // empty reply → the agent shows its normal prompt
   }
-  if (decision === "deny") {
-    return reply({ behavior: "deny", message: "User denied this from Bayloob" });
+  if (event === "PreToolUse") {
+    const out = { hookEventName: "PreToolUse", permissionDecision: decision };
+    if (decision === "allow" && updatedInput) {
+      out.updatedInput = updatedInput;
+    }
+    if (decision === "deny") {
+      out.permissionDecisionReason = "User denied this from Bayloob";
+    }
+    return JSON.stringify({ hookSpecificOutput: out });
   }
-  return ""; // 'terminal' → empty reply → the agent shows its normal prompt
+  const behavior =
+    decision === "allow"
+      ? { behavior: "allow", ...(updatedInput ? { updatedInput } : {}) }
+      : { behavior: "deny", message: "User denied this from Bayloob" };
+  return JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PermissionRequest", decision: behavior },
+  });
 }
 
 /** HTTP endpoint for the hooks: /ev for events, /perm for permission requests that wait for the user. */
 class EventServer {
-  #pending = new Map(); // permId -> {res, timer, sid}
+  #pending = new Map(); // permId -> {res, timer, sid, input, event}
   #permSeq = 0;
   lastEventAt = null;
 
@@ -135,15 +159,28 @@ class EventServer {
     this.http.close();
   }
 
+  /**
+   * Answers an AskUserQuestion from the UI: allows the tool with the user's answers filled in, so the
+   * agent continues without its own question prompt. `answers` maps question text → chosen label(s).
+   */
+  answer(permId, answers) {
+    const p = this.#pending.get(permId);
+    if (!p) {
+      return false;
+    }
+    // The original questions must be echoed back next to the answers
+    return this.decide(permId, "allow", { ...p.input, answers: encodeAnswers(answers) });
+  }
+
   // Decision from the UI: 'allow' | 'deny' | 'terminal'
-  decide(permId, decision) {
+  decide(permId, decision, updatedInput = null) {
     const p = this.#pending.get(permId);
     if (!p) {
       return false;
     }
     this.#pending.delete(permId);
     clearTimeout(p.timer);
-    p.res.end(decisionBody(decision));
+    p.res.end(decisionBody(decision, updatedInput, p.event));
     this.store.settlePermission(
       p.sid,
       permId,
@@ -206,15 +243,21 @@ class EventServer {
   }
 
   #onPermission(id, agent, ev, query, res) {
-    const permId = String(++this.#permSeq);
     const tool = ev.tool_name || "Tool";
+    const event = ev.hook_event_name === "PreToolUse" ? "PreToolUse" : "PermissionRequest";
+    // Questions are asked once, from their PreToolUse hook. If the user sent one to the terminal,
+    // the PermissionRequest that may follow goes straight there too, so no second card appears.
+    if (event === "PermissionRequest" && QUESTION_TOOLS.has(tool)) {
+      return res.end("");
+    }
+    const permId = String(++this.#permSeq);
     this.store.upsert(id, agent, ev, query, {
       state: "waiting",
       tool,
       perm: { id: permId, tool, ...permDetail(tool, ev.tool_input) },
     });
     const timer = setTimeout(() => this.decide(permId, "terminal"), PERM_TIMEOUT_MS);
-    this.#pending.set(permId, { res, timer, sid: id });
+    this.#pending.set(permId, { res, timer, sid: id, input: ev.tool_input || {}, event });
     // The hook went away (answered in the terminal, agent timeout, …) → remove the card
     res.on("close", () => {
       if (!this.#pending.delete(permId)) {
@@ -259,6 +302,7 @@ module.exports = {
   describeTool,
   permDetail,
   decisionBody,
+  encodeAnswers,
   PORT,
 };
 
