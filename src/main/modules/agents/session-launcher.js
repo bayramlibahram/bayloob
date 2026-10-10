@@ -8,6 +8,17 @@ const { agentCommand } = require("./agents");
 const { TerminalLauncher } = require("../../infrastructure/system/terminal-launcher");
 
 const PREFIX = "bl-";
+// Typed text followed at once by Enter reads as a paste burst to Codex, which turns that Enter into a new
+// line instead of submitting (measured on Codex 0.154.0: Enter 0 ms after the text fails, from 50 ms it
+// submits). So the text always goes in as one bracketed paste, then Enter after a pause with margin.
+const ENTER_DELAY_MS = 150;
+
+/** How a prompt is typed: [{ paste }, { wait }, { key }] — pure, so it can be tested. */
+function promptSteps(text) {
+  const body = String(text).replace(/\r/g, "").trim();
+  return body ? [{ paste: body }, { wait: ENTER_DELAY_MS }, { key: "Enter" }] : [];
+}
+
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash", "ksh", "tcsh", "csh"]);
 
 const tmux = args =>
@@ -104,12 +115,12 @@ class SessionLauncher {
   }
 
   /**
-   * Types `text` into the agent's input and submits it. Multi-line text goes in as a bracketed paste,
-   * so its newlines stay newlines instead of submitting early; Enter is sent once at the end.
+   * Types `text` into the agent's input and submits it: one bracketed paste (newlines stay newlines),
+   * then Enter once, after ENTER_DELAY_MS so the agent doesn't take it as part of the paste.
    */
   async sendPrompt(paneId, text) {
-    const body = String(text).replace(/\r/g, "").trim();
-    if (!body) {
+    const steps = promptSteps(text);
+    if (!steps.length) {
       return;
     }
     // An empty or odd target would make tmux pick the current pane — someone else's terminal
@@ -123,14 +134,18 @@ class SessionLauncher {
     if (SHELLS.has(running)) {
       throw new Error("The agent isn't running in that terminal any more");
     }
-    if (body.includes("\n")) {
-      const buffer = `bayloob-${Date.now()}`;
-      await loadBuffer(buffer, body);
-      await tmux(["paste-buffer", "-p", "-d", "-b", buffer, "-t", paneId]);
-    } else {
-      await tmux(["send-keys", "-t", paneId, "-l", "--", body]);
+    for (const step of steps) {
+      if (step.paste) {
+        // Bracketed paste: newlines stay newlines, nothing in the text is read as a key
+        const buffer = `bayloob-${process.pid}-${Date.now()}`;
+        await loadBuffer(buffer, step.paste);
+        await tmux(["paste-buffer", "-p", "-d", "-b", buffer, "-t", paneId]);
+      } else if (step.wait) {
+        await new Promise(r => setTimeout(r, step.wait));
+      } else {
+        await tmux(["send-keys", "-t", paneId, step.key]);
+      }
     }
-    await tmux(["send-keys", "-t", paneId, "Enter"]);
   }
 
   async stop(name) {
@@ -149,4 +164,4 @@ class SessionLauncher {
   }
 }
 
-module.exports = { SessionLauncher };
+module.exports = { SessionLauncher, promptSteps, ENTER_DELAY_MS };
