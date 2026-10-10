@@ -46,6 +46,15 @@
   /* an agent waiting on you: the mascot fades as the wait grows */
   .pill.hungry .mascot { filter: saturate(.55); }
   .pill.starving .mascot { filter: saturate(.2) brightness(.8); }
+  .card.done.r-failed { border-color: color-mix(in srgb, var(--waiting) 45%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--waiting) 9%, transparent), var(--card)); }
+  .card.done.r-untested { border-color: color-mix(in srgb, var(--working) 40%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--working) 8%, transparent), var(--card)); }
+  .receipt { margin-top: 8px; font-size: 12.5px; font-weight: 600; }
+  .receipt code { font: 500 11.5px ui-monospace, monospace; color: var(--muted); }
+  .receipt.passed { color: var(--done); }
+  .receipt.failed { color: var(--waiting); }
+  .receipt.untested { color: var(--working); }
   .card .head .wait { color: var(--waiting); font-variant-numeric: tabular-nums; }
   .pill.deaf .mascot { filter: grayscale(1) brightness(.75); }
   .label .deaf-note { color: var(--working); }
@@ -226,10 +235,13 @@
     tokensTip: t => `Tokens: ${t.input.toLocaleString()} in · ${t.output.toLocaleString()} out · ${t.cacheWrite.toLocaleString()} cache write\n+ ${t.cacheRead.toLocaleString()} read from cache (not counted)`,
     queuedTip: n => `${n} prompt${n === 1 ? '' : 's'} waiting — sent when the agent finishes`,
     waiting: 'waiting',
+    receipt: { passed: '✓ Tests passed', failed: '✗ Tests failed', untested: '⚠ Code changed, no tests run' },
+    askTests: 'Ask to run tests',
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+  const RECEIPT_MARK = { passed: ' ✓', failed: ' ✗', untested: ' ⚠' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const DONE_TOAST_MS = 12000;
   const PILL_OPEN_WIDTH = 480;
@@ -340,6 +352,7 @@
     tokens = {};           // session id -> { input, output, cacheWrite, cacheRead, total }
     queues = {};           // session id -> number of prompts waiting for it
     waits = {};            // session id -> when it started waiting on a card
+    receipts = {};         // session id -> { status, command? } of its last finished turn
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -373,6 +386,8 @@
     setTokens(tokens) { this.tokens = tokens || {}; this.render(); }
 
     setQueues(queues) { this.queues = queues || {}; this.render(); }
+
+    setReceipts(receipts) { this.receipts = receipts || {}; this.render(); }
 
     setBlocked(info) { this.waits = info?.waits || {}; this.render(); this.#tickWaits(); }
 
@@ -532,14 +547,32 @@
 
     #doneCard() {
       const s = this.sessions.find(x => x.id === this.toast.sid);
-      return { kind: 'done', html: `
+      const r = this.receipts[s.id];
+      // Green only when the turn's tests passed (or nothing needed testing)
+      const tone = r?.status === 'failed' ? ' r-failed' : r?.status === 'untested' ? ' r-untested' : '';
+      return { kind: `done${tone}`, html: `
         ${this.#cardHead(s, T.finished)}
         <div class="summary">${esc(s.summary || T.taskDone)}</div>
+        ${this.#receiptHtml(s)}
         ${this.toast.hint ? `<div class="hint">${esc(this.toast.hint)}</div>` : ''}
         <div class="actions">
+          ${this.#needsTests(s) ? `<button class="btn" data-act="ask-tests" data-sid="${esc(s.id)}">${T.askTests}</button>` : ''}
           <button class="btn" data-act="dismiss">${T.dismiss}</button>
           <button class="btn primary" data-act="focus" data-sid="${esc(s.id)}">${T.openTerminal}</button>
         </div>` };
+    }
+
+    // ✓ / ✗ / ⚠ line under a finished turn's summary: did its tests pass, or were none run
+    #receiptHtml(s) {
+      const r = this.receipts[s.id];
+      if (!r || r.status === 'no-changes') { return ''; }
+      const cmd = r.command ? ` · <code>${esc(r.command.length > 48 ? `${r.command.slice(0, 47)}…` : r.command)}</code>` : '';
+      return `<div class="receipt ${r.status}">${T.receipt[r.status]}${cmd}</div>`;
+    }
+
+    #needsTests(s) {
+      const r = this.receipts[s.id];
+      return !!s.term?.tmux && (r?.status === 'failed' || r?.status === 'untested');
     }
 
     #listHtml() {
@@ -549,7 +582,7 @@
           <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
           ${this.queues[s.id] ? `<span class="queue" title="${T.queuedTip(this.queues[s.id])}">⏳${this.queues[s.id]}</span>` : ''}
           ${this.#diffHtml(s.id)}
-          <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
+          <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}${s.state === 'done' && this.receipts[s.id] ? (RECEIPT_MARK[this.receipts[s.id].status] || '') : ''}</span>
           ${this.#rowControls(s)}</div>`).join('');
     }
 
@@ -623,6 +656,9 @@
       } else if (act === 'allow' || act === 'deny' || act === 'terminal') {
         b.disabled = true;
         this.api?.decide(b.dataset.id, act);
+      } else if (act === 'ask-tests') {
+        b.disabled = true;
+        this.api?.askTests(b.dataset.sid);
       } else if (act === 'dismiss') {
         this.toast = null;
         this.render();
@@ -696,6 +732,7 @@
     window.bayloobAPI.onTokens?.(tokens => view.setTokens(tokens));
     window.bayloobAPI.onQueues?.(q => view.setQueues(q));
     window.bayloobAPI.onBlocked?.(info => view.setBlocked(info));
+    window.bayloobAPI.onReceipts?.(r => view.setReceipts(r));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

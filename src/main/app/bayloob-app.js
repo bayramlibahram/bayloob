@@ -11,6 +11,7 @@ const { PromptQueue } = require("../modules/agents/prompt-queue");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { BlockedClock } = require("../modules/sessions/blocked-clock");
+const { receiptFor } = require("../modules/sessions/receipt");
 const { SessionOutput } = require("../modules/sessions/session-output");
 const { TokenUsage } = require("../modules/sessions/token-usage");
 const { HookHealth } = require("../modules/hooks/hook-health");
@@ -95,6 +96,8 @@ class BayloobApp {
   git = new Git();
   tokens = new TokenUsage();
   queue = new PromptQueue();
+  #receipts = new Map(); // session id -> receipt of its last finished turn
+  #lastStates = new Map(); // session id -> state at the previous change
   presence = new Presence();
   blocked = null;
   #locked = false;
@@ -165,6 +168,7 @@ class BayloobApp {
       this.panel.send("panel:sessions", list);
       this.#sendQueued(list);
       this.#tickBlocked(list);
+      this.#updateReceipts(list);
     });
     this.server.http.on("error", e => {
       console.error(
@@ -404,6 +408,33 @@ class BayloobApp {
     this.panel.send("panel:blocked", info);
   }
 
+  // A turn that just finished gets a receipt (did it change code, did its tests pass); a new turn clears it
+  #updateReceipts(list) {
+    let changed = false;
+    for (const s of list) {
+      const was = this.#lastStates.get(s.id);
+      if (s.state === "done" && was !== "done") {
+        const r = receiptFor(s);
+        if (r) {
+          this.#receipts.set(s.id, r);
+          changed = true;
+        }
+      } else if (s.state !== "done" && this.#receipts.delete(s.id)) {
+        changed = true;
+      }
+    }
+    this.#lastStates = new Map(list.map(s => [s.id, s.state]));
+    for (const id of this.#receipts.keys()) {
+      if (!this.#lastStates.has(id)) {
+        this.#receipts.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.overlay.send("receipts", Object.fromEntries(this.#receipts));
+    }
+  }
+
   // Sends the next queued prompt of every session that just finished its turn
   #sendQueued(list) {
     for (const { session, text } of this.queue.due(list)) {
@@ -541,6 +572,19 @@ class BayloobApp {
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
     ipcMain.on("open-settings", () => this.openSettings());
+    // From a receipt: ask the agent to run its tests (queued if it's busy again by then)
+    ipcMain.on("ask-tests", (_e, sessionId) => {
+      const s = session(sessionId);
+      if (!s?.term?.tmux) {
+        return;
+      }
+      const prompt = "Run the project's tests and fix any failures.";
+      if (PromptQueue.isBusy(s)) {
+        this.queue.add(s.id, prompt);
+      } else {
+        this.launcher.sendPrompt(s.term.tmux, prompt).catch(() => {});
+      }
+    });
 
     // Launcher
     ipcMain.handle("launcher:launch", (_e, opts) => result(() => this.launch(opts)));
