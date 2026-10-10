@@ -28,4 +28,16 @@ function overlayPosition(display, panel, { width, gnome = false } = {}) {
   return { x, y: bounds.y + (gnome ? GNOME_TOP_BAR : 0) };
 }
 
-module.exports = { overlayPosition, GNOME_TOP_BAR };
+// The top bar the overlay last learned from the GNOME extension, so windows that drop from the top
+// (the workspace panel) open below it too — without asking D-Bus again
+let knownTopBar = null;
+const rememberTopBar = panel => {
+  knownTopBar = panel || null;
+};
+
+/** { x, y } just below the top bar for a window `width` wide (best guess, see overlayPosition). */
+function belowTopBar(display, width, gnome) {
+  return overlayPosition(display, knownTopBar, { width, gnome });
+}
+
+module.exports = { overlayPosition, belowTopBar, rememberTopBar, GNOME_TOP_BAR };

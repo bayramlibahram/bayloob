@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Workspace panel: Docker **Logs** (last 200 lines, read-only); stop / restart ask first, in the row; 28 px
+  buttons. Empty sections and "no activity" show an icon, a line and a hint; disabled buttons say why;
+  sidebar counts explain themselves.
 - Replies straight into agents that run outside tmux, two ways (no GNOME extension needed):
   - **Continue in Bayloob** (session menu, and the panel's copy-and-paste strip): close the agent in its
     terminal once, and Bayloob resumes the same conversation in tmux (`claude --resume <id>`,
@@ -24,6 +27,10 @@
   the terminal's default can be the risky choice, e.g. Codex's "Update now" runs a script).
 
 ### Fixed
+- Panel footer: CPU is now the whole machine's, as a share of all cores (0–100 %, "2.4 of 16 cores" on
+  hover), and memory is used / total — it used to sum per-app percentages ("243 %") or show "—" by section.
+- The workspace panel opens below the desktop's top bar, like the pill.
+- Docker actions only accept real container ids (never something the CLI could read as an option).
 - Clicks in the pill no longer get lost while agents work: the list and cards used to be rebuilt
   several times a second, so a press and release could land on two different buttons. Parts are now
   replaced only when they change, and never while a mouse button is held (10/10 clicks vs 2/10 before).

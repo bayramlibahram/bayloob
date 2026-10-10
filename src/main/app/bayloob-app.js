@@ -36,6 +36,7 @@ const { TerminalFocuser } = require("../infrastructure/desktop/terminal-focuser"
 const { WindowService } = require("../infrastructure/desktop/window.service");
 const { Git } = require("../infrastructure/system/git");
 const { AgentDiscovery } = require("../infrastructure/system/agent-discovery");
+const { SystemStats } = require("../infrastructure/system/system-stats");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
@@ -117,6 +118,7 @@ class BayloobApp {
   output = new SessionOutput();
   git = new Git();
   discovery = new AgentDiscovery();
+  system = new SystemStats(); // whole-machine CPU / memory for the panel's footer
   #handoffs = new Map(); // session id -> { agent, cwd, sessionId, pid, at }: waiting to continue in tmux
   // Questions agents ask only in their terminal (folder trust, update offers…), read from tmux panes
   menus = new MenuWatcher({
@@ -427,7 +429,10 @@ class BayloobApp {
       if (!this.panel.visible) {
         return clearInterval(this.#statsTimer);
       }
-      this.panel.send("panel:stats", this.stats.sample(this.server.store.list()));
+      this.panel.send("panel:stats", {
+        ...this.stats.sample(this.server.store.list()),
+        system: this.system.sample(),
+      });
       const snap = await this.workspace.snapshot().catch(() => null);
       if (snap) {
         this.#apps = new Map(snap.apps.map(a => [a.id, a]));
@@ -1047,6 +1052,13 @@ class BayloobApp {
     ipcMain.handle("panel:docker", (_e, action, id) =>
       result(() => this.workspace.docker.act(String(action), String(id)))
     );
+    ipcMain.handle("panel:docker-logs", async (_e, id) => {
+      try {
+        return { ok: true, text: await this.workspace.docker.logs(String(id)) };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    });
     ipcMain.handle("panel:launchable", () => this.workspace.launchable());
     ipcMain.on("panel:open-settings", () => this.openSettings());
     ipcMain.on("panel:close", () => this.panel.hide());

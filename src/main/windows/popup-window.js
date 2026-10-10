@@ -1,5 +1,11 @@
 const { BrowserWindow, screen } = require("electron");
 const paths = require("../app/paths");
+const { belowTopBar } = require("./overlay-position");
+
+// Electron replaces XDG_CURRENT_DESKTOP for itself; the original value says whether this is GNOME
+const IS_GNOME = /gnome/i.test(
+  process.env.ORIGINAL_XDG_CURRENT_DESKTOP || process.env.XDG_CURRENT_DESKTOP || ""
+);
 
 /**
  * Base for Bayloob's focusable popups (launcher, workspace panel, settings): frameless, transparent,
@@ -21,13 +27,20 @@ class PopupWindow {
   }
 
   #bounds() {
-    const { workArea } = screen.getPrimaryDisplay();
+    const display = screen.getPrimaryDisplay();
+    const { workArea } = display;
     const { width, height, placement } = this.opts;
+    if (placement === "top") {
+      // Dropping from the top: below the desktop's top bar, like the pill (workArea alone doesn't know it
+      // on GNOME under XWayland)
+      const { x, y } = belowTopBar(display, width, IS_GNOME);
+      return { width, height, x, y: y + 6 };
+    }
     return {
       width,
       height,
       x: Math.round(workArea.x + (workArea.width - width) / 2),
-      y: placement === "top" ? workArea.y + 6 : Math.round(workArea.y + workArea.height * 0.18),
+      y: Math.round(workArea.y + workArea.height * 0.18),
     };
   }
 

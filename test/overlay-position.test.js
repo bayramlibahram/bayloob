@@ -30,3 +30,16 @@ test("GNOME without the extension (work area = whole screen): a fallback below t
   const hidden = { x: 0, y: 0, width: 10, height: 30, visible: false };
   assert.deepEqual(overlayPosition(screen, hidden, { width: 540 }), { x: 3370, y: 480 });
 });
+
+test("windows dropping from the top use the top bar the overlay learned", () => {
+  const { belowTopBar, rememberTopBar } = require("../src/main/windows/overlay-position");
+  const display = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+  };
+  rememberTopBar(null);
+  assert.equal(belowTopBar(display, 1080, true).y, 32); // GNOME fallback
+  rememberTopBar({ x: 0, y: 0, width: 1920, height: 40, visible: true });
+  assert.deepEqual(belowTopBar(display, 1080, true), { x: 420, y: 40 });
+  rememberTopBar(null);
+});

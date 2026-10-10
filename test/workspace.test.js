@@ -51,3 +51,15 @@ test("gdbus output: GVariant strings are unescaped exactly", () => {
   assert.equal(JSON.parse(gvariantString(printed))[0].title, `It's "quoted" C:\\dir ə`);
   assert.equal(gvariantString("not a variant"), null);
 });
+
+test("docker: only real container ids reach the CLI (nothing it could read as an option)", async () => {
+  const { DockerService, CONTAINER } = require("../src/main/modules/workspace/docker.service");
+  for (const ok of ["3f2a9c1b7d", "shop-db", "api_worker.1"]) {
+    assert.match(ok, CONTAINER);
+  }
+  const d = new DockerService();
+  for (const bad of ["-f", "--help", "a b", "", "x;rm"]) {
+    await assert.rejects(() => d.logs(bad), /Not a container id/);
+    await assert.rejects(() => d.act("stop", bad), /Not a container id/);
+  }
+});

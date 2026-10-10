@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("panelAPI", {
   launchApp: appId => ipcRenderer.invoke("panel:launch-app", appId),
   newTab: appId => ipcRenderer.invoke("panel:new-tab", appId),
   docker: (action, id) => ipcRenderer.invoke("panel:docker", action, id),
+  dockerLogs: id => ipcRenderer.invoke("panel:docker-logs", id),
   launchable: () => ipcRenderer.invoke("panel:launchable"),
   focus: sessionId => ipcRenderer.invoke("focus", sessionId),
   openWorkspace: sessionId => ipcRenderer.invoke("panel:open-workspace", sessionId),

@@ -93,6 +93,14 @@
   .kebab { width: 24px; height: 30px; border-radius: 8px; color: var(--muted); display: grid; place-items: center; flex: none; }
   .kebab:hover { color: var(--text); background: rgb(var(--ink) / .07); }
   .empty { color: var(--muted); padding: 30px 10px; text-align: center; line-height: 1.6; }
+  /* empty state: an icon, one line, a hint at what to do */
+  .empty .ei { display: grid; place-items: center; width: 44px; height: 44px; margin: 0 auto 10px; border-radius: 14px; background: rgb(var(--ink) / .05); }
+  .empty .ei .i { width: 20px; height: 20px; }
+  .empty b { display: block; color: var(--soft); font-weight: 600; }
+  .empty small { display: block; font-size: 12px; }
+  .empty.small { padding: 12px 0; text-align: left; display: flex; align-items: center; gap: 10px; }
+  .empty.small .ei { width: 30px; height: 30px; margin: 0; border-radius: 9px; flex: none; }
+  .empty.small .ei .i { width: 15px; height: 15px; }
 
   /* detail */
   .detailcol { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
@@ -172,7 +180,13 @@
   .item.click { cursor: pointer; } .item.click:hover { background: rgb(var(--ink) / .04); }
   .item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item .m { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
-  .item .mini { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); }
+  .item .mini { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); }
+  .item .mini.wide-mini { width: auto; padding: 0 10px; font-size: 12px; font-weight: 600; color: var(--text); background: rgb(var(--ink) / .06); }
+  .item .mini.danger { background: var(--waiting); color: #fff; }
+  .item .ask { flex: 1; min-width: 0; color: var(--soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  pre.logs { max-height: 220px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: rgb(var(--ink) / .04);
+    border: 1px solid var(--line); font: 11.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; color: var(--softer); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+  h3 .link { float: right; font-size: 12px; color: var(--brand-soft); font-weight: 600; }
   .item .mini:hover { color: var(--text); background: rgb(var(--ink) / .08); }
   .buttons { display: flex; gap: 8px; margin-top: 12px; }
   .wide { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 9px; border-radius: 10px;
@@ -295,14 +309,35 @@
     kind: { browser: 'Browser', ide: 'IDE', terminal: 'Terminal', files: 'Files', app: 'Application', system: 'System tool', agent: 'AI agent' },
     empty: 'Nothing here right now.', noMatch: q => `No apps match “${q}”.`,
     loading: 'Looking at what’s running…',
+    wsPickAgent: 'Select an AI agent to open its folder', wsNoFolder: "This agent's folder isn't known", wsOpen: "Open the selected agent's folder",
+    focusNoExt: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows', focusNoWindows: 'This app has no open windows',
+    noActivity: 'No activity yet', noActivityHint: 'Windows opened, focus changes and new tabs show up here',
+    noMatchHint: 'Try another word, or clear the search (Esc)',
+    countTip: {
+      overview: n => `${n} running apps and agents`, agents: n => `${n} agent sessions`, browsers: n => `${n} browsers running`,
+      ides: n => `${n} IDEs running`, applications: n => `${n} other apps running`, system: n => `${n} system tools`,
+    },
+    emptyIn: {
+      overview: 'Nothing running yet', agents: 'No agents running', browsers: 'No browser is open', ides: 'No IDE is open',
+      applications: 'No other apps running', system: 'No system tools found',
+    },
+    emptyHint: {
+      overview: 'Start an agent with Ask Bayloob below', agents: 'Ask Bayloob below starts one — or run claude / codex in a terminal',
+      browsers: 'Firefox windows and tab counts appear here', ides: 'VS Code, JetBrains IDEs… and their projects appear here',
+      applications: 'Terminals, Files and other apps appear here', system: 'Docker shows up here when it is installed and running',
+    },
     windows: 'Windows', projects: 'Projects', containers: 'Containers', recent: 'Recent activity', nothingYet: 'Nothing yet',
     focus: 'Focus window', newTab: 'New tab', newWindow: 'New window', openTerminal: 'Open terminal', more: 'More actions', open: 'Open',
     tabs: n => `${n} tab${n === 1 ? '' : 's'}`, wins: n => `${n} window${n === 1 ? '' : 's'}`, sessions: n => `${n} session${n === 1 ? '' : 's'}`,
     unhealthyN: n => `${n} unhealthy`, allHealthy: 'All healthy',
     needsExtension: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows.',
-    start: 'Start', stop: 'Stop', restart: 'Restart', launched: name => `Launching ${name}…`,
+    start: 'Start', stop: 'Stop', restart: 'Restart', cancel: 'Cancel', close: 'Close',
+    dockerAsk: action => `Really ${action.toLowerCase()}?`, logs: 'Logs', logsTip: 'Show the last 200 lines (read-only)',
+    logsOf: name => `Logs · ${name}`, noLogs: 'No output yet.', wrong: 'Something went wrong', launched: name => `Launching ${name}…`,
+    cpuTip: 'All cores of this computer', memTip: 'Memory in use on this computer, of the total',
+    cores: (busy, n) => `${busy.toFixed(1)} of ${n} cores busy`,
     waited: 'Agents waited', waitedTip: 'Today, agents spent this long waiting on your permission and question cards (screen-locked time not counted)',
-    cpu: 'CPU', memory: 'Memory', metersTip: 'Apps in this view and the processes they started',
+    cpu: 'CPU', memory: 'Memory',
   };
   const STATUS_COLOR = { active: 'var(--done)', running: 'var(--thinking)', healthy: 'var(--done)', unhealthy: 'var(--waiting)', stopped: 'var(--idle)',
     idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
@@ -310,6 +345,8 @@
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const FINISHED_RECENT_MS = 10 * 60 * 1000;
   const RESUMABLE = new Set(['claude', 'codex']); // agents Bayloob can continue in tmux (--resume / resume)
+  const emptyHtml = (icon, line, hint, size = '') =>
+    `<div class="empty ${size}"><span class="ei">${icon || ''}</span><span><b>${line}</b><small>${hint}</small></span></div>`;
   const BUSY = new Set(['thinking', 'working', 'waiting']); // a prompt sent now is queued for the end of the turn
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   const FOLDER = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
@@ -332,9 +369,11 @@
     tab: I('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M8 5v4"/>'),
     win: I('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 7h14"/>'),
     clock: I('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    search: I('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
     plus: I('<path d="M12 5v14M5 12h14"/>'),
     play: I('<path d="M7 4v16l13-8Z"/>'), stop: I('<rect x="6" y="6" width="12" height="12" rx="2"/>'),
     restart: I('<path d="M4 4v6h6"/><path d="M20 12a8 8 0 0 1-13.7 5.7M4 10a8 8 0 0 1 14.5-3.5"/>'),
+    logs: I('<path d="M5 6h14M5 12h14M5 18h9"/>'),
     focus: I('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 12h8M12 8v8"/>'),
     check: I('<path d="m5 12 4.5 4.5L19 7"/>'),
   };
@@ -486,7 +525,10 @@
       this.#renderMeters();
       this.#renderSay();
       this.#renderFinished();
-      this.el.openWorkspace.disabled = !(this.current?.kind === 'agent' && this.current.data.cwd);
+      // A disabled button always says why
+      const cur = this.current;
+      this.el.openWorkspace.disabled = !(cur?.kind === 'agent' && cur.data.cwd);
+      this.el.openWorkspace.title = cur?.kind !== 'agent' ? T.wsPickAgent : !cur.data.cwd ? T.wsNoFolder : T.wsOpen;
     }
 
     #renderStatus() {
@@ -502,7 +544,7 @@
     #renderSide() {
       this.el.side.innerHTML = Object.entries(T.sections).map(([key, label]) => {
         const n = this.#items(key).length;
-        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}">${ICONS[key]}<span>${label}</span>${n ? `<em>${n}</em>` : ''}</button>`;
+        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}">${ICONS[key]}<span>${label}</span>${n ? `<em title="${esc(T.countTip[key](n))}">${n}</em>` : ''}</button>`;
       }).join('');
     }
 
@@ -513,7 +555,12 @@
       if (this.launchMode) { return this.#renderLaunchable(); }
       if (this.apps === null && this.section !== 'agents') { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
       const items = this.#visible();
-      if (!items.length) { this.el.rows.innerHTML = `<div class="empty">${this.query ? T.noMatch(esc(this.query)) : T.empty}</div>`; return; }
+      if (!items.length) {
+        this.el.rows.innerHTML = this.query
+          ? emptyHtml(ICONS.search, T.noMatch(esc(this.query)), T.noMatchHint)
+          : emptyHtml(ICONS[this.section], T.emptyIn[this.section], T.emptyHint[this.section]);
+        return;
+      }
       const sel = this.current?.key;
       this.el.rows.innerHTML = items.map(i => `
         <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
@@ -564,7 +611,7 @@
     }
 
     #history(list) {
-      if (!list?.length) { return `<div class="empty" style="padding:10px 0;text-align:left">${T.nothingYet}</div>`; }
+      if (!list?.length) { return emptyHtml(ICONS.clock, T.noActivity, T.noActivityHint, 'small'); }
       return `<ul class="timeline plain">${list.slice(0, 6).map(h => `<li><span class="t" title="${esc(h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>`;
     }
 
@@ -597,7 +644,7 @@
         ${windows ? `<h3>${T.windows}</h3><div class="items">${windows}</div>` : ''}
         ${!this.extension ? `<div class="note">${T.needsExtension}</div>` : ''}
         <div class="buttons">
-          <button class="wide" data-act="focus"${a.windows.length ? '' : ' disabled'}>${ICONS.focus}${T.focus}</button>
+          <button class="wide" data-act="focus"${a.windows.length ? '' : ` disabled title="${this.extension ? T.focusNoWindows : T.focusNoExt}"`}>${ICONS.focus}${T.focus}</button>
           ${second}
         </div>
         <h3>${T.recent}</h3>${this.#history(a.history)}`;
@@ -609,11 +656,24 @@
       const unhealthy = cs.filter(c => c.health === 'unhealthy').length;
       const rows = cs.map(c => {
         const on = c.state === 'running';
-        const actions = on
-          ? `<button class="mini" data-docker="restart" data-id="${esc(c.id)}" title="${T.restart}">${ICONS.restart}</button><button class="mini" data-docker="stop" data-id="${esc(c.id)}" title="${T.stop}">${ICONS.stop}</button>`
-          : `<button class="mini" data-docker="start" data-id="${esc(c.id)}" title="${T.start}">${ICONS.play}</button>`;
-        return `<div class="item"><span class="dot" style="--c:${HEALTH_COLOR[c.health] || 'var(--idle)'}" title="${esc(c.status)}"></span><span class="t" title="${esc(c.image)}">${esc(c.name)}</span><span class="m">${esc(c.health)}</span>${actions}</div>`;
+        const id = esc(c.id);
+        // Stop / restart ask first, in the row itself; start and logs don't change anything risky
+        const ask = this.dockerAsk?.id === c.id ? this.dockerAsk.action : null;
+        const actions = ask
+          ? `<span class="ask">${T.dockerAsk(T[ask])}</span>
+             <button class="mini wide-mini danger" data-docker="${ask}" data-id="${id}" data-confirmed="1">${T[ask]}</button>
+             <button class="mini wide-mini" data-docker-cancel>${T.cancel}</button>`
+          : `<button class="mini" data-logs="${id}" title="${T.logsTip}" aria-label="${T.logs}">${ICONS.logs}</button>${on
+            ? `<button class="mini" data-docker="restart" data-id="${id}" title="${T.restart}" aria-label="${T.restart}">${ICONS.restart}</button><button class="mini" data-docker="stop" data-id="${id}" title="${T.stop}" aria-label="${T.stop}">${ICONS.stop}</button>`
+            : `<button class="mini" data-docker="start" data-id="${id}" title="${T.start}" aria-label="${T.start}">${ICONS.play}</button>`}`;
+        return `<div class="item"><span class="dot" style="--c:${HEALTH_COLOR[c.health] || 'var(--idle)'}" title="${esc(c.status)}"></span><span class="t" title="${esc(c.image)}">${esc(c.name)}</span>${ask ? '' : `<span class="m">${esc(c.health)}</span>`}${actions}</div>`;
       }).join('');
+      // Logs of one container: read-only, the last 200 lines
+      const lg = this.dockerLogs;
+      const logs = lg && cs.some(c => c.id === lg.id)
+        ? `<h3>${T.logsOf(esc(lg.name))} <button class="link" data-logs-close>${T.close}</button></h3>
+           <pre class="logs">${lg.text == null ? T.loading : esc(lg.text) || T.noLogs}</pre>`
+        : '';
       return `
         <div class="tiles">
           <div class="tile">${ICONS.box}${cs.length} total</div>
@@ -621,6 +681,7 @@
           <div class="tile">${unhealthy ? ICONS.restart : ICONS.check}${unhealthy ? T.unhealthyN(unhealthy) : T.allHealthy}</div>
         </div>
         <h3>${T.containers}</h3><div class="items">${rows}</div>
+        ${logs}
         <h3>${T.recent}</h3>${this.#history(a.history)}`;
     }
 
@@ -635,21 +696,17 @@
         <div class="buttons"><button class="wide" data-act="terminal">${ICON_TERM}${T.openTerminal}</button></div>`;
     }
 
+    // The footer is always the whole machine — never a sum over the selected section (that read "243 %"):
+    // CPU as a share of all cores (0–100 %), memory as used of total. Per-app numbers live in the detail.
     #renderMeters() {
-      let cpu = null, memory = null;
-      if (this.section === 'agents' && !this.launchMode) { ({ cpu, memory } = this.stats || {}); }
-      else {
-        for (const i of this.#items()) {
-          if (i.kind !== 'app') { continue; }
-          if (i.data.cpu != null) { cpu = (cpu || 0) + i.data.cpu; }
-          if (i.data.memory != null) { memory = (memory || 0) + i.data.memory; }
-        }
-      }
-      this.el.meters.title = T.metersTip;
+      const sys = this.stats?.system || {};
+      const cpu = sys.cpu == null ? '—' : `${Math.round(sys.cpu)}%`;
+      const cpuTip = sys.cpu == null ? T.cpuTip : `${T.cpuTip} · ${T.cores(sys.coresBusy, sys.cores)}`;
+      const mem = sys.memTotal ? `${formatBytes(sys.memUsed)} / ${formatBytes(sys.memTotal)}` : '—';
       const waited = this.blocked?.today
         ? `<span class="sep"></span><span class="meter" title="${T.waitedTip}">${ICONS.clock}${T.waited}<b>${formatWait(this.blocked.today)}</b></span>`
         : '';
-      this.el.meters.innerHTML = `<span class="meter">${ICONS.cpu}${T.cpu}<b>${pct(cpu)}</b></span><span class="sep"></span><span class="meter">${ICONS.mem}${T.memory}<b>${memory == null ? '—' : formatBytes(memory)}</b></span>${waited}`;
+      this.el.meters.innerHTML = `<span class="meter" title="${esc(cpuTip)}">${ICONS.cpu}${T.cpu}<b>${cpu}</b></span><span class="sep"></span><span class="meter" title="${T.memTip}">${ICONS.mem}${T.memory}<b>${mem}</b></span>${waited}`;
     }
 
     #flash(text) {
@@ -848,6 +905,18 @@
 
     #fit() { this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20); }
 
+    async #showLogs(item, id) {
+      const c = item.data.details.containers.find(x => x.id === id);
+      this.dockerLogs = { id, name: c?.name || id, text: null };
+      this.#renderDetail();
+      const r = await this.api?.dockerLogs(id);
+      if (this.dockerLogs?.id !== id) { return; } // closed or switched meanwhile
+      this.dockerLogs.text = r?.ok ? r.text : `⚠ ${r?.error || T.wrong}`;
+      this.#renderDetail();
+      const pre = this.el.detail.querySelector('.logs');
+      if (pre) { pre.scrollTop = pre.scrollHeight; } // newest at the bottom, in view
+    }
+
     #move(step) {
       const items = this.#visible();
       if (!items.length) { return; }
@@ -886,8 +955,21 @@
         if (!item) { return; }
         const win = e.target.closest('[data-window]');
         if (win) { return this.#run(this.api?.focusApp(item.id, win.dataset.window)); }
+        if (e.target.closest('[data-docker-cancel]')) { this.dockerAsk = null; return this.#renderDetail(); }
+        if (e.target.closest('[data-logs-close]')) { this.dockerLogs = null; return this.#renderDetail(); }
+        const logs = e.target.closest('[data-logs]');
+        if (logs) { return this.#showLogs(item, logs.dataset.logs); }
         const docker = e.target.closest('[data-docker]');
-        if (docker) { docker.disabled = true; return this.#run(this.api?.docker(docker.dataset.docker, docker.dataset.id)); }
+        if (docker) {
+          const { docker: action, id, confirmed } = docker.dataset;
+          if ((action === 'stop' || action === 'restart') && !confirmed) {
+            this.dockerAsk = { id, action };
+            return this.#renderDetail();
+          }
+          this.dockerAsk = null;
+          docker.disabled = true;
+          return this.#run(this.api?.docker(action, id));
+        }
         const act = e.target.closest('[data-act]')?.dataset.act;
         if (act === 'focus') { this.#run(this.api?.focusApp(item.id)); }
         if (act === 'newtab') { this.#run(this.api?.newTab(item.id)); }

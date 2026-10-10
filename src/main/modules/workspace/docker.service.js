@@ -1,7 +1,16 @@
-// Docker containers through the docker CLI: list with health, and start / stop / restart.
+// Docker containers through the docker CLI: list with health, start / stop / restart, and recent logs.
 const { execFile } = require("node:child_process");
 
 const ACTIONS = new Set(["start", "stop", "restart"]);
+// A container id or name — never something docker could read as an option ("-f…")
+const CONTAINER = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
+const LOG_LINES = 200;
+const checkId = id => {
+  if (!CONTAINER.test(String(id))) {
+    throw new Error("Not a container id");
+  }
+  return String(id);
+};
 
 const docker = (args, timeout = 4000) =>
   new Promise(resolve => {
@@ -57,11 +66,21 @@ class DockerService {
     if (!ACTIONS.has(action)) {
       throw new Error(`Unknown action: ${action}`);
     }
-    const r = await docker([action, String(id)], 30_000);
+    const r = await docker([action, checkId(id)], 30_000);
     if (!r.ok) {
       throw new Error(r.err || `docker ${action} failed`);
     }
   }
+
+  /** The last LOG_LINES lines of a container's output (stdout and stderr), read-only. */
+  async logs(id) {
+    const r = await docker(["logs", "--tail", String(LOG_LINES), checkId(id)], 8000);
+    if (!r.ok) {
+      throw new Error(r.err || "docker logs failed");
+    }
+    // The container's stderr arrives on docker's stderr: both are its output (their interleaving is lost)
+    return [r.out.trim(), r.err].filter(Boolean).join("\n");
+  }
 }
 
-module.exports = { DockerService };
+module.exports = { DockerService, CONTAINER };

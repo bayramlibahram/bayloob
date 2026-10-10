@@ -1,6 +1,6 @@
 const { app, BrowserWindow, screen } = require("electron");
 const paths = require("../app/paths");
-const { overlayPosition } = require("./overlay-position");
+const { overlayPosition, rememberTopBar } = require("./overlay-position");
 
 const IS_LINUX = process.platform === "linux";
 // Electron replaces XDG_CURRENT_DESKTOP for itself; the original value says whether this is GNOME
@@ -70,6 +70,7 @@ class OverlayWindow {
   /** Puts the window centred just below the top bar (see overlay-position.js). */
   async place() {
     const panel = await this.topBar().catch(() => null);
+    rememberTopBar(panel);
     if (!this.win || this.win.isDestroyed()) {
       return;
     }
