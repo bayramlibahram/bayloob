@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld("launcherAPI", {
   sendPrompt: (sessionId, text) => ipcRenderer.invoke("launcher:send-prompt", sessionId, text),
   pickFolder: current => ipcRenderer.invoke("launcher:pick-folder", current),
   close: () => ipcRenderer.send("launcher:close"),
+  clipboard: () => ipcRenderer.invoke("launcher:clipboard"),
   resize: height => ipcRenderer.send("launcher:resize", height),
 });

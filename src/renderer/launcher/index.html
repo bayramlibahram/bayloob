@@ -40,6 +40,7 @@
 
   .field { width: 100%; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
   .field:focus { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
+  textarea.field.tall { height: 210px; font: 12.5px/1.45 ui-monospace, "Ubuntu Mono", monospace; }
   textarea.field { resize: none; height: 92px; font-size: 14px; line-height: 1.45; }
   input.field { font: 12px ui-monospace, "Ubuntu Mono", monospace; padding: 7px 10px; border-radius: 9px; }
 
@@ -109,6 +110,7 @@
 
     <div class="foot">
       <div class="msg" id="msg"></div>
+      <button class="btn" type="button" id="paste" title="Paste what you copied — an error becomes a fix-it prompt">📋 Paste clipboard</button>
       <button class="btn" type="button" id="back" hidden>Back</button>
       <button class="btn primary" type="submit" id="submit">Continue</button>
     </div>
@@ -119,6 +121,7 @@
   const T = {
     ask: 'Ask Bayloob', send: 'Send a prompt',
     continue: 'Continue', launch: 'Launch', sendBtn: 'Send', back: 'Back',
+    prefilled: 'Pasted the error you copied — Enter to send', emptyClipboard: 'The clipboard is empty',
     hintPrompt: 'Enter to choose an agent · Shift+Enter for a new line',
     hintAgent: n => `1–${n} or ← → to pick · Enter to launch`,
     hintSend: 'Enter to send',
@@ -146,7 +149,7 @@
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), stepPrompt: $('stepPrompt'), stepAgent: $('stepAgent'), title: $('title'), subtitle: $('subtitle'),
         prompt: $('prompt'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
-        quote: $('quote'), agents: $('agents'), where: $('where'), msg: $('msg'), back: $('back'), submit: $('submit') };
+        quote: $('quote'), agents: $('agents'), where: $('where'), msg: $('msg'), back: $('back'), paste: $('paste'), submit: $('submit') };
       $('manager').innerHTML = $('manager2').innerHTML = Agent.thumb(MANAGER);
       this.#bind();
     }
@@ -157,7 +160,8 @@
     show(state) {
       this.state = state;
       this.busy = false;
-      this.el.prompt.value = '';
+      this.el.prompt.value = state.prefill || '';
+      this.el.prompt.classList.toggle('tall', !!state.prefill);
       this.el.title.textContent = this.isNew ? T.ask : T.send;
       this.el.subtitle.textContent = this.isNew ? '' : `${state.session.project} · ${state.session.agentName}`;
       this.el.prompt.placeholder = this.isNew ? T.promptPlaceholder : T.followUp;
@@ -179,11 +183,17 @@
       this.el.stepPrompt.hidden = step !== 'prompt';
       this.el.stepAgent.hidden = step !== 'agent';
       this.el.back.hidden = step !== 'agent';
+      this.el.paste.hidden = step !== 'prompt';
       this.el.submit.disabled = false;
       if (step === 'prompt') {
         this.el.submit.textContent = this.isNew ? T.continue : T.sendBtn;
-        this.#message(this.isNew ? T.hintPrompt : T.hintSend);
+        this.#message(this.state.prefill ? T.prefilled : this.isNew ? T.hintPrompt : T.hintSend);
         this.el.prompt.focus();
+        if (this.state.prefill) {
+          // Show the prompt from its first line ("Fix this error:"), not scrolled to the end
+          this.el.prompt.setSelectionRange(0, 0);
+          this.el.prompt.scrollTop = 0;
+        }
       } else {
         this.el.submit.textContent = T.launch;
         const text = this.el.prompt.value.trim();
@@ -219,6 +229,17 @@
       if (!this.state.agents[agent]?.installed) { return; }
       this.agent = agent;
       this.#renderAgents();
+    }
+
+    // Inserts the clipboard at the cursor; main turns an error into a "Fix this error" prompt
+    async #pasteClipboard() {
+      const text = await this.api.clipboard?.();
+      if (!text) { return this.#message(T.emptyClipboard, true); }
+      const el = this.el.prompt;
+      const at = el.selectionStart ?? el.value.length;
+      el.value = el.value.slice(0, at) + text + el.value.slice(el.selectionEnd ?? at);
+      el.focus();
+      this.#fit();
     }
 
     #message(text, isError = false) {
@@ -260,6 +281,7 @@
     #bind() {
       this.el.form.addEventListener('submit', e => { e.preventDefault(); this.#submit(); });
       this.el.back.addEventListener('click', () => this.#go('prompt'));
+      this.el.paste.addEventListener('click', () => this.#pasteClipboard());
       this.el.agents.addEventListener('click', e => {
         const b = e.target.closest('[data-agent]');
         if (!b || b.disabled) { return; }

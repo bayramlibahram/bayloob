@@ -1,4 +1,4 @@
-const { app, ipcMain, globalShortcut, Menu, shell } = require("electron");
+const { app, clipboard, ipcMain, globalShortcut, Menu, shell } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 const path = require("node:path");
@@ -6,6 +6,7 @@ const { HOOKS_DIR, TOOLS_DIR, EXTENSION_DIR } = require("./paths");
 const { Settings } = require("../config/settings");
 const { AGENTS } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
+const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { SessionOutput } = require("../modules/sessions/session-output");
@@ -350,10 +351,13 @@ class BayloobApp {
     });
   }
 
+  // An error the user just copied (failing test, stack trace…) pre-fills the prompt, ready to send
   openPromptBox(session) {
+    const copied = clipboard.readText();
     this.launcherWindow.show({
       mode: "prompt",
       home: os.homedir(),
+      prefill: looksLikeError(copied) ? errorPrompt(copied) : "",
       session: {
         id: session.id,
         project: session.project,
@@ -507,6 +511,10 @@ class BayloobApp {
       this.launcherWindow.pickFolder(current ? expandHome(current) : os.homedir())
     );
     ipcMain.on("launcher:close", () => this.launcherWindow.hide());
+    ipcMain.handle("launcher:clipboard", () => {
+      const text = clipboard.readText();
+      return looksLikeError(text) ? errorPrompt(text) : text;
+    });
     ipcMain.on("launcher:resize", (_e, height) => this.launcherWindow.fitHeight(Number(height)));
 
     // Workspace panel
