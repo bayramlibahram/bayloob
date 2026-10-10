@@ -10,7 +10,9 @@ const PORT = Number(process.env.BAYLOOB_PORT || 7777);
 const STALE_MS = 15 * 60 * 1000;                                                // drop sessions silent for 15 min
 const PERM_TIMEOUT_MS = Number(process.env.BAYLOOB_PERM_TIMEOUT || 280) * 1000; // then hand the decision back to the terminal
 const MAX_BODY = 2e6;
-const DETAIL_MAX = 600;
+const DETAIL_MAX = 4000;   // the card scrolls; beyond this the command can only be approved in the terminal
+// Tools that ask the user something rather than asking for permission: answered in the terminal, never allowed/denied here
+const QUESTION_TOOLS = new Set(['AskUserQuestion']);
 const SUMMARY_MAX = 160;
 const HISTORY_MAX = 8;
 const TERM_KEYS = ['term', 'winid', 'kitty', 'kittysock', 'wez', 'tmux', 'pid'];
@@ -66,7 +68,11 @@ const short = (s, n) => {
 
 // Permission details are never silently cut: the UI is told how much is missing,
 // so nobody approves a command whose tail they haven't seen.
-function permDetail(input) {
+function permDetail(tool, input) {
+  if (QUESTION_TOOLS.has(tool)) {
+    const questions = (input?.questions || []).map(q => String(q?.question || '')).filter(Boolean);
+    return { kind: 'question', questions: questions.length ? questions : [describeTool(input)], detail: '', hidden: 0 };
+  }
   const full = describeTool(input).trim();
   return full.length > DETAIL_MAX
     ? { detail: full.slice(0, DETAIL_MAX), hidden: full.length - DETAIL_MAX }
@@ -252,7 +258,7 @@ class EventServer {
   #onPermission(id, agent, ev, query, res) {
     const permId = String(++this.#permSeq);
     const tool = ev.tool_name || 'Tool';
-    this.store.upsert(id, agent, ev, query, { state: 'waiting', tool, perm: { id: permId, tool, ...permDetail(ev.tool_input) } });
+    this.store.upsert(id, agent, ev, query, { state: 'waiting', tool, perm: { id: permId, tool, ...permDetail(tool, ev.tool_input) } });
     const timer = setTimeout(() => this.decide(permId, 'terminal'), PERM_TIMEOUT_MS);
     this.#pending.set(permId, { res, timer, sid: id });
     // The hook went away (answered in the terminal, agent timeout, …) → remove the card

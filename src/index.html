@@ -113,7 +113,14 @@
     background: rgba(255,181,71,.14); color: var(--working); margin-right: 6px; }
   .code { font: 11px/1.45 ui-monospace, "Ubuntu Mono", "DejaVu Sans Mono", monospace; color: #e9e6f5;
     background: rgba(0,0,0,.35); border-radius: 8px; padding: 6px 8px; margin-top: 6px;
-    max-height: 48px; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+    max-height: 96px; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
+  .code::-webkit-scrollbar { width: 5px; }
+  .code::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
+  .questions { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+  .questions li { color: #e9e6f5; padding-left: 14px; position: relative; }
+  .questions li::before { content: '?'; position: absolute; left: 0; color: var(--thinking); font-weight: 700; }
+  .card.question { border-color: color-mix(in srgb, var(--thinking) 45%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--thinking) 10%, transparent), var(--card)); }
   .summary { color: #d9d7e3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .actions { display: flex; gap: 6px; margin-top: 9px; justify-content: flex-end; }
   .btn { padding: 5px 11px; border-radius: 999px; background: rgba(255,255,255,.08); font-size: 11.5px; font-weight: 600;
@@ -181,8 +188,11 @@
     permAsks: 'wants permission', finished: 'finished', taskDone: 'Task completed.',
     queued: n => `+${n} queued`,
     hidden: n => `⚠ ${n} more characters not shown — review in the terminal`,
+    scrollToAllow: 'Scroll to the end of the command to enable Allow',
+    asksYou: 'has a question', answerInTerminal: 'Answer in terminal',
     deny: 'Deny', terminal: 'In terminal', terminalTip: 'Decide in the terminal', allow: 'Allow',
     allowBlocked: 'Part of this command is hidden, so it can only be approved in the terminal',
+    allowUnread: 'Read the whole command first (scroll to its end)',
     dismiss: 'Dismiss', openTerminal: 'Open terminal',
     focusFailed: 'Could not bring this terminal to the front (see README → "Open terminal").',
     prev: 'Previous', playPause: 'Play / pause', next: 'Next',
@@ -294,6 +304,8 @@
     toast = null;          // { sid, until, hint } — the "done" card
     hovering = false;
     confirmStop = null;    // session id armed for stopping
+    #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
+    #permRead = new Set();   // permIds whose whole command has been scrolled through
     #prevStates = new Map();
 
     constructor(api) {
@@ -338,11 +350,13 @@
       this.el.card.className = card ? `card ${card.kind}` : 'card';
       this.el.card.innerHTML = card ? card.html : '';
       this.el.pill.classList.toggle('has-card', !!card);
+      if (card?.kind === 'perm') this.#syncPermScroll();
 
       this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
     }
 
     #labelHtml(top, state) {
+      if (top?.perm?.kind === 'question') return `<b>${esc(top.project)}</b> <span>${T.asksYou}</span>`;
       if (top && state !== 'idle') {
         return `<b>${esc(top.project)}</b> <span>${T.state[state]}${top.tool ? ' · ' + esc(top.tool) : ''}</span>`;
       }
@@ -365,19 +379,47 @@
     }
 
     #permCard(s, queued) {
-      const { id, tool, detail, hidden } = s.perm;
+      const { id, tool, detail, hidden, kind, questions } = s.perm;
       const pid = esc(id);
+      const more = queued ? `<span class="more">${T.queued(queued)}</span>` : '';
+      // A question (AskUserQuestion) can't be answered with allow/deny: show it and send the user to the terminal
+      if (kind === 'question') {
+        return { kind: 'question', html: `
+          ${this.#cardHead(s, T.asksYou)}
+          <ul class="questions">${(questions || []).map(q => `<li>${esc(q)}</li>`).join('')}</ul>
+          <div class="actions">${more}
+            <button class="btn primary" data-act="answer" data-id="${pid}" data-sid="${esc(s.id)}">${T.answerInTerminal}</button>
+          </div>` };
+      }
       return { kind: 'perm', html: `
         ${this.#cardHead(s, T.permAsks)}
         <div><span class="chip">${esc(tool)}</span></div>
-        ${detail ? `<div class="code">${esc(detail)}</div>` : ''}
-        ${hidden ? `<div class="hint">${T.hidden(hidden)}</div>` : ''}
-        <div class="actions">
-          ${queued ? `<span class="more">${T.queued(queued)}</span>` : ''}
+        ${detail ? `<div class="code" data-perm="${pid}">${esc(detail)}</div>` : ''}
+        <div class="hint" data-hint="${pid}">${hidden ? T.hidden(hidden) : ''}</div>
+        <div class="actions">${more}
           <button class="btn deny" data-act="deny" data-id="${pid}">${T.deny}</button>
           <button class="btn" data-act="terminal" data-id="${pid}" title="${T.terminalTip}">${T.terminal}</button>
           <button class="btn allow" data-act="allow" data-id="${pid}" ${hidden ? `disabled title="${T.allowBlocked}"` : ''}>${T.allow}</button>
         </div>` };
+    }
+
+    // A command too tall for its box can be allowed only after it has been scrolled to the end, so nobody
+    // approves a tail they haven't seen. The scroll position survives re-renders.
+    #syncPermScroll() {
+      const box = this.el.card.querySelector('.code[data-perm]');
+      if (!box) return;
+      const id = box.dataset.perm;
+      const allow = this.el.card.querySelector('[data-act=allow]');
+      const hint = this.el.card.querySelector(`[data-hint="${id}"]`);
+      box.scrollTop = this.#permScroll.get(id) || 0;
+      const fits = box.scrollHeight <= box.clientHeight + 2;
+      const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
+      if (fits || atEnd) this.#permRead.add(id);
+      if (allow.disabled && allow.title === T.allowBlocked) return; // hidden characters: terminal only
+      const read = this.#permRead.has(id);
+      allow.disabled = !read;
+      allow.title = read ? '' : T.allowUnread;
+      if (hint) hint.textContent = read ? '' : T.scrollToAllow;
     }
 
     #doneCard() {
@@ -433,7 +475,11 @@
       const b = e.target.closest('[data-act]');
       if (!b || b.disabled) return;
       const act = b.dataset.act;
-      if (act === 'allow' || act === 'deny' || act === 'terminal') {
+      if (act === 'answer') {
+        b.disabled = true;
+        this.api?.decide(b.dataset.id, 'terminal');
+        this.api?.focus(b.dataset.sid);
+      } else if (act === 'allow' || act === 'deny' || act === 'terminal') {
         b.disabled = true;
         this.api?.decide(b.dataset.id, act);
       } else if (act === 'dismiss') {
@@ -466,6 +512,12 @@
     #bindEvents() {
       const { pill } = this.el;
       pill.addEventListener('click', e => this.#onClick(e));
+      // scroll doesn't bubble, so listen in the capture phase for the permission command box
+      pill.addEventListener('scroll', e => {
+        if (!e.target.matches?.('.code[data-perm]')) return;
+        this.#permScroll.set(e.target.dataset.perm, e.target.scrollTop);
+        this.#syncPermScroll();
+      }, true);
       pill.addEventListener('mouseenter', () => { this.hovering = true; this.open(); this.api?.setMouseOver(true); });
       pill.addEventListener('mouseleave', () => {
         this.hovering = false;
