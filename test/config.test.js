@@ -78,3 +78,13 @@ test("theme: system by default, light/dark when chosen, anything else falls back
   delete process.env.BAYLOOB_THEME;
   fs.rmSync(dir, { recursive: true });
 });
+
+test("soundToggles keeps only sound names with true/false; saving the same map isn't a change", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bl-sounds-"));
+  const s = new Settings(path.join(dir, "settings.json"));
+  assert.deepEqual(s.get("soundToggles"), {});
+  s.save({ soundToggles: { tool: true, done: false, "bad key!": true, prompt: "yes" } });
+  assert.deepEqual(s.get("soundToggles"), { tool: true, done: false });
+  assert.deepEqual(s.save({ soundToggles: { tool: true, done: false } }), []);
+  fs.rmSync(dir, { recursive: true });
+});

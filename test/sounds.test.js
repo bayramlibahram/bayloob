@@ -61,3 +61,27 @@ test("wake stays quiet when another sound just played; sounds respect cooldowns 
   assert.deepEqual(played, ["s/prompt.ogg"]);
   delete global.Audio;
 });
+
+test("per-sound toggles override the pack's defaults", () => {
+  const { SoundPlayer } = require("../src/renderer/shared/sounds");
+  const played = [];
+  global.Audio = class {
+    constructor(src) {
+      this.src = src;
+    }
+    play() {
+      played.push(this.src);
+      return Promise.resolve();
+    }
+  };
+  const manifest = {
+    done: { file: "done.ogg", default_enabled: true, cooldown_ms: 0 },
+    tool: { file: "tool.ogg", default_enabled: false, cooldown_ms: 0 },
+  };
+  const p = new SoundPlayer();
+  p.configure({ manifest, enabled: true, volume: 1, toggles: { done: false, tool: true } });
+  assert.equal(p.play("done"), false);
+  assert.equal(p.play("tool"), true);
+  assert.deepEqual(played, ["tool.ogg"]);
+  delete global.Audio;
+});

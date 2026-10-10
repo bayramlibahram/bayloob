@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Settings → Sounds → "Choose sounds…": turn each sound on or off (turning one on plays it). Only
+  changes from the pack's defaults are saved (`soundToggles`).
 - Permission polish: a request a rule allows shows "✓ npm test · allowed by rule" in the pill for
   4 s (click → Settings); on a red "looks like what you denied" card Deny is the main button and
   Allow is outlined; a locked Allow shows 🔒; Settings lists denied requests with Forget; denials
