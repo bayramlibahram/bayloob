@@ -100,6 +100,17 @@ function timeAgo(at, now = Date.now()) {
   return `${Math.round(s / 86400)}d ago`;
 }
 
+// 950 → "950", 1_234 → "1.2k", 12_300 → "12k", 1_234_567 → "1.23M" (same as formatTokens in token-usage.js)
+function formatTokens(n) {
+  if (n < 1000) {
+    return String(n);
+  }
+  if (n < 1e6) {
+    return `${(n / 1000).toFixed(n < 1e4 ? 1 : 0)}k`;
+  }
+  return `${(n / 1e6).toFixed(n < 1e7 ? 2 : 1)}M`;
+}
+
 function formatBytes(n) {
   if (!n) {
     return "0 MB";

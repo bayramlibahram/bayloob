@@ -17,4 +17,5 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onHealth: cb => ipcRenderer.on("health", (_e, health) => cb(health)),
   onOutput: cb => ipcRenderer.on("output", (_e, lines) => cb(lines)),
   onDiffs: cb => ipcRenderer.on("diffs", (_e, diffs) => cb(diffs)),
+  onTokens: cb => ipcRenderer.on("tokens", (_e, tokens) => cb(tokens)),
 });
