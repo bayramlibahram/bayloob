@@ -434,12 +434,14 @@ class BayloobApp {
   }
 
   // An error the user just copied (failing test, stack trace…) pre-fills the prompt, ready to send
-  openPromptBox(session) {
+  // `text`: a draft to continue (e.g. typed into a done card); otherwise a copied error pre-fills it
+  openPromptBox(session, text = "") {
     const copied = clipboard.readText();
     this.launcherWindow.show({
       mode: "prompt",
       home: os.homedir(),
-      prefill: looksLikeError(copied) ? errorPrompt(copied) : "",
+      prefill: text || (looksLikeError(copied) ? errorPrompt(copied) : ""),
+      draft: !!text, // the user's own text, not a pasted error
       session: {
         id: session.id,
         agent: session.agent,
@@ -694,10 +696,11 @@ class BayloobApp {
     ipcMain.handle("focus", (_e, sessionId) => this.focus(session(sessionId)));
     ipcMain.on("music", (_e, action) => this.music?.control(action));
     ipcMain.on("open-launcher", () => this.openLauncher());
-    ipcMain.on("open-prompt", (_e, sessionId) => {
+    ipcMain.on("overlay-keyboard", (_e, on) => this.overlay.setKeyboard(!!on));
+    ipcMain.on("open-prompt", (_e, sessionId, text) => {
       const s = session(sessionId);
       if (s?.term?.tmux) {
-        this.openPromptBox(s);
+        this.openPromptBox(s, typeof text === "string" ? text : "");
       }
     });
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));

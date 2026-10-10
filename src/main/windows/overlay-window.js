@@ -82,6 +82,21 @@ class OverlayWindow {
     ]);
   }
 
+  // The overlay normally never takes keyboard focus (it would steal it from the user's work); typing a reply
+  // into a card turns that on until the reply is sent or abandoned
+  setKeyboard(on) {
+    if (!this.win) {
+      return;
+    }
+    this.win.setFocusable(on);
+    if (on) {
+      this.win.focus();
+      this.win.webContents.focus();
+    } else {
+      this.win.blur();
+    }
+  }
+
   // macOS/Windows: accept clicks only while the mouse is over the pill
   setMouseOver(over) {
     if (!IS_LINUX) {
