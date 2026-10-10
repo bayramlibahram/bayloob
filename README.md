@@ -294,6 +294,19 @@ build/  design/  docs/          packaging, mascot art and prototypes, docs and s
 - **Ubuntu 24.04+:** the package installs an AppArmor profile (`/etc/apparmor.d/bayloob`) so
   Electron's sandbox can start.
 
+
+## Demo mode
+
+```bash
+bun run demo        # or: bayloob --demo
+```
+
+Plays a ~70-second scripted tour — four agents on demo projects, permission cards, an "allowed by rule"
+note, a red "looks like what you denied" card, a collision, delivery receipts, a ⚔ challenge report and a
+copied error — through the same pipeline real hooks use. Cards wait 6 seconds for you to click, then
+decide by themselves, so it can be recorded hands-free. It runs as a separate instance (port 7790, its
+own token and data in the temp folder), alongside a running Bayloob, without touching it.
+
 ## Configuration
 
 Most of these are in the **Settings** window. An environment variable, when set, wins over the saved
