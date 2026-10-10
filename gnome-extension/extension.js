@@ -11,12 +11,13 @@ import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 const OBJECT_PATH = "/com/baynovix/Bayloob";
-const VERSION = 1;
+const VERSION = 2; // 2: Panel
 const IFACE = `
 <node>
   <interface name="com.baynovix.Bayloob.Windows">
     <method name="Ping"><arg type="u" direction="out" name="version"/></method>
     <method name="List"><arg type="s" direction="out" name="windowsJson"/></method>
+    <method name="Panel"><arg type="s" direction="out" name="panelJson"/></method>
     <method name="Activate">
       <arg type="t" direction="in" name="windowId"/>
       <arg type="b" direction="out" name="activated"/>
@@ -56,6 +57,13 @@ class WindowBridge {
       };
     });
     return JSON.stringify(windows);
+  }
+
+  // Where GNOME's top bar is, so the Bayloob pill can sit just below it instead of covering the clock
+  Panel() {
+    const [x, y] = Main.panel.get_transformed_position();
+    const [width, height] = Main.panel.get_transformed_size();
+    return JSON.stringify({ x, y, width, height, visible: Main.panel.visible });
   }
 
   Activate(windowId) {

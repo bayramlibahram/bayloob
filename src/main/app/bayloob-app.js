@@ -89,7 +89,7 @@ function detectAgents() {
 
 /** Wires the event server, launcher, panel, settings, music watcher and terminal focuser to the windows and tray. */
 class BayloobApp {
-  overlay = new OverlayWindow();
+  overlay = new OverlayWindow({ topBar: () => this.windows.panel() });
   launcherWindow = new LauncherWindow();
   panel = new PanelWindow();
   settingsWindow = new SettingsWindow();
@@ -366,6 +366,7 @@ class BayloobApp {
       enabled: this.settings.get("sounds"),
       volume: this.settings.get("soundVolume"),
       toggles: this.settings.get("soundToggles"),
+      locked: this.settings.lockedByEnv().includes("sounds"), // BAYLOOB_SOUNDS=0: the bar button can't change it
     });
   }
 
@@ -883,6 +884,12 @@ class BayloobApp {
     });
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
+    // The pill's sound button: flips the setting (saved like Settings does; the change re-sends the config)
+    ipcMain.on("toggle-sounds", () => {
+      if (!this.settings.lockedByEnv().includes("sounds")) {
+        this.settings.save({ sounds: !this.settings.get("sounds") });
+      }
+    });
     ipcMain.on("open-settings", () => this.openSettings());
     // The user picked an option of a terminal-only question in the pill
     ipcMain.handle("answer-menu", async (_e, sessionId, index) => {
@@ -990,6 +997,7 @@ class BayloobApp {
       try {
         const r = await this.extension.install();
         await this.windows.recheck();
+        this.overlay.place(); // the extension now tells where GNOME's top bar is
         return { ok: true, ...r };
       } catch (e) {
         return { ok: false, error: e.message };

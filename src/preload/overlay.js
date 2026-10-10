@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   keyboard: on => ipcRenderer.send("overlay-keyboard", on),
   stopSession: sessionId => ipcRenderer.send("stop-session", sessionId),
   togglePanel: () => ipcRenderer.send("toggle-panel"),
+  toggleSounds: () => ipcRenderer.send("toggle-sounds"),
   openSettings: () => ipcRenderer.send("open-settings"),
   onHealth: cb => ipcRenderer.on("health", (_e, health) => cb(health)),
   onOutput: cb => ipcRenderer.on("output", (_e, lines) => cb(lines)),

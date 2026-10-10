@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- The pill floats just below the desktop's top bar instead of covering it: placed from the GNOME
+  extension's new `Panel()` method (extension v2 — reinstall it and log in again), else from a work area
+  that reserves a bar, else 32 px down on GNOME (`BAYLOOB_TOP_OFFSET`). Fully rounded, nearly solid,
+  with a state-coloured top edge and halo.
+- Pill buttons: 🔊/🔇 sound on/off (shown while open, and always while muted) and open the workspace
+  panel.
 - Questions an agent asks only in its terminal — before its hooks run, like the folder-trust question
   on first start or Codex's update offer — appear as a card in the pill for agents in tmux. Each option
   is its own button: Bayloob moves the terminal's cursor to it and confirms (never a bare Enter, since
