@@ -87,6 +87,10 @@ function agentPidOf(pid) { … }
 
 - The event server only answers local processes: requests with an `Origin` header or a foreign
   `Host` are refused (DNS rebinding). Tested in `test/event-server.test.js`.
+- Every request must carry the token from `~/.config/Bayloob/token` (32 random bytes, mode 0600,
+  created on first start) in `X-Bayloob-Token` (or `?t=`); compared in constant time. Without the
+  file the hooks exit 0 at once, so an agent never waits on a Bayloob that isn't running. Allow/deny
+  decisions only come from the UI over IPC, never over HTTP. Tested in `test/api-token.test.js`.
 - A permission card never hides part of a command: up to 4000 characters are shown and Allow unlocks
   only after scrolling to the end; longer commands are terminal-only. Tested in
   `test/sessions.test.js`.

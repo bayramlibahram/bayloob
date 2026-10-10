@@ -5,8 +5,13 @@
 agent="${1:-claude}"
 port="${BAYLOOB_PORT:-7777}"
 
-if [ -n "$2" ]; then body="$2"; else body="$(cat)"; fi
+if [ -n "$2" ]; then body="$2"; else body="$(cat)"; fi   # read stdin first, so the agent never gets EPIPE
 [ -z "$body" ] && exit 0
+
+# The shared secret written by Bayloob (mode 0600); no file → Bayloob never ran, nothing to tell
+token_file="${BAYLOOB_TOKEN_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/Bayloob/token}"
+token="$(head -c 64 "$token_file" 2>/dev/null)"
+[ ${#token} -eq 64 ] || exit 0
 
 # If Bayloob isn't running the connection fails immediately — we never block the agent
 { exec 3<>"/dev/tcp/127.0.0.1/$port"; } 2>/dev/null || exit 0
@@ -26,8 +31,8 @@ if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PermissionRequest\"
 if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" && $body =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"AskUserQuestion\" ]]; then path="/perm"; fi
 
 len="$(LC_ALL=C; printf '%s' "${#body}")"   # byte length, not character length
-printf 'POST %s?%s HTTP/1.0\r\nHost: 127.0.0.1:%s\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s' \
-  "$path" "$q" "$port" "$len" "$body" >&3
+printf 'POST %s?%s HTTP/1.0\r\nHost: 127.0.0.1:%s\r\nX-Bayloob-Token: %s\r\nContent-Type: application/json\r\nContent-Length: %s\r\n\r\n%s' \
+  "$path" "$q" "$port" "$token" "$len" "$body" >&3
 
 if [ "$path" = "/perm" ]; then
   resp="$(cat <&3)"                     # blocks until the server replies and closes
