@@ -111,6 +111,18 @@ function formatTokens(n) {
   return `${(n / 1e6).toFixed(n < 1e7 ? 2 : 1)}M`;
 }
 
+// 14_000 → "14s", 134_000 → "2m 14s", 3_780_000 → "1h 3m"
+function formatWait(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) {
+    return `${s}s`;
+  }
+  if (s < 3600) {
+    return `${Math.floor(s / 60)}m ${s % 60}s`;
+  }
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+
 function formatBytes(n) {
   if (!n) {
     return "0 MB";

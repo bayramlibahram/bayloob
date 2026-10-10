@@ -10,6 +10,7 @@ const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt"
 const { PromptQueue } = require("../modules/agents/prompt-queue");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
+const { BlockedClock } = require("../modules/sessions/blocked-clock");
 const { SessionOutput } = require("../modules/sessions/session-output");
 const { TokenUsage } = require("../modules/sessions/token-usage");
 const { HookHealth } = require("../modules/hooks/hook-health");
@@ -20,6 +21,7 @@ const { Notifier } = require("../windows/notifier");
 const { AppActions } = require("../modules/workspace/app-actions");
 const { WorkspaceService } = require("../modules/workspace/workspace.service");
 const { GnomeExtension } = require("../infrastructure/desktop/gnome-extension");
+const { Presence } = require("../infrastructure/desktop/presence");
 const { TerminalFocuser } = require("../infrastructure/desktop/terminal-focuser");
 const { WindowService } = require("../infrastructure/desktop/window.service");
 const { Git } = require("../infrastructure/system/git");
@@ -35,6 +37,9 @@ const DECISIONS = new Set(["allow", "deny", "terminal"]);
 const RECONCILE_MS = 5000;
 const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the agents
 const OUTPUT_MS = 2000; // refresh of the last-output lines while the pill's list is open
+const BLOCKED_MS = 5000; // how often waiting time is credited
+const PRESENCE_MS = 15_000; // how often the screen lock is checked
+const SAVE_MS = 60_000; // how often today's waiting total is written to disk
 const STATS_MS = 2000; // CPU/memory refresh while the panel is open
 const STATUS_EVERY_TICKS = 5; // re-read the hook status every 5th stats tick
 
@@ -90,6 +95,9 @@ class BayloobApp {
   git = new Git();
   tokens = new TokenUsage();
   queue = new PromptQueue();
+  presence = new Presence();
+  blocked = null;
+  #locked = false;
   #outputTimer = null;
 
   // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
@@ -98,7 +106,10 @@ class BayloobApp {
     app.on("second-instance", (_e, argv) => this.#openFromArgs(argv));
     app.whenReady().then(() => this.#onReady(open));
     app.on("window-all-closed", e => e.preventDefault()); // closing a popup must not quit the app
-    app.on("will-quit", () => globalShortcut.unregisterAll());
+    app.on("will-quit", () => {
+      globalShortcut.unregisterAll();
+      this.blocked?.save();
+    });
   }
 
   #openFromArgs(argv) {
@@ -118,6 +129,14 @@ class BayloobApp {
     this.settings = new Settings(path.join(data, "settings.json"));
     this.settings.on("change", keys => this.#applySettings(keys));
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
+    this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
+    const checkLock = async () => {
+      this.#locked = await this.presence.locked();
+    };
+    checkLock();
+    setInterval(checkLock, PRESENCE_MS).unref();
+    setInterval(() => this.#tickBlocked(this.server.store.list()), BLOCKED_MS).unref();
+    setInterval(() => this.blocked.save(), SAVE_MS).unref();
     this.launcher.terminal.setOverride(this.settings.get("terminal"));
 
     // On Linux the compositor needs a moment before transparency works; this avoids a black window
@@ -145,6 +164,7 @@ class BayloobApp {
       this.overlay.send("sessions", list);
       this.panel.send("panel:sessions", list);
       this.#sendQueued(list);
+      this.#tickBlocked(list);
     });
     this.server.http.on("error", e => {
       console.error(
@@ -371,6 +391,17 @@ class BayloobApp {
         queue: this.queue.list(session.id),
       },
     });
+  }
+
+  // Credits waiting time and tells the windows: when each current wait began, and today's total
+  #tickBlocked(list) {
+    if (!this.blocked) {
+      return;
+    }
+    this.blocked.tick(list, { paused: this.#locked });
+    const info = { waits: this.blocked.waits(), today: this.blocked.today().total };
+    this.overlay.send("blocked", info);
+    this.panel.send("panel:blocked", info);
   }
 
   // Sends the next queued prompt of every session that just finished its turn

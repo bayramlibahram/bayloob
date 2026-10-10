@@ -43,6 +43,10 @@
   .label span { color: var(--muted); }
   .label .note { color: #c9a4ff; }
   /* deaf: Bayloob can't hear the agents — grey mascot, warning in the label */
+  /* an agent waiting on you: the mascot fades as the wait grows */
+  .pill.hungry .mascot { filter: saturate(.55); }
+  .pill.starving .mascot { filter: saturate(.2) brightness(.8); }
+  .card .head .wait { color: var(--waiting); font-variant-numeric: tabular-nums; }
   .pill.deaf .mascot { filter: grayscale(1) brightness(.75); }
   .label .deaf-note { color: var(--working); }
   .count { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -221,6 +225,7 @@
     diffTip: d => `Uncommitted in this repo: ${d.files} file${d.files === 1 ? '' : 's'} changed${d.untracked ? ` (${d.untracked} new)` : ''}`,
     tokensTip: t => `Tokens: ${t.input.toLocaleString()} in · ${t.output.toLocaleString()} out · ${t.cacheWrite.toLocaleString()} cache write\n+ ${t.cacheRead.toLocaleString()} read from cache (not counted)`,
     queuedTip: n => `${n} prompt${n === 1 ? '' : 's'} waiting — sent when the agent finishes`,
+    waiting: 'waiting',
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
@@ -334,6 +339,7 @@
     diffs = {};            // session id -> { files, added, deleted, untracked } of its repo
     tokens = {};           // session id -> { input, output, cacheWrite, cacheRead, total }
     queues = {};           // session id -> number of prompts waiting for it
+    waits = {};            // session id -> when it started waiting on a card
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -367,6 +373,8 @@
     setTokens(tokens) { this.tokens = tokens || {}; this.render(); }
 
     setQueues(queues) { this.queues = queues || {}; this.render(); }
+
+    setBlocked(info) { this.waits = info?.waits || {}; this.render(); this.#tickWaits(); }
 
     setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
 
@@ -424,7 +432,10 @@
 
     #cardHead(s, verb) {
       const dot = Agent.color(s.agent, MASCOT_MODE);
-      return `<div class="head"><span class="adot" style="background:${dot}"></span><b>${esc(Agent.displayName(s.agent))}</b> · ${esc(s.project)} · ${verb}</div>`;
+      // How long the agent has been waiting on this card, ticking live
+      const since = s.perm && this.waits[s.id];
+      const wait = since ? ` · <span class="wait" data-since="${since}">${T.waiting} ${formatWait(Date.now() - since)}</span>` : '';
+      return `<div class="head"><span class="adot" style="background:${dot}"></span><b>${esc(Agent.displayName(s.agent))}</b> · ${esc(s.project)} · ${verb}${wait}</div>`;
     }
 
     #permCard(s, queued) {
@@ -566,6 +577,17 @@
       return `<span class="diff" title="${esc(T.diffTip(d))}"><span class="add">+${d.added}</span> <span class="del">−${d.deleted}</span></span>`;
     }
 
+    // Live "waiting 2m 14s" on cards; the mascot fades the longer an agent waits (30 s hungry, 2 min starving)
+    #tickWaits() {
+      const now = Date.now();
+      for (const el of this.el.card.querySelectorAll('[data-since]')) {
+        el.textContent = `${T.waiting} ${formatWait(now - Number(el.dataset.since))}`;
+      }
+      const longest = Math.max(0, ...Object.values(this.waits).map(since => now - since));
+      this.el.pill.classList.toggle('starving', longest >= 120_000);
+      this.el.pill.classList.toggle('hungry', longest >= 30_000 && longest < 120_000);
+    }
+
     #newSessionHtml() {
       return this.api ? `<button class="new" data-act="new"><span>+</span> ${T.newSession}</button>` : '';
     }
@@ -646,6 +668,7 @@
         this.render();
       });
       setInterval(() => { if (this.toast && !this.hovering && Date.now() > this.toast.until) { this.render();  }}, 1000);
+      setInterval(() => this.#tickWaits(), 1000);
 
       if (!this.api) { return; }
       // Report the pill's bounds whenever they change (on Linux the window shape follows them)
@@ -672,6 +695,7 @@
     window.bayloobAPI.onDiffs?.(diffs => view.setDiffs(diffs));
     window.bayloobAPI.onTokens?.(tokens => view.setTokens(tokens));
     window.bayloobAPI.onQueues?.(q => view.setQueues(q));
+    window.bayloobAPI.onBlocked?.(info => view.setBlocked(info));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };
