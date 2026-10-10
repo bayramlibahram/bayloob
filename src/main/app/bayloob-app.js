@@ -7,6 +7,7 @@ const { Settings } = require("../config/settings");
 const { AGENTS } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
+const { PromptQueue } = require("../modules/agents/prompt-queue");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { SessionOutput } = require("../modules/sessions/session-output");
@@ -88,6 +89,7 @@ class BayloobApp {
   output = new SessionOutput();
   git = new Git();
   tokens = new TokenUsage();
+  queue = new PromptQueue();
   #outputTimer = null;
 
   // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
@@ -142,6 +144,7 @@ class BayloobApp {
       this.notifier.update(list);
       this.overlay.send("sessions", list);
       this.panel.send("panel:sessions", list);
+      this.#sendQueued(list);
     });
     this.server.http.on("error", e => {
       console.error(
@@ -364,8 +367,20 @@ class BayloobApp {
         id: session.id,
         project: session.project,
         agentName: AGENTS[session.agent]?.name || session.agent,
+        busy: PromptQueue.isBusy(session),
+        queue: this.queue.list(session.id),
       },
     });
+  }
+
+  // Sends the next queued prompt of every session that just finished its turn
+  #sendQueued(list) {
+    for (const { session, text } of this.queue.due(list)) {
+      if (session.term?.tmux) {
+        this.launcher.sendPrompt(session.term.tmux, text).catch(() => {});
+      }
+    }
+    this.overlay.send("queues", this.queue.counts());
   }
 
   async launch(opts) {
@@ -498,18 +513,29 @@ class BayloobApp {
 
     // Launcher
     ipcMain.handle("launcher:launch", (_e, opts) => result(() => this.launch(opts)));
-    ipcMain.handle("launcher:send-prompt", (_e, sessionId, text) =>
-      result(async () => {
-        const s = session(sessionId);
+    // A busy agent (or one waiting on a permission) gets the prompt queued; it goes out when the turn ends
+    ipcMain.handle("launcher:send-prompt", async (_e, sessionId, text) => {
+      const s = session(sessionId);
+      try {
         if (!s?.term?.tmux) {
           throw new Error("This session is no longer running in tmux");
         }
-        if (s.perm) {
-          throw new Error("The agent is waiting for a permission answer first");
+        if (PromptQueue.isBusy(s)) {
+          this.queue.add(s.id, String(text));
+          this.overlay.send("queues", this.queue.counts());
+          return { ok: true, queued: true };
         }
         await this.launcher.sendPrompt(s.term.tmux, String(text));
-      })
-    );
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    });
+    ipcMain.handle("launcher:unqueue", (_e, sessionId, index) => {
+      this.queue.remove(String(sessionId), Number(index));
+      this.overlay.send("queues", this.queue.counts());
+      return this.queue.list(String(sessionId));
+    });
     ipcMain.handle("launcher:pick-folder", (_e, current) =>
       this.launcherWindow.pickFolder(current ? expandHome(current) : os.homedir())
     );

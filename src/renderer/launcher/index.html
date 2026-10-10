@@ -57,6 +57,14 @@
 
   /* step 2: agent choice */
   .ask { color: #c9c7d4; }
+  /* prompts already waiting for a busy agent */
+  .queued { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .queued .cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+  .queued li.item { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; border-radius: 9px;
+    background: var(--field); border: 1px solid var(--line); font-size: 12.5px; }
+  .queued li.item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d9d7e3; }
+  .queued li.item button { width: 22px; height: 22px; border-radius: 6px; color: var(--muted); }
+  .queued li.item button:hover { background: rgba(255,255,255,.1); color: var(--text); }
   .quote { padding: 9px 12px; border-left: 2px solid var(--brand); background: rgba(139,92,255,.06); border-radius: 0 10px 10px 0;
     color: #d9d7e3; font-size: 12.5px; max-height: 64px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
   .quote.empty { color: var(--muted); font-style: italic; }
@@ -90,6 +98,7 @@
     <section class="step" id="stepPrompt">
       <div class="title"><div class="m" id="manager"></div><b id="title">Ask Bayloob</b><span id="subtitle"></span><kbd>Esc</kbd></div>
       <textarea class="field" id="prompt" placeholder="What should be done?"></textarea>
+      <ul class="queued" id="queued" hidden></ul>
       <div id="projectBox">
         <div class="project">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
@@ -125,6 +134,8 @@
     hintPrompt: 'Enter to choose an agent · Shift+Enter for a new line',
     hintAgent: n => `1–${n} or ← → to pick · Enter to launch`,
     hintSend: 'Enter to send',
+    queueBtn: 'Queue', hintQueue: 'Agent is busy — Enter adds this to its queue',
+    queuedCap: n => `Waiting for this agent · ${n}`, unqueue: 'Remove from the queue',
     noPrompt: 'No prompt: the agent starts and waits for you',
     pickProject: 'Pick a project folder first',
     notInstalled: 'not installed', starting: 'Starting…', in: 'in',
@@ -149,7 +160,7 @@
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), stepPrompt: $('stepPrompt'), stepAgent: $('stepAgent'), title: $('title'), subtitle: $('subtitle'),
         prompt: $('prompt'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
-        quote: $('quote'), agents: $('agents'), where: $('where'), msg: $('msg'), back: $('back'), paste: $('paste'), submit: $('submit') };
+        queued: $('queued'), quote: $('quote'), agents: $('agents'), where: $('where'), msg: $('msg'), back: $('back'), paste: $('paste'), submit: $('submit') };
       $('manager').innerHTML = $('manager2').innerHTML = Agent.thumb(MANAGER);
       this.#bind();
     }
@@ -186,8 +197,10 @@
       this.el.paste.hidden = step !== 'prompt';
       this.el.submit.disabled = false;
       if (step === 'prompt') {
-        this.el.submit.textContent = this.isNew ? T.continue : T.sendBtn;
-        this.#message(this.state.prefill ? T.prefilled : this.isNew ? T.hintPrompt : T.hintSend);
+        const busy = !this.isNew && this.state.session.busy;
+        this.el.submit.textContent = this.isNew ? T.continue : busy ? T.queueBtn : T.sendBtn;
+        this.#message(this.state.prefill ? T.prefilled : this.isNew ? T.hintPrompt : busy ? T.hintQueue : T.hintSend);
+        this.#renderQueue();
         this.el.prompt.focus();
         if (this.state.prefill) {
           // Show the prompt from its first line ("Fix this error:"), not scrolled to the end
@@ -266,6 +279,16 @@
       else { this.#message(res?.error || T.wrong, true); }
     }
 
+    // Prompts already waiting for this agent, each removable
+    #renderQueue() {
+      const q = this.isNew ? [] : this.state.session.queue || [];
+      this.el.queued.hidden = !q.length;
+      this.el.queued.innerHTML = q.length
+        ? `<li class="cap">${T.queuedCap(q.length)}</li>` +
+          q.map((text, i) => `<li class="item"><span title="${esc(text)}">${esc(text)}</span><button type="button" data-unqueue="${i}" title="${T.unqueue}">×</button></li>`).join('')
+        : '';
+    }
+
     async #send() {
       const text = this.el.prompt.value.trim();
       if (!text) { return; }
@@ -280,6 +303,13 @@
 
     #bind() {
       this.el.form.addEventListener('submit', e => { e.preventDefault(); this.#submit(); });
+      this.el.queued.addEventListener('click', async e => {
+        const b = e.target.closest('[data-unqueue]');
+        if (!b) { return; }
+        this.state.session.queue = (await this.api.unqueue?.(this.state.session.id, Number(b.dataset.unqueue))) || [];
+        this.#renderQueue();
+        this.#fit();
+      });
       this.el.back.addEventListener('click', () => this.#go('prompt'));
       this.el.paste.addEventListener('click', () => this.#pasteClipboard());
       this.el.agents.addEventListener('click', e => {
