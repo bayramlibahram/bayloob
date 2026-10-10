@@ -28,7 +28,7 @@
 
   /* ---------- Pill ---------- */
   .pill {
-    width: 290px; min-height: 48px;
+    width: 340px; min-height: 58px;
     background: var(--glass);
     border-radius: 0 0 20px 20px;
     border: 1px solid var(--line); border-top: none;
@@ -37,10 +37,33 @@
     transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
   }
   .pill.open, .pill.has-card { width: 480px; border-radius: 0 0 26px 26px; }
-  .bar { cursor: pointer; display: flex; align-items: center; gap: 10px; height: 48px; padding: 4px 16px 0 12px; }
-  .label { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .label b { font-weight: 600; }
+  .bar { position: relative; cursor: pointer; display: flex; align-items: center; gap: 10px; height: 58px; padding: 4px 14px 0 7px; }
+  /* the manager mascot sits on its own tile, like an app icon docked to the bar */
+  .tile { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.025));
+    border: 1px solid rgba(255,255,255,.1); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 2px 8px rgba(0,0,0,.35); }
+  .label { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .label b { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
   .label span { color: var(--muted); }
+  /* status chip: "••• Thinking" in the state's colour; the dots pulse while the agent is busy */
+  .status { flex: none; display: none; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 9px; border-radius: 13px;
+    font-size: 12.5px; font-weight: 600; color: color-mix(in srgb, var(--accent) 80%, white);
+    background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .status.on { display: inline-flex; }
+  .status .dots { display: inline-flex; gap: 3px; }
+  .status .dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; }
+  .status.busy .dots i { animation: dot 1.2s ease-in-out infinite; }
+  .status.busy .dots i:nth-child(2) { animation-delay: .15s; }
+  .status.busy .dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+  .chev { flex: none; width: 18px; height: 18px; color: var(--muted); transition: transform .3s, color .2s; }
+  .pill.open .chev { transform: rotate(180deg); color: var(--text); }
+  /* the top agent's own to-do list (TodoWrite / tasks): done / total along the bottom of the bar */
+  .progress { position: absolute; left: 62px; right: 14px; bottom: 3px; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,.07); overflow: hidden; display: none; }
+  .progress.on { display: block; }
+  .progress i { display: block; height: 100%; width: var(--p, 0%); border-radius: inherit;
+    background: linear-gradient(90deg, var(--brand), #b28bff); transition: width .5s cubic-bezier(.2,.9,.3,1); }
   .label .note { color: #c9a4ff; }
   /* deaf: Bayloob can't hear the agents — grey mascot, warning in the label */
   /* an agent waiting on you: the mascot fades as the wait grows */
@@ -62,7 +85,7 @@
   .card .head .wait { color: var(--waiting); font-variant-numeric: tabular-nums; }
   .pill.deaf .mascot { filter: grayscale(1) brightness(.75); }
   .label .deaf-note { color: var(--working); }
-  .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .count { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* ---------- Mascot (based on the Baynovix logo) ---------- */
   .mascot { position: relative; width: 38px; height: 38px; flex: none; --ring: var(--accent); }
@@ -204,9 +227,12 @@
 <body>
   <div class="pill" id="pill">
     <div class="bar">
-      <div class="mascot" id="mascot" data-s="idle"></div>
+      <div class="tile"><div class="mascot" id="mascot" data-s="idle"></div></div>
       <div class="label" id="label"><b>Bayloob</b> <span>starting…</span></div>
+      <span class="status" id="status"><span class="dots"><i></i><i></i><i></i></span><span id="statusText"></span></span>
       <div class="count" id="count"></div>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      <div class="progress" id="progress"><i></i></div>
     </div>
     <div class="card" id="card"></div>
     <div class="list" id="list"></div>
@@ -244,6 +270,7 @@
     tokensTip: t => `Tokens: ${t.input.toLocaleString()} in · ${t.output.toLocaleString()} out · ${t.cacheWrite.toLocaleString()} cache write\n+ ${t.cacheRead.toLocaleString()} read from cache (not counted)`,
     queuedTip: n => `${n} prompt${n === 1 ? '' : 's'} waiting — sent when the agent finishes`,
     waiting: 'waiting',
+    progress: (d, t) => `${d} of ${t} to-dos done`,
     receipt: { passed: '✓ Tests passed', failed: '✗ Tests failed', untested: '⚠ Code changed, no tests run' },
     askTests: 'Ask to run tests',
     challenge: '⚔ Challenge', challenger: '⚔ challenger',
@@ -366,6 +393,7 @@
     queues = {};           // session id -> number of prompts waiting for it
     waits = {};            // session id -> when it started waiting on a card
     receipts = {};         // session id -> { status, command? } of its last finished turn
+    progress = {};         // session id -> { done, total } of its own to-do list
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #permShown = new Map();  // permId -> when its card first appeared (for the Allow cooldown)
@@ -376,7 +404,7 @@
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), card: $('card'), list: $('list') };
+      this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), progress: $('progress'), card: $('card'), list: $('list') };
       this.mascot = new MascotView(this.el.mascot);
       this.#bindEvents();
     }
@@ -404,6 +432,8 @@
 
     setReceipts(receipts) { this.receipts = receipts || {}; this.render(); }
 
+    setProgress(progress) { this.progress = progress || {}; this.render(); }
+
     setBlocked(info) { this.waits = info?.waits || {}; this.render(); this.#tickWaits(); }
 
     setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
@@ -422,6 +452,7 @@
       this.el.pill.classList.toggle('deaf', deaf);
       this.el.label.innerHTML = deaf && !(top?.perm) ? this.#deafHtml() : this.#labelHtml(top, state);
       this.el.label.title = deaf ? T.deafTip : '';
+      this.#renderStatus(top, state, deaf);
       const n = this.sessions.length;
       this.el.count.textContent = n > 1 ? n : '';
       this.el.count.title = n > 1 ? T.sessions(n) : '';
@@ -437,15 +468,29 @@
       this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
     }
 
+    // Chip next to the name ("••• Thinking") and the to-do progress of the agent the pill shows
+    #renderStatus(top, state, deaf) {
+      const on = !!top && state !== 'idle' && !deaf;
+      const text = top?.perm?.kind === 'question' ? T.asksYou : T.state[state];
+      this.el.status.classList.toggle('on', on);
+      this.el.status.classList.toggle('busy', state === 'thinking' || state === 'working');
+      this.el.statusText.textContent = on ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+      const p = top && this.progress[top.id];
+      this.el.progress.classList.toggle('on', !!p);
+      this.el.progress.style.setProperty('--p', p ? `${Math.round((p.done / p.total) * 100)}%` : '0%');
+      this.el.progress.title = p ? T.progress(p.done, p.total) : '';
+    }
+
     #deafHtml() {
       const kind = this.health.issues[0].kind;
       return `<b>Bayloob</b> <span class="deaf-note" data-act="settings">⚠ can’t hear · ${T.deaf[kind] || kind}</span>`;
     }
 
     #labelHtml(top, state) {
-      if (top?.perm?.kind === 'question') { return `<b>${esc(top.project)}</b> <span>${T.asksYou}</span>`; }
+      if (top?.perm?.kind === 'question') { return `<b>${esc(top.project)}</b>`; }
+      // The state itself is in the status chip; the label keeps the project and the tool in use
       if (top && state !== 'idle') {
-        return `<b>${esc(top.project)}</b> <span>${T.state[state]}${top.tool ? ` · ${esc(top.tool)}` : ''}</span>`;
+        return `<b>${esc(top.project)}</b>${top.tool && state === 'working' ? ` <span>· ${esc(top.tool)}</span>` : ''}`;
       }
       if (this.music?.title) {
         return `<span class="note">♪</span> <b>${esc(this.music.title)}</b> <span>· ${esc(this.music.artist)}</span>`;
@@ -775,6 +820,7 @@
     window.bayloobAPI.onQueues?.(q => view.setQueues(q));
     window.bayloobAPI.onBlocked?.(info => view.setBlocked(info));
     window.bayloobAPI.onReceipts?.(r => view.setReceipts(r));
+    window.bayloobAPI.onProgress?.(p => view.setProgress(p));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

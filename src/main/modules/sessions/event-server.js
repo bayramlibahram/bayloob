@@ -137,6 +137,7 @@ class EventServer {
   #permSeq = 0;
   lastEventAt = null;
   immune = null; // ImmuneSystem: remembered decisions, rules and antibodies (optional)
+  observers = []; // (sessionId, event) => void, called for every hook event before the store updates
 
   constructor({ port = PORT, store = new SessionStore() } = {}) {
     this.port = port;
@@ -261,6 +262,9 @@ class EventServer {
         this.#onEvent(id, agent, ev, query);
       }
       // Handlers only update the store; the change goes out once, after the activity line is recorded
+      for (const observe of this.observers) {
+        observe(id, ev);
+      }
       this.store.record(id, ev);
       this.store.changed();
     });
