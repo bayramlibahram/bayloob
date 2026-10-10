@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Replies and prompts reach agents outside tmux too: the text is copied, the terminal comes forward,
+  and Bayloob says "paste with Ctrl+Shift+V" (done card, panel, prompt dialog, Ask to run tests).
+  `PromptDelivery` decides: tmux → typed in (queued while busy), anything else → clipboard.
 - Settings → Sounds → "Choose sounds…": turn each sound on or off (turning one on plays it). Only
   changes from the pack's defaults are saved (`soundToggles`).
 - Permission polish: a request a rule allows shows "✓ npm test · allowed by rule" in the pill for

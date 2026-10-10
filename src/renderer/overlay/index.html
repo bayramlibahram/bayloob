@@ -317,6 +317,8 @@
     replyTo: agent => `Reply to ${agent}…`, replySend: '✓ Send', replySendTip: 'Enter, then Enter again to send',
     replyConfirm: agent => `Enter again sends it to ${agent} · Esc to edit`, replyDialog: 'Open in the prompt window',
     replyFailed: 'Could not send',
+    replyConfirmPaste: 'Enter again copies it and brings the terminal forward — paste with Ctrl+Shift+V',
+    copiedPaste: '📋 Copied · paste with Ctrl+Shift+V',
     challenge: '⚔ Challenge', challenger: '⚔ challenger',
     challengeTip: 'Start a different agent, read-only, to try to break these changes',
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
@@ -585,7 +587,7 @@
 
     #renderStatus(top, state, deaf) {
       // While "allowed by rule" shows, the label needs the room: the chip steps aside
-      const ruled = this.ruleNote && Date.now() < this.ruleNote.until;
+      const ruled = this.labelNote && Date.now() < this.labelNote.until;
       const on = !!top && state !== 'idle' && !deaf && !ruled;
       const text = top?.perm?.kind === 'question' ? T.asksYou : T.state[state];
       this.el.status.classList.toggle('on', on);
@@ -607,17 +609,21 @@
     }
 
     // "Allowed by rule" shows for a few seconds in place of the label; clicking it opens Settings (the rules)
-    setRuleAllowed(info) {
-      this.ruleNote = { ...info, until: Date.now() + RULE_NOTE_MS };
+    setRuleAllowed(r) {
+      this.#flashLabel(`<b>${esc(r.project)}</b> <span class="ruled" data-act="settings" title="${esc(`${r.command}\n${T.ruleTip}`)}">${T.ruled(esc(r.key))}</span>`);
+    }
+
+    // A short message in place of the label (rule allowed something, prompt copied…), then back to normal
+    #flashLabel(html) {
+      this.labelNote = { html, until: Date.now() + RULE_NOTE_MS };
       this.render();
       clearTimeout(this.#ruleTimer);
       this.#ruleTimer = setTimeout(() => this.render(), RULE_NOTE_MS + 50);
     }
 
     #labelHtml(top, state) {
-      if (this.ruleNote && Date.now() < this.ruleNote.until) {
-        const r = this.ruleNote;
-        return `<b>${esc(r.project)}</b> <span class="ruled" data-act="settings" title="${esc(`${r.command}\n${T.ruleTip}`)}">${T.ruled(esc(r.key))}</span>`;
+      if (this.labelNote && Date.now() < this.labelNote.until) {
+        return this.labelNote.html;
       }
       if (top?.perm?.kind === 'question') { return `<b>${esc(top.project)}</b>`; }
       // The state itself is in the status chip; the label keeps the project and the tool in use
@@ -777,9 +783,10 @@
 
     // Reply right in the done card, without the terminal: Enter, then Enter again to confirm
     #replyHtml(s) {
-      if (!s.term?.tmux) { return ''; }
       const r = this.#reply.sid === s.id ? this.#reply : { text: '', confirm: false, error: '' };
-      const hint = r.error ? `<span class="err">${esc(r.error)}</span>` : r.confirm ? T.replyConfirm(esc(Agent.displayName(s.agent))) : '';
+      // Not in tmux: Bayloob can't type into that terminal, so the reply is copied for the user to paste
+      const confirm = s.term?.tmux ? T.replyConfirm(esc(Agent.displayName(s.agent))) : T.replyConfirmPaste;
+      const hint = r.error ? `<span class="err">${esc(r.error)}</span>` : r.confirm ? confirm : '';
       return `<form class="reply${r.confirm ? ' confirm' : ''}" data-sid="${esc(s.id)}" autocomplete="off">
           <input class="rtext" placeholder="${esc(T.replyTo(Agent.displayName(s.agent)))}" spellcheck="false">
           <button type="button" class="ricon" data-act="reply-dialog" data-sid="${esc(s.id)}" title="${T.replyDialog}">↗</button>
@@ -810,6 +817,7 @@
         this.#reply = { sid: null, text: '', confirm: false, focused: false, error: '' };
         this.api?.keyboard(false);
         this.toast = null;
+        if (res.via === 'clipboard') { this.#flashLabel(`<span class="ruled">${T.copiedPaste}</span>`); }
       } else {
         Object.assign(r, { confirm: false, error: res?.error || T.replyFailed });
       }
@@ -832,7 +840,7 @@
 
     #needsTests(s) {
       const r = this.receipts[s.id];
-      return !!s.term?.tmux && (r?.status === 'failed' || r?.status === 'untested');
+      return r?.status === 'failed' || r?.status === 'untested';
     }
 
     #listHtml() {
@@ -852,7 +860,7 @@
       const sid = esc(s.id);
       const armed = this.confirmStop === s.id;
       return [
-        s.term?.tmux && !s.perm ? `<button class="icon" data-act="prompt" data-sid="${sid}" title="${T.sendPrompt}">${ICON_PROMPT}</button>` : '',
+        !s.perm ? `<button class="icon" data-act="prompt" data-sid="${sid}" title="${T.sendPrompt}">${ICON_PROMPT}</button>` : '',
         s.managed ? `<button class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
         `<button class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}">${ICON_TERM}</button>`,
       ].join('');

@@ -134,6 +134,7 @@
   .review .v small { color: var(--muted); font-size: 11.5px; }
   .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
   .badge.now { color: var(--ok); background: rgba(79,213,154,.12); }
+  .badge.paste { color: var(--brand-soft); background: rgba(139,92,255,.12); }
   .badge.queue { color: var(--warn); background: rgba(255,181,71,.12); }
   .review .prompt { padding: 10px 14px 12px; border-top: 1px solid var(--line); }
   .review .prompt pre { margin-top: 6px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -226,7 +227,8 @@
     chars: n => `${n} chars`, wrong: 'Something went wrong',
     rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rWhen: 'Delivery', rPrompt: 'Prompt', edit: 'Edit',
     inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
-    now: '● sent now', queued: '⏳ queued — the agent is busy; it goes out when its turn ends',
+    now: '● sent now',
+    paste: '📋 copied · paste with Ctrl+Shift+V (not in tmux)', pasteBtn: 'Copy & open terminal', queued: '⏳ queued — the agent is busy; it goes out when its turn ends',
   };
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
 
@@ -300,7 +302,7 @@
       const arrow = '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
       const check = '<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>';
       this.el.submit.innerHTML = confirm
-        ? `${check}${this.isNew ? T.launch : this.#willQueue ? T.queueBtn : T.sendBtn}`
+        ? `${check}${this.isNew ? T.launch : this.#willPaste ? T.pasteBtn : this.#willQueue ? T.queueBtn : T.sendBtn}`
         : `${T.next}${arrow}`;
       if (first) {
         this.#message(this.state.prefill && !this.state.draft && this.el.prompt.value === this.state.prefill ? `${T.prefilled} · ${T.hintWrite}` : T.hintWrite, false, true);
@@ -337,7 +339,10 @@
       return i > 0 ? this.#go(this.flow[i - 1]) : this.api.close();
     }
 
-    get #willQueue() { return !this.isNew && !!this.state.session.busy; }
+    get #willQueue() { return !this.isNew && !this.#willPaste && !!this.state.session.busy; }
+
+    // Not in tmux: Bayloob can't type into that terminal, so the prompt is copied for the user to paste
+    get #willPaste() { return !this.isNew && !!this.state.session.paste; }
 
     #fit() { requestAnimationFrame(() => this.api.resize?.(Math.ceil(this.el.form.getBoundingClientRect().height) + 20)); }
 
@@ -378,7 +383,8 @@
       } else {
         const s = this.state.session;
         rows.push([T.rAgent, `<div class="m">${Agent.thumb(s.agent || MANAGER)}</div><b>${esc(s.agentName)}</b><small>${esc(s.project)}</small>`]);
-        rows.push([T.rWhen, this.#willQueue ? `<span class="badge queue">${T.queued}</span>` : `<span class="badge now">${T.now}</span>`]);
+        rows.push([T.rWhen, this.#willPaste ? `<span class="badge paste">${T.paste}</span>`
+          : this.#willQueue ? `<span class="badge queue">${T.queued}</span>` : `<span class="badge now">${T.now}</span>`]);
       }
       const text = this.text;
       this.el.review.innerHTML = rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('') +
