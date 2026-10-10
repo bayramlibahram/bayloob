@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   openPrompt: sessionId => ipcRenderer.send("open-prompt", sessionId),
   stopSession: sessionId => ipcRenderer.send("stop-session", sessionId),
   togglePanel: () => ipcRenderer.send("toggle-panel"),
+  openSettings: () => ipcRenderer.send("open-settings"),
+  onHealth: cb => ipcRenderer.on("health", (_e, health) => cb(health)),
 });

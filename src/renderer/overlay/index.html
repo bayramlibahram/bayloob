@@ -42,6 +42,9 @@
   .label b { font-weight: 600; }
   .label span { color: var(--muted); }
   .label .note { color: #c9a4ff; }
+  /* deaf: Bayloob can't hear the agents — grey mascot, warning in the label */
+  .pill.deaf .mascot { filter: grayscale(1) brightness(.75); }
+  .label .deaf-note { color: var(--working); }
   .count { color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* ---------- Mascot (based on the Baynovix logo) ---------- */
@@ -206,6 +209,8 @@
     dismiss: 'Dismiss', openTerminal: 'Open terminal',
     focusFailed: 'Could not bring this terminal to the front (see README → "Open terminal").',
     prev: 'Previous', playPause: 'Play / pause', next: 'Next',
+    deaf: { 'not-installed': 'no hooks', broken: 'hook missing', unheard: 'agent silent' },
+    deafTip: 'Bayloob can’t hear your agents — click to open Settings',
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
@@ -314,6 +319,7 @@
     toast = null;          // { sid, until, hint } — the "done" card
     hovering = false;
     confirmStop = null;    // session id armed for stopping
+    health = { ok: true, issues: [] };
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -340,6 +346,8 @@
 
     setMusic(np) { this.music = np; this.render(); }
 
+    setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
+
     open() { this.el.pill.classList.add('open'); }
 
     render() {
@@ -350,7 +358,10 @@
       // The manager mascot shows the most urgent state across all sessions
       this.mascot.set(MANAGER, dancing ? 'dance' : state);
 
-      this.el.label.innerHTML = this.#labelHtml(top, state);
+      const deaf = !this.health.ok && this.health.issues.length > 0;
+      this.el.pill.classList.toggle('deaf', deaf);
+      this.el.label.innerHTML = deaf && !(top?.perm) ? this.#deafHtml() : this.#labelHtml(top, state);
+      this.el.label.title = deaf ? T.deafTip : '';
       const n = this.sessions.length;
       this.el.count.textContent = n > 1 ? n : '';
       this.el.count.title = n > 1 ? T.sessions(n) : '';
@@ -364,6 +375,11 @@
       if (card?.kind === 'perm') { this.#syncPermScroll(); }
 
       this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
+    }
+
+    #deafHtml() {
+      const kind = this.health.issues[0].kind;
+      return `<b>Bayloob</b> <span class="deaf-note" data-act="settings">⚠ can’t hear · ${T.deaf[kind] || kind}</span>`;
     }
 
     #labelHtml(top, state) {
@@ -529,6 +545,8 @@
     }
 
     async #onClick(e) {
+      // The deaf warning opens Settings (where hooks and the extension are installed)
+      if (e.target.closest('[data-act=settings]')) { return this.api?.openSettings(); }
       // A click on the top bar (mascot / label) opens the workspace panel
       if (e.target.closest('.bar')) { return this.api?.togglePanel(); }
       const b = e.target.closest('[data-act]');
@@ -612,6 +630,7 @@
   if (window.bayloobAPI) {
     window.bayloobAPI.onSessions(list => view.setSessions(list));
     window.bayloobAPI.onMusic(np => view.setMusic(np));
+    window.bayloobAPI.onHealth?.(h => view.setHealth(h));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

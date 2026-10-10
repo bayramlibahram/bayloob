@@ -8,6 +8,7 @@ const { AGENTS } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
+const { HookHealth } = require("../modules/hooks/hook-health");
 const { HookInstaller } = require("../modules/hooks/hook-installer");
 const { MusicWatcher } = require("../modules/music/music-watcher");
 const { EventServer } = require("../modules/sessions/event-server");
@@ -27,6 +28,7 @@ const { TrayMenu } = require("../windows/tray");
 const IS_LINUX = process.platform === "linux";
 const DECISIONS = new Set(["allow", "deny", "terminal"]);
 const RECONCILE_MS = 5000;
+const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the agents
 const STATS_MS = 2000; // CPU/memory refresh while the panel is open
 const STATUS_EVERY_TICKS = 5; // re-read the hook status every 5th stats tick
 
@@ -69,6 +71,8 @@ class BayloobApp {
   #apps = new Map(); // app id -> app from the latest workspace snapshot
   launcher = new SessionLauncher();
   hooks = new HookInstaller(HOOKS_DIR, { log: () => {} });
+  health = null;
+  #lastHealth = { ok: true, issues: [] };
   stats = new AgentStats();
   music = IS_LINUX ? new MusicWatcher() : null;
   settings = null;
@@ -113,6 +117,7 @@ class BayloobApp {
         this.overlay.onLoad(() => {
           this.overlay.send("music", this.music?.current ?? null);
           this.overlay.send("sessions", this.server.store.list());
+          this.overlay.send("health", this.#lastHealth);
         });
         if (open === "launcher") {
           this.openLauncher();
@@ -137,6 +142,9 @@ class BayloobApp {
     });
     this.server.listen();
     setInterval(() => this.#reconcile(), RECONCILE_MS).unref();
+    this.health = new HookHealth({ installer: this.hooks, store: this.server.store });
+    this.#checkHealth();
+    setInterval(() => this.#checkHealth(), HEALTH_MS).unref();
 
     this.music?.on("change", np => this.overlay.send("music", np));
     if (this.settings.get("music")) {
@@ -379,6 +387,16 @@ class BayloobApp {
     this.server.store.changed();
   }
 
+  // Tell the overlay when Bayloob can't hear the agents (hooks missing or broken, or a busy agent nobody hears)
+  #checkHealth() {
+    try {
+      this.#lastHealth = this.health.check();
+    } catch {
+      this.#lastHealth = { ok: true, issues: [] }; // a failed check must not cry wolf
+    }
+    this.overlay.send("health", this.#lastHealth);
+  }
+
   // Drop sessions whose tmux session ended (agent exited, or killed outside Bayloob)
   async #reconcile() {
     const tracked = this.server.store.launchedNames();
@@ -431,6 +449,7 @@ class BayloobApp {
     });
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
+    ipcMain.on("open-settings", () => this.openSettings());
 
     // Launcher
     ipcMain.handle("launcher:launch", (_e, opts) => result(() => this.launch(opts)));
