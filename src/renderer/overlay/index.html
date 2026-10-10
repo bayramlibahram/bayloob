@@ -159,6 +159,7 @@
   .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* the agent's latest output, under its name */
   /* uncommitted changes in the session's repo */
+  .row .queue { flex: none; font-size: 12px; color: var(--thinking); }
   .row .diff { flex: none; font: 600 11.5px ui-monospace, "Ubuntu Mono", monospace; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.05); }
   .row .diff .add { color: var(--done); }
   .row .diff .del { color: var(--waiting); }
@@ -219,6 +220,7 @@
     deafTip: 'Bayloob can’t hear your agents — click to open Settings',
     diffTip: d => `Uncommitted in this repo: ${d.files} file${d.files === 1 ? '' : 's'} changed${d.untracked ? ` (${d.untracked} new)` : ''}`,
     tokensTip: t => `Tokens: ${t.input.toLocaleString()} in · ${t.output.toLocaleString()} out · ${t.cacheWrite.toLocaleString()} cache write\n+ ${t.cacheRead.toLocaleString()} read from cache (not counted)`,
+    queuedTip: n => `${n} prompt${n === 1 ? '' : 's'} waiting — sent when the agent finishes`,
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
@@ -331,6 +333,7 @@
     output = {};           // session id -> latest output line (only while the list is open)
     diffs = {};            // session id -> { files, added, deleted, untracked } of its repo
     tokens = {};           // session id -> { input, output, cacheWrite, cacheRead, total }
+    queues = {};           // session id -> number of prompts waiting for it
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -362,6 +365,8 @@
     setDiffs(diffs) { this.diffs = diffs || {}; this.render(); }
 
     setTokens(tokens) { this.tokens = tokens || {}; this.render(); }
+
+    setQueues(queues) { this.queues = queues || {}; this.render(); }
 
     setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
 
@@ -531,6 +536,7 @@
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
           <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
+          ${this.queues[s.id] ? `<span class="queue" title="${T.queuedTip(this.queues[s.id])}">⏳${this.queues[s.id]}</span>` : ''}
           ${this.#diffHtml(s.id)}
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
           ${this.#rowControls(s)}</div>`).join('');
@@ -665,6 +671,7 @@
     window.bayloobAPI.onOutput?.(lines => view.setOutput(lines));
     window.bayloobAPI.onDiffs?.(diffs => view.setDiffs(diffs));
     window.bayloobAPI.onTokens?.(tokens => view.setTokens(tokens));
+    window.bayloobAPI.onQueues?.(q => view.setQueues(q));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

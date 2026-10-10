@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onOutput: cb => ipcRenderer.on("output", (_e, lines) => cb(lines)),
   onDiffs: cb => ipcRenderer.on("diffs", (_e, diffs) => cb(diffs)),
   onTokens: cb => ipcRenderer.on("tokens", (_e, tokens) => cb(tokens)),
+  onQueues: cb => ipcRenderer.on("queues", (_e, counts) => cb(counts)),
 });
