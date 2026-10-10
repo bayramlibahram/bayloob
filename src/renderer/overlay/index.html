@@ -520,6 +520,9 @@
     soundOn = true;
     soundLocked = false;
     #errorTimer = null;
+    #pressing = false;     // a mouse button is down on the pill: hold re-renders until it's released
+    #paintLater = false;
+    #painted = new WeakMap(); // element -> the HTML last put into it
     #reply = { sid: null, text: '', confirm: false, focused: false, error: '' }; // the done card's reply box
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
@@ -639,11 +642,11 @@
 
       const deaf = !this.health.ok && this.health.issues.length > 0;
       this.el.pill.classList.toggle('deaf', deaf);
-      this.el.label.innerHTML = deaf && !(top?.perm) ? this.#deafHtml() : this.#labelHtml(top, state);
+      this.#paint(this.el.label, deaf && !(top?.perm) ? this.#deafHtml() : this.#labelHtml(top, state));
       this.el.label.title = deaf ? T.deafTip : '';
       this.#renderStatus(top, state, deaf);
       const n = this.sessions.length;
-      this.el.count.innerHTML = n > 1 ? this.#stackHtml() : '';
+      this.#paint(this.el.count, n > 1 ? this.#stackHtml() : '');
       this.el.pill.classList.toggle('multi', n > 1);
       this.el.count.title = n > 1 ? this.#byPriority().map(s => `${Agent.displayName(s.agent)} · ${s.project} — ${T.state[s.state]}`).join('\n') : '';
 
@@ -655,12 +658,12 @@
         : menus.length ? this.#menuCard(menus[0])
         : this.toast ? this.#doneCard() : this.errorNote ? this.#errorCard() : null;
       this.el.card.className = card ? `card ${card.kind}` : 'card';
-      this.el.card.innerHTML = card ? card.html : '';
+      this.#paint(this.el.card, card ? card.html : '');
       this.#restoreReply();
       this.el.pill.classList.toggle('has-card', !!card);
       if (card?.kind.split(' ')[0] === 'perm') { this.#syncPermScroll(); }
 
-      this.el.list.innerHTML = this.#listHtml() + this.#newSessionHtml() + this.#musicHtml();
+      this.#paint(this.el.list, this.#listHtml() + this.#newSessionHtml() + this.#musicHtml());
     }
 
     // Chip next to the name ("••• Thinking") and the to-do progress of the agent the pill shows
@@ -691,6 +694,20 @@
       this.el.plabel.classList.toggle('on', !!p);
       this.el.plabel.textContent = p ? T.progressShort(p.done, p.total) : '';
       this.el.plabel.title = this.el.progress.title;
+    }
+
+    // Replaces a part's content only when it changed — and never while a mouse button is held on the pill:
+    // a click is a press and a release on the same element, so swapping the buttons in between (updates
+    // arrive several times a second while agents work) used to swallow clicks
+    #paint(el, html) {
+      if (this.#pressing) {
+        this.#paintLater = true;
+        return;
+      }
+      if (this.#painted.get(el) !== html) {
+        el.innerHTML = html;
+        this.#painted.set(el, html);
+      }
     }
 
     #deafHtml() {
@@ -1142,6 +1159,16 @@
     #bindEvents() {
       const { pill } = this.el;
       pill.addEventListener('click', e => this.#onClick(e));
+      pill.addEventListener('pointerdown', () => { this.#pressing = true; });
+      // Released anywhere (or cancelled): let the click fire first, then catch up on held renders
+      const release = () => {
+        if (!this.#pressing) { return; }
+        this.#pressing = false;
+        setTimeout(() => { if (this.#paintLater) { this.#paintLater = false; this.render(); } }, 0);
+      };
+      window.addEventListener('pointerup', release);
+      window.addEventListener('pointercancel', release);
+      window.addEventListener('blur', release);
       // Done card reply box: the overlay takes keyboard focus only while it's being typed into
       const card = this.el.card;
       card.addEventListener('pointerdown', e => {
