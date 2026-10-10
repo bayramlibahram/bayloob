@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Agents that were already running when Bayloob started — or sitting idle, so no hook had fired — now
+  show up at once (and every 15 s): Claude Code from `~/.claude/sessions/<pid>.json` (its hooks' own
+  session id; the process start time guards against reused pids), Codex from its open rollout file.
+  Their terminal comes from the process environment, like the hooks report it.
+- An idle agent whose process is alive is no longer dropped from the list after 15 minutes of silence;
+  a found agent whose process ends is removed.
+
 ## 0.6.0 — 2026-10-10
 
 Bayloob grows from a status overlay into a place to steer agents from: an immune system for

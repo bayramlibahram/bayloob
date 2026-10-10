@@ -57,6 +57,11 @@ class SessionStore extends EventEmitter {
     if (launch) {
       this.#sessions.delete(SessionStore.placeholderId(launch)); // the real session takes over
     }
+    // A session found running before its hooks spoke under another id (same process / pane) is replaced
+    const found = old ? null : this.#discoveredTwin(id, agent, term);
+    if (found) {
+      this.#sessions.delete(found.id);
+    }
     const session = {
       id,
       agent,
@@ -73,12 +78,73 @@ class SessionStore extends EventEmitter {
       activity: old?.activity || null,
       history: old?.history || [],
       files: old?.files || [],
-      startedAt: old?.startedAt || Date.now(),
+      startedAt: old?.startedAt || found?.startedAt || Date.now(),
+      aliveAt: old?.aliveAt || found?.aliveAt || null,
       ...patch,
       updatedAt: Date.now(),
     };
+    delete session.discovered; // hooks speak for it now
     this.#sessions.set(id, session);
     return session;
+  }
+
+  #discoveredTwin(id, agent, term) {
+    for (const s of this.#sessions.values()) {
+      const samePane = term.tmux && s.term?.tmux === term.tmux;
+      const sameProc = term.agentPid && String(s.term?.pid) === String(term.agentPid);
+      if (s.discovered && s.agent === agent && s.id !== id && (samePane || sameProc)) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Takes in agents found running (AgentDiscovery): new ones appear in the list; known ones are marked
+   * alive, so an agent that just sits idle isn't dropped as stale; ones found earlier whose process
+   * has ended are removed. Returns whether anything visible changed.
+   */
+  adopt(found, now = Date.now()) {
+    let changed = false;
+    const ids = new Set();
+    for (const a of found) {
+      const id = `${a.agent}:${a.sessionId}`;
+      ids.add(id);
+      const known = this.#sessions.get(id);
+      if (known) {
+        known.aliveAt = now;
+        continue;
+      }
+      this.#sessions.set(id, {
+        id,
+        agent: a.agent,
+        cwd: a.cwd,
+        project: a.cwd ? path.basename(a.cwd) : a.agent,
+        state: a.state || "idle",
+        tool: null,
+        summary: null,
+        perm: null,
+        term: a.term || {},
+        managed: null,
+        role: null,
+        transcript: a.transcript || null,
+        activity: { title: "Already running", detail: a.cwd, at: now },
+        history: [],
+        files: [],
+        startedAt: now,
+        updatedAt: now,
+        aliveAt: now,
+        discovered: true,
+      });
+      changed = true;
+    }
+    for (const [id, s] of this.#sessions) {
+      if (s.discovered && !ids.has(id)) {
+        this.#sessions.delete(id);
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   static placeholderId(launch) {
@@ -188,8 +254,10 @@ class SessionStore extends EventEmitter {
     const now = Date.now();
     let removed = false;
     for (const [id, s] of this.#sessions) {
-      // Bayloob-launched sessions are removed when their tmux session ends, not by age
-      if (!s.perm && !s.managed && now - s.updatedAt > maxAge) {
+      // Bayloob-launched sessions are removed when their tmux session ends, not by age; a session whose
+      // process was recently seen alive (AgentDiscovery) is just idle, not gone
+      const alive = s.aliveAt && now - s.aliveAt < maxAge;
+      if (!s.perm && !s.managed && !alive && now - s.updatedAt > maxAge) {
         this.#sessions.delete(id);
         removed = true;
       }

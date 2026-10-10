@@ -35,6 +35,7 @@ const { Presence } = require("../infrastructure/desktop/presence");
 const { TerminalFocuser } = require("../infrastructure/desktop/terminal-focuser");
 const { WindowService } = require("../infrastructure/desktop/window.service");
 const { Git } = require("../infrastructure/system/git");
+const { AgentDiscovery } = require("../infrastructure/system/agent-discovery");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
 const { LauncherWindow } = require("../windows/launcher-window");
 const { OverlayWindow } = require("../windows/overlay-window");
@@ -48,6 +49,7 @@ const RECONCILE_MS = 5000;
 const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the agents
 const OUTPUT_MS = 2000; // refresh of the last-output lines while the pill's list is open
 const SOUNDS_DIR = path.join(ASSETS_DIR, "sounds");
+const DISCOVER_MS = 15_000; // how often running agents are looked for (new ones, idle ones, ended ones)
 const BLOCKED_MS = 5000; // how often waiting time is credited
 const PRESENCE_MS = 15_000; // how often the screen lock is checked
 const SAVE_MS = 60_000; // how often today's waiting total is written to disk
@@ -109,6 +111,7 @@ class BayloobApp {
   #statsTimer = null;
   output = new SessionOutput();
   git = new Git();
+  discovery = new AgentDiscovery();
   radar = new CollisionRadar({ resolveRoot: cwd => this.git.toplevel(cwd) });
   #collisions = {}; // session id -> { with, files, level, conflictWith }
   #radarTimer = null;
@@ -238,6 +241,11 @@ class BayloobApp {
     });
     this.server.listen();
     this.#watchClipboard();
+    // Agents already running (started before Bayloob, or idle since): show them, keep idle ones listed
+    if (!this.demo) {
+      this.#discover();
+      setInterval(() => this.#discover(), DISCOVER_MS).unref();
+    }
     if (this.demo) {
       const { DemoScenario } = require("./demo");
       setTimeout(
@@ -760,6 +768,16 @@ class BayloobApp {
   }
 
   // Drop sessions whose tmux session ended (agent exited, or killed outside Bayloob)
+  #discover() {
+    try {
+      if (this.server.store.adopt(this.discovery.find())) {
+        this.server.store.changed();
+      }
+    } catch (e) {
+      console.error("discovery:", e.message);
+    }
+  }
+
   async #reconcile() {
     const tracked = this.server.store.launchedNames();
     // The demo's challenger has no real tmux session behind it
