@@ -50,6 +50,7 @@ test("hook installer adds its hooks once, keeps the user's, and backs up", () =>
   assert.equal(s.model, "x");
   assert.equal(s.hooks.Stop.length, 2);
   assert.equal(s.hooks.PermissionRequest[0].hooks[0].timeout, 300);
+  assert.equal(s.hooks.PreToolUse[0].hooks[0].timeout, 300);
   const status = installer.status();
   assert.equal(status.installed, true);
   assert.equal(status.complete, true);

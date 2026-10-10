@@ -26,7 +26,10 @@ function send(raw) {
   } catch {
     return quit();
   }
-  const isPerm = ev.hook_event_name === "PermissionRequest";
+  // Permission requests, and questions from the agent (answered from Bayloob), wait for the user
+  const isPerm =
+    ev.hook_event_name === "PermissionRequest" ||
+    (ev.hook_event_name === "PreToolUse" && ev.tool_name === "AskUserQuestion");
   const query = new URLSearchParams({ agent, cwd: process.cwd(), pid: String(process.ppid) });
   const body = JSON.stringify(ev);
 

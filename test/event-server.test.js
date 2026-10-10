@@ -66,6 +66,41 @@ test("event server", async t => {
     assert.equal(server.store.get("claude:s1").perm, null);
   });
 
+  await t.test("a question waits on PreToolUse and gets the picked answers back", async () => {
+    const questions = [
+      {
+        question: "Which one?",
+        header: "Pick",
+        multiSelect: false,
+        options: [{ label: "A" }, { label: "B" }],
+      },
+    ];
+    const pending = request("/perm?agent=claude", {
+      hook_event_name: "PreToolUse",
+      session_id: "s1",
+      tool_name: "AskUserQuestion",
+      tool_input: { questions },
+    });
+    await new Promise(r => setTimeout(r, 100));
+    const s = server.store.get("claude:s1");
+    assert.equal(s.perm.kind, "question");
+    assert.ok(server.answer(s.perm.id, { "Which one?": ["B"] }));
+    const out = JSON.parse((await pending).body).hookSpecificOutput;
+    assert.equal(out.permissionDecision, "allow");
+    assert.deepEqual(out.updatedInput.questions, questions);
+    assert.deepEqual(out.updatedInput.answers, { "Which one?": "B" });
+  });
+
+  await t.test("a PermissionRequest for a question goes straight to the terminal", async () => {
+    const r = await request("/perm?agent=claude", {
+      hook_event_name: "PermissionRequest",
+      session_id: "s1",
+      tool_name: "AskUserQuestion",
+      tool_input: { questions: [] },
+    });
+    assert.equal(r.body, "");
+  });
+
   await t.test("SessionEnd removes the session", async () => {
     await request("/ev?agent=claude", { hook_event_name: "SessionEnd", session_id: "s1" });
     assert.equal(server.store.get("claude:s1"), undefined);

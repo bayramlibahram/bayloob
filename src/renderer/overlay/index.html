@@ -21,14 +21,14 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: transparent; overflow: hidden; height: 100%;
-    font: 500 12px/1.35 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
+    font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
     user-select: none; -webkit-font-smoothing: antialiased; }
   body { display: flex; justify-content: center; align-items: flex-start; }
   button { font: inherit; color: inherit; border: 0; cursor: pointer; background: none; }
 
   /* ---------- Pill ---------- */
   .pill {
-    width: 250px; min-height: 44px;
+    width: 290px; min-height: 48px;
     background: var(--glass);
     border-radius: 0 0 20px 20px;
     border: 1px solid var(--line); border-top: none;
@@ -36,8 +36,8 @@
     overflow: hidden;
     transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
   }
-  .pill.open, .pill.has-card { width: 380px; border-radius: 0 0 24px 24px; }
-  .bar { cursor: pointer; display: flex; align-items: center; gap: 10px; height: 44px; padding: 4px 14px 0 10px; }
+  .pill.open, .pill.has-card { width: 480px; border-radius: 0 0 26px 26px; }
+  .bar { cursor: pointer; display: flex; align-items: center; gap: 10px; height: 48px; padding: 4px 16px 0 12px; }
   .label { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .label b { font-weight: 600; }
   .label span { color: var(--muted); }
@@ -45,8 +45,8 @@
   .count { color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* ---------- Mascot (based on the Baynovix logo) ---------- */
-  .mascot { position: relative; width: 34px; height: 34px; flex: none; --ring: var(--accent); }
-  .mascot.mini { width: 20px; height: 20px; }
+  .mascot { position: relative; width: 38px; height: 38px; flex: none; --ring: var(--accent); }
+  .mascot.mini { width: 26px; height: 26px; }
   .mascot[data-s=idle], .mascot[data-s=dance] { --ring: var(--brand); }
   .mascot svg { width: 100%; height: 100%; overflow: visible; display: block;
     filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ring) 70%, transparent)) drop-shadow(0 2px 3px rgba(0,0,0,.5));
@@ -99,31 +99,40 @@
   @keyframes float { 0% { opacity: 0; transform: translateY(4px) scale(.7); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px) scale(1); } }
 
   /* ---------- Cards: permission and "done" ---------- */
-  .card { margin: 2px 10px 10px; padding: 10px 12px; border-radius: 14px; background: var(--card);
+  .card { margin: 2px 12px 12px; padding: 14px 16px; border-radius: 16px; background: var(--card);
     border: 1px solid var(--line); display: none; animation: cardIn .3s cubic-bezier(.2,.9,.3,1.2); }
   .pill.has-card .card { display: block; }
   .card.perm { border-color: color-mix(in srgb, var(--waiting) 45%, transparent);
     background: linear-gradient(180deg, color-mix(in srgb, var(--waiting) 10%, transparent), var(--card)); }
   .card.done { border-color: color-mix(in srgb, var(--done) 40%, transparent);
     background: linear-gradient(180deg, color-mix(in srgb, var(--done) 9%, transparent), var(--card)); }
-  .card .head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+  .card .head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .card .head b { color: var(--text); font-weight: 600; }
   .card .head .adot { width: 7px; height: 7px; border-radius: 50%; }
-  .chip { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 7px; font-size: 12px; font-weight: 600;
     background: rgba(255,181,71,.14); color: var(--working); margin-right: 6px; }
-  .code { font: 11px/1.45 ui-monospace, "Ubuntu Mono", "DejaVu Sans Mono", monospace; color: #e9e6f5;
+  .code { font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", "DejaVu Sans Mono", monospace; color: #e9e6f5;
     background: rgba(0,0,0,.35); border-radius: 8px; padding: 6px 8px; margin-top: 6px;
-    max-height: 96px; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
+    max-height: 160px; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
   .code::-webkit-scrollbar { width: 5px; }
   .code::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
-  .questions { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-  .questions li { color: #e9e6f5; padding-left: 14px; position: relative; }
-  .questions li::before { content: '?'; position: absolute; left: 0; color: var(--thinking); font-weight: 700; }
+  .questions { display: flex; flex-direction: column; gap: 14px; margin-top: 2px; max-height: 360px; overflow-y: auto; }
+  .q .qh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+  .q .qh small { flex: none; padding: 1px 7px; border-radius: 6px; background: rgba(106,168,255,.14); color: var(--thinking);
+    font-size: 11px; font-weight: 600; }
+  .q .qh span { color: #e9e6f5; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .opt { padding: 6px 12px; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid var(--line);
+    color: #d9d7e3; font-size: 12.5px; text-align: left; transition: background .12s, border-color .12s; }
+  .opt:hover { background: rgba(255,255,255,.11); }
+  .opt.on { background: color-mix(in srgb, var(--thinking) 20%, transparent); border-color: var(--thinking); color: var(--text); }
+  .opt.multi::before { content: '☐ '; color: var(--muted); }
+  .opt.multi.on::before { content: '☑ '; color: var(--thinking); }
   .card.question { border-color: color-mix(in srgb, var(--thinking) 45%, transparent);
     background: linear-gradient(180deg, color-mix(in srgb, var(--thinking) 10%, transparent), var(--card)); }
   .summary { color: #d9d7e3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .actions { display: flex; gap: 6px; margin-top: 9px; justify-content: flex-end; }
-  .btn { padding: 5px 11px; border-radius: 999px; background: rgba(255,255,255,.08); font-size: 11.5px; font-weight: 600;
+  .btn { padding: 7px 15px; border-radius: 999px; background: rgba(255,255,255,.08); font-size: 13px; font-weight: 600;
     transition: background .15s, transform .1s; }
   .btn:hover { background: rgba(255,255,255,.15); }
   .btn:active { transform: scale(.96); }
@@ -132,24 +141,24 @@
   .btn.allow { background: var(--done); color: #08130d; }
   .btn.deny { color: var(--waiting); }
   .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
-  .more { color: var(--muted); font-size: 11px; margin-right: auto; align-self: center; }
-  .hint { color: var(--waiting); font-size: 11px; margin-top: 6px; }
+  .more { color: var(--muted); font-size: 12px; margin-right: auto; align-self: center; }
+  .hint { color: var(--waiting); font-size: 12px; margin-top: 8px; }
   @keyframes cardIn { from { opacity: 0; transform: translateY(-6px); } }
 
   /* ---------- Session list (opens on hover) ---------- */
   .list { max-height: 0; opacity: 0; transition: max-height .35s ease, opacity .25s; padding: 0 12px; }
-  .pill.open .list { max-height: 320px; opacity: 1; padding-bottom: 10px; }
-  .row { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 2px 6px 18px; border-top: 1px solid var(--line); }
+  .pill.open .list { max-height: 400px; opacity: 1; padding-bottom: 10px; }
+  .row { position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 2px 8px 18px; border-top: 1px solid var(--line); }
   /* sessions are subs of the manager mascot: a tree guide links each row to the pill's mascot column */
   .row::before { content: ''; position: absolute; left: 6px; top: -1px; bottom: 0; border-left: 1px solid rgba(255,255,255,.12); }
   .row::after { content: ''; position: absolute; left: 6px; top: 50%; width: 8px; border-top: 1px solid rgba(255,255,255,.12); }
   .row.last::before { bottom: 50%; }
   .row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .row .agent { color: var(--muted); font-size: 11px; }
-  .row .st { font-size: 11px; }
-  .icon { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  .row .agent { color: var(--muted); font-size: 12px; }
+  .row .st { font-size: 12px; }
+  .icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
   .icon:hover { background: rgba(255,255,255,.1); color: var(--text); }
-  .icon svg { width: 13px; height: 13px; fill: currentColor; }
+  .icon svg { width: 15px; height: 15px; fill: currentColor; }
   .icon.stop:hover { color: var(--waiting); }
   .icon.stop.armed { background: color-mix(in srgb, var(--waiting) 22%, transparent); color: var(--waiting); }
   .new { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 2px; border-top: 1px solid var(--line);
@@ -189,7 +198,8 @@
     queued: n => `+${n} queued`,
     hidden: n => `⚠ ${n} more characters not shown — review in the terminal`,
     scrollToAllow: 'Scroll to the end of the command to enable Allow',
-    asksYou: 'has a question', answerInTerminal: 'Answer in terminal',
+    asksYou: 'has a question', answerInTerminal: 'Answer in terminal', sendAnswer: 'Send answer',
+    pickAll: 'Pick an answer for every question', pickMany: 'any number',
     deny: 'Deny', terminal: 'In terminal', terminalTip: 'Decide in the terminal', allow: 'Allow',
     allowBlocked: 'Part of this command is hidden, so it can only be approved in the terminal',
     allowUnread: 'Read the whole command first (scroll to its end)',
@@ -202,7 +212,7 @@
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const DONE_TOAST_MS = 12000;
-  const PILL_OPEN_WIDTH = 380;
+  const PILL_OPEN_WIDTH = 480;
   const STOP_CONFIRM_MS = 3000;
 
   const SLEEP_AFTER_MS = 5 * 60 * 1000;
@@ -306,6 +316,7 @@
     confirmStop = null;    // session id armed for stopping
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
+    #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
 
     constructor(api) {
@@ -382,13 +393,24 @@
       const { id, tool, detail, hidden, kind, questions } = s.perm;
       const pid = esc(id);
       const more = queued ? `<span class="more">${T.queued(queued)}</span>` : '';
-      // A question (AskUserQuestion) can't be answered with allow/deny: show it and send the user to the terminal
+      // A question (AskUserQuestion): pick the answers right here, or answer in the terminal
       if (kind === 'question') {
+        const picked = this.#answers.get(id) || new Map();
+        const complete = questions.length > 0 && questions.every(q => picked.get(q.question)?.size);
+        const qs = questions.map((q, qi) => `
+          <div class="q">
+            <div class="qh">${q.header ? `<small>${esc(q.header)}</small>` : ''}<span>${esc(q.question)}${q.multiSelect ? ` <em style="color:var(--muted);font-style:normal">(${T.pickMany})</em>` : ''}</span></div>
+            <div class="opts">${q.options.map((o, oi) => `
+              <button type="button" class="opt${q.multiSelect ? ' multi' : ''}${picked.get(q.question)?.has(o.label) ? ' on' : ''}"
+                data-act="pick" data-id="${pid}" data-q="${qi}" data-o="${oi}" title="${esc(o.description)}">${esc(o.label)}</button>`).join('')}
+            </div>
+          </div>`).join('');
         return { kind: 'question', html: `
           ${this.#cardHead(s, T.asksYou)}
-          <ul class="questions">${(questions || []).map(q => `<li>${esc(q)}</li>`).join('')}</ul>
+          <div class="questions">${qs}</div>
           <div class="actions">${more}
-            <button class="btn primary" data-act="answer" data-id="${pid}" data-sid="${esc(s.id)}">${T.answerInTerminal}</button>
+            <button type="button" class="btn" data-act="answer-terminal" data-id="${pid}" data-sid="${esc(s.id)}">${T.answerInTerminal}</button>
+            <button type="button" class="btn primary" data-act="send-answer" data-id="${pid}" ${complete ? '' : `disabled title="${T.pickAll}"`}>${T.sendAnswer}</button>
           </div>` };
       }
       return { kind: 'perm', html: `
@@ -401,6 +423,42 @@
           <button class="btn" data-act="terminal" data-id="${pid}" title="${T.terminalTip}">${T.terminal}</button>
           <button class="btn allow" data-act="allow" data-id="${pid}" ${hidden ? `disabled title="${T.allowBlocked}"` : ''}>${T.allow}</button>
         </div>` };
+    }
+
+    #questionPerm(permId) {
+      return this.sessions.find(s => s.perm?.id === permId)?.perm || null;
+    }
+
+    // Single-choice questions keep one label, multi-select ones toggle labels
+    #pick(permId, qi, oi) {
+      const perm = this.#questionPerm(permId);
+      const q = perm?.questions?.[qi];
+      const label = q?.options?.[oi]?.label;
+      if (!label) {
+        return;
+      }
+      if (!this.#answers.has(permId)) {
+        this.#answers.set(permId, new Map());
+      }
+      const picked = this.#answers.get(permId);
+      const set = q.multiSelect ? new Set(picked.get(q.question)) : new Set();
+      if (q.multiSelect && set.has(label)) {
+        set.delete(label);
+      } else {
+        set.add(label);
+      }
+      picked.set(q.question, set);
+      this.render();
+    }
+
+    #sendAnswer(permId) {
+      const picked = this.#answers.get(permId);
+      if (!picked) {
+        return;
+      }
+      const answers = Object.fromEntries([...picked].map(([q, set]) => [q, [...set]]));
+      this.api?.answer(permId, answers);
+      this.#answers.delete(permId);
     }
 
     // A command too tall for its box can be allowed only after it has been scrolled to the end, so nobody
@@ -476,7 +534,12 @@
       const b = e.target.closest('[data-act]');
       if (!b || b.disabled) { return; }
       const act = b.dataset.act;
-      if (act === 'answer') {
+      if (act === 'pick') {
+        this.#pick(b.dataset.id, Number(b.dataset.q), Number(b.dataset.o));
+      } else if (act === 'send-answer') {
+        b.disabled = true;
+        this.#sendAnswer(b.dataset.id);
+      } else if (act === 'answer-terminal') {
         b.disabled = true;
         this.api?.decide(b.dataset.id, 'terminal');
         this.api?.focus(b.dataset.sid);
@@ -539,7 +602,7 @@
       // Give the full open size up front so the shape doesn't clip the opening animation
       pill.addEventListener('mouseenter', () => {
         const r = pill.getBoundingClientRect();
-        this.api.setPillRect({ x: Math.min(r.left, (innerWidth - PILL_OPEN_WIDTH) / 2), y: r.top, w: PILL_OPEN_WIDTH, h: r.height + 360 });
+        this.api.setPillRect({ x: Math.min(r.left, (innerWidth - PILL_OPEN_WIDTH) / 2), y: r.top, w: PILL_OPEN_WIDTH, h: r.height + 460 });
       });
       sendRect();
     }
