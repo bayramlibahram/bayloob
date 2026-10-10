@@ -2,6 +2,7 @@
 // Talks to a running Bayloob like the agents' hooks do, so each feature can be seen without a real agent.
 //   bun scripts/simulate.js          one session through every state (default)
 //   bun scripts/simulate.js auth     the local API refuses requests without the token
+//   bun scripts/simulate.js immune   deny one card, then see the red "looks like what you denied" card
 //   bun scripts/simulate.js multi    four agents at once (stacked tiles) and a to-do list ("2 of 5")
 const { execFileSync } = require("node:child_process");
 const http = require("node:http");
@@ -74,6 +75,33 @@ async function multi() {
   });
 }
 
+// A permission request through the real hook; resolves when it's answered in Bayloob (the hook prints the decision)
+const ask = command =>
+  execFileSync(process.execPath, [hook, "claude"], {
+    input: JSON.stringify({
+      session_id: "demo-immune",
+      cwd: "/projects/shop",
+      hook_event_name: "PermissionRequest",
+      tool_name: "Bash",
+      tool_input: { command },
+    }),
+  }).toString();
+
+async function immune() {
+  send("claude", {
+    session_id: "demo-immune",
+    cwd: "/projects/shop",
+    hook_event_name: "SessionStart",
+  });
+  console.log("1. A card asks for `git push --force` — press Deny.");
+  console.log("   →", ask("git push --force") || "(answered in the terminal)");
+  console.log(
+    "2. Now `git push -f origin main`: the card is red, Deny is the main button, Allow waits 3 s."
+  );
+  console.log("   →", ask("git push -f origin main") || "(answered in the terminal)");
+  console.log('3. Settings → "Denied before" lists it; Forget removes it.');
+}
+
 // GET /state with the given token header (or none); resolves with the HTTP status
 const state = token =>
   new Promise(resolve => {
@@ -104,7 +132,7 @@ async function auth() {
   }
 }
 
-const scenarios = { states, auth, multi };
+const scenarios = { states, auth, multi, immune };
 const name = process.argv[2] || "states";
 if (!scenarios[name]) {
   console.error(`Unknown scenario "${name}". Try: ${Object.keys(scenarios).join(", ")}`);

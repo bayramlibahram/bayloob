@@ -27,8 +27,43 @@ const WITH_SUBCOMMAND = new Set([
   "systemctl",
   "gh",
 ]);
-const RISKY_FLAGS =
-  /^(-[a-zA-Z]*[rRf][a-zA-Z]*|--force(-with-lease)?|--hard|--no-verify|--delete|-D|--prune|--purge|--recursive|--yes|-y)$/;
+// Flags are compared in a normal form: combined short flags split (-rf → -r -f) and long aliases mapped
+// (--force → -f, --recursive → -r), so `git push -f` and `git push --force` count as the same request
+const FLAG_ALIASES = {
+  "--force": "-f",
+  "--force-with-lease": "-f",
+  "--recursive": "-r",
+  "-R": "-r",
+  "--yes": "-y",
+};
+const RISKY = new Set([
+  "-r",
+  "-f",
+  "-y",
+  "-D",
+  "--hard",
+  "--no-verify",
+  "--delete",
+  "--prune",
+  "--purge",
+]);
+
+function normalizeFlags(flags) {
+  const out = new Set();
+  for (const raw of flags) {
+    const f = raw.split("=")[0];
+    if (FLAG_ALIASES[f]) {
+      out.add(FLAG_ALIASES[f]);
+    } else if (/^-[a-zA-Z]{2,}$/.test(f)) {
+      for (const c of f.slice(1)) {
+        out.add(FLAG_ALIASES[`-${c}`] || `-${c}`);
+      }
+    } else {
+      out.add(f);
+    }
+  }
+  return [...out];
+}
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
 // Splits like a shell for the simple cases; returns null for anything it can't be sure about
@@ -150,7 +185,7 @@ function signature(tool, input = {}, cwd = "") {
     head,
     sub,
     flags,
-    risky: flags.filter(f => RISKY_FLAGS.test(f)),
+    risky: normalizeFlags(flags).filter(f => RISKY.has(f)),
     paths,
     compound: false,
     parseable,
@@ -193,4 +228,4 @@ function similarity(a, b) {
   return Math.min(10, tenths) / 10;
 }
 
-module.exports = { signature, ruleable, similarity, tokenize, classifyPath };
+module.exports = { signature, ruleable, similarity, tokenize, classifyPath, normalizeFlags };

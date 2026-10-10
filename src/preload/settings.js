@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   installHooks: () => ipcRenderer.invoke("settings:install-hooks"),
   installExtension: () => ipcRenderer.invoke("settings:install-extension"),
   revokeRule: ruleId => ipcRenderer.invoke("settings:revoke-rule", ruleId),
+  forgetDenial: id => ipcRenderer.invoke("settings:forget-denial", id),
   resize: height => ipcRenderer.send("settings:resize", height),
   close: () => ipcRenderer.send("settings:close"),
 });
