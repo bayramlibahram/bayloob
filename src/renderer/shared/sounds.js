@@ -51,12 +51,18 @@ class SoundPlayer {
   base = "";
   volume = 0;
   #last = {}; // name -> when it last played
+  #lastAny = 0; // when any sound last played
 
   /** { manifest, base, enabled, volume } from main; enabled false or volume 0 silences everything. */
   configure({ manifest = {}, base = "", enabled = false, volume = 0.8 } = {}) {
     this.manifest = manifest;
     this.base = base;
     this.volume = enabled ? Math.max(0, Math.min(1, volume)) : 0;
+  }
+
+  // A sound that only plays when nothing else just did (e.g. "wake", which comes with the update that woke it)
+  playIfQuiet(name, quietMs = 800) {
+    return Date.now() - this.#lastAny < quietMs ? false : this.play(name);
   }
 
   play(name) {
@@ -69,6 +75,7 @@ class SoundPlayer {
       return false;
     }
     this.#last[name] = now;
+    this.#lastAny = now;
     const audio = new Audio(this.base + m.file);
     audio.volume = this.volume;
     audio.play().catch(() => {});

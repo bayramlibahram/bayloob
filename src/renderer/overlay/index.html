@@ -367,7 +367,7 @@
     #pack = null;
     #novi = null;
 
-    constructor(el) { this.el = el; }
+    constructor(el, { onSleep = null } = {}) { this.el = el; this.onSleep = onSleep; }
 
     set(agent, state) {
       const pack = Agent.palette(agent).pack;
@@ -375,7 +375,7 @@
         // A new agent color: replace the instance (each one runs its own frame loop)
         this.#novi?.destroy();
         this.#pack = pack;
-        this.#novi = new Novi(this.el, NOVI_META[pack], `${PACKS_URL}/${pack}`, { sleepAfter: SLEEP_AFTER_MS });
+        this.#novi = new Novi(this.el, NOVI_META[pack], `${PACKS_URL}/${pack}`, { sleepAfter: SLEEP_AFTER_MS, onSleep: this.onSleep });
       }
       this.#novi.set(state);
     }
@@ -416,7 +416,8 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), progress: $('progress'), card: $('card'), list: $('list') };
-      this.mascot = new MascotView(this.el.mascot);
+      // The manager falls asleep after a long idle and wakes on the next change: a soft sound for each
+      this.mascot = new MascotView(this.el.mascot, { onSleep: asleep => asleep ? this.sounds.play('sleep') : this.sounds.playIfQuiet('wake') });
       this.#bindEvents();
       setInterval(() => this.#remind(), 5000);
     }

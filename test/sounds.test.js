@@ -32,3 +32,32 @@ test("only the most important sound plays when several things happen at once", (
   // The same card on the next update is not news again
   assert.equal(soundCue(next, next), null);
 });
+
+test("wake stays quiet when another sound just played; sounds respect cooldowns and volume 0", () => {
+  const { SoundPlayer } = require("../src/renderer/shared/sounds");
+  const played = [];
+  global.Audio = class {
+    constructor(src) {
+      this.src = src;
+    }
+    play() {
+      played.push(this.src);
+      return Promise.resolve();
+    }
+  };
+  const manifest = {
+    prompt: { file: "prompt.ogg", default_enabled: true, cooldown_ms: 2000 },
+    wake: { file: "wake.ogg", default_enabled: true, cooldown_ms: 0 },
+    tool: { file: "tool.ogg", default_enabled: false, cooldown_ms: 0 },
+  };
+  const p = new SoundPlayer();
+  p.configure({ manifest, base: "s/", enabled: true, volume: 0.5 });
+  assert.equal(p.play("prompt"), true);
+  assert.equal(p.playIfQuiet("wake"), false);
+  assert.equal(p.play("prompt"), false); // cooldown
+  assert.equal(p.play("tool"), false); // off by default
+  p.configure({ manifest, enabled: false });
+  assert.equal(p.play("wake"), false);
+  assert.deepEqual(played, ["s/prompt.ogg"]);
+  delete global.Audio;
+});
