@@ -7,6 +7,7 @@ const { Settings } = require("../config/settings");
 const { AGENTS } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
+const { pickChallenger, challengePrompt } = require("../modules/agents/challenge");
 const { PromptQueue } = require("../modules/agents/prompt-queue");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
@@ -342,6 +343,11 @@ class BayloobApp {
       { label: "Open terminal", click: () => this.focus(session) },
       { label: "Send a prompt…", enabled: canPrompt, click: () => this.openPromptBox(session) },
       { label: "Open workspace", enabled: !!session.cwd, click: () => this.openWorkspace(session) },
+      {
+        label: "Challenge with another agent",
+        enabled: !!session.cwd && session.role !== "challenger",
+        click: () => this.challenge(session).catch(() => {}),
+      },
       { type: "separator" },
       { label: "Stop session", enabled: !!session.managed, click: () => this.stopSession(session) },
       {
@@ -435,6 +441,27 @@ class BayloobApp {
     }
   }
 
+  /** Starts a different agent, read-only, in the same folder to try to break this session's changes. */
+  async challenge(session) {
+    if (!session?.cwd) {
+      throw new Error("This session has no folder to review");
+    }
+    const challenger = pickChallenger(session.agent, await this.installed);
+    if (!challenger) {
+      throw new Error(
+        "Install a second agent (Codex, Claude Code or Gemini CLI) to challenge this one"
+      );
+    }
+    const author = AGENTS[session.agent]?.name || session.agent;
+    return this.launch({
+      agent: challenger,
+      cwd: session.cwd,
+      prompt: challengePrompt(author),
+      readOnly: true,
+      role: "challenger",
+    });
+  }
+
   // Sends the next queued prompt of every session that just finished its turn
   #sendQueued(list) {
     for (const { session, text } of this.queue.due(list)) {
@@ -449,8 +476,11 @@ class BayloobApp {
     const launch = await this.launcher.launch(opts);
     this.server.store.trackLaunch(launch);
     this.server.store.changed();
-    this.recent.add(launch.cwd, launch.agent);
-    this.tray?.update(this.recent.list());
+    // A challenger isn't the user's choice of agent for the project, so it doesn't go into recents
+    if (!launch.role) {
+      this.recent.add(launch.cwd, launch.agent);
+      this.tray?.update(this.recent.list());
+    }
     return launch;
   }
 
@@ -572,6 +602,9 @@ class BayloobApp {
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
     ipcMain.on("open-settings", () => this.openSettings());
+    ipcMain.handle("challenge", (_e, sessionId) =>
+      result(() => this.challenge(session(sessionId)))
+    );
     // From a receipt: ask the agent to run its tests (queued if it's busy again by then)
     ipcMain.on("ask-tests", (_e, sessionId) => {
       const s = session(sessionId);

@@ -60,7 +60,8 @@ class SessionLauncher {
   }
 
   /** Starts `agent` in `cwd` (optionally with a first prompt) and opens it in a terminal window. */
-  async launch({ agent, cwd, prompt = "" }) {
+  // role: what the session is for ("challenger" reviews another agent's work); readOnly: no file changes
+  async launch({ agent, cwd, prompt = "", readOnly = false, role = null }) {
     cwd = cwd.replace(/^~(?=$|\/)/, os.homedir());
     if (!fs.statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
       throw new Error(`Not a folder: ${cwd}`);
@@ -80,10 +81,10 @@ class SessionLauncher {
       "-P",
       "-F",
       "#{pane_id}",
-      ...viaLoginShell(agentCommand(agent, prompt.trim())),
+      ...viaLoginShell(agentCommand(agent, prompt.trim(), { readOnly })),
     ]);
     this.attach(name);
-    return { name, paneId, agent, cwd };
+    return { name, paneId, agent, cwd, role };
   }
 
   /** Opens a terminal window attached to the tmux session. */
