@@ -12,6 +12,7 @@ const { pickChallenger, challengePrompt } = require("../modules/agents/challenge
 const { findingPath } = require("../modules/agents/challenge-report");
 const { PromptQueue } = require("../modules/agents/prompt-queue");
 const { PromptDelivery } = require("../modules/agents/prompt-delivery");
+const { ClipboardWatcher } = require("../modules/agents/clipboard-watcher");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { BlockedClock } = require("../modules/sessions/blocked-clock");
@@ -113,6 +114,21 @@ class BayloobApp {
   #radarTimer = null;
   tokens = new TokenUsage();
   queue = new PromptQueue();
+  // Opt-in (Settings): a copied stack trace → "Fix this error?" in the pill; never sends anything itself
+  #copiedError = null;
+  clipboardWatcher = new ClipboardWatcher({
+    read: () => clipboard.readText(),
+    onError: text => {
+      this.#copiedError = text;
+      const lines = text.trim().split("\n");
+      const headline =
+        lines.find(l => /(Error|Exception|panic|Traceback|Fatal)/.test(l)) || lines[0];
+      this.overlay.send("error-copied", {
+        headline: headline.trim().slice(0, 160),
+        lines: lines.length,
+      });
+    },
+  });
   delivery = new PromptDelivery({
     queue: this.queue,
     typeInto: (pane, text) => this.launcher.sendPrompt(pane, text),
@@ -219,6 +235,7 @@ class BayloobApp {
       app.quit();
     });
     this.server.listen();
+    this.#watchClipboard();
     setInterval(() => this.#reconcile(), RECONCILE_MS).unref();
     this.health = new HookHealth({ installer: this.hooks, store: this.server.store });
     this.#checkHealth();
@@ -276,6 +293,9 @@ class BayloobApp {
       this.tray.actions.shortcut = this.settings.get("shortcut");
       this.tray.update(this.recent.list());
     }
+    if (keys.includes("watchClipboard")) {
+      this.#watchClipboard();
+    }
     if (keys.includes("theme")) {
       nativeTheme.themeSource = this.settings.get("theme");
     }
@@ -293,6 +313,14 @@ class BayloobApp {
   }
 
   // Which UI sounds exist (src/assets/sounds/sounds.json) and how loud, for the overlay's player
+  #watchClipboard() {
+    if (this.settings.get("watchClipboard")) {
+      this.clipboardWatcher.start();
+    } else {
+      this.clipboardWatcher.stop();
+    }
+  }
+
   // The sound pack's manifest (src/assets/sounds/sounds.json); {} without a pack, and the overlay stays silent
   #soundManifest() {
     try {
@@ -494,12 +522,14 @@ class BayloobApp {
     );
   }
 
-  async openLauncher(preset = null) {
+  // prefill: a first prompt to start from (e.g. "Fix this error:" with a copied stack trace)
+  async openLauncher(preset = null, prefill = "") {
     this.launcherWindow.show({
       mode: "new",
       agents: await this.#agentChoices(),
       recent: this.recent.list(),
       preset,
+      prefill,
       home: os.homedir(),
     });
   }
@@ -511,12 +541,13 @@ class BayloobApp {
 
   // An error the user just copied (failing test, stack trace…) pre-fills the prompt, ready to send
   // `text`: a draft to continue (e.g. typed into a done card); otherwise a copied error pre-fills it
-  openPromptBox(session, text = "") {
-    const copied = clipboard.readText();
+  // error: a stack trace to wrap in "Fix this error:" (else one on the clipboard is picked up)
+  openPromptBox(session, text = "", { error = null } = {}) {
+    const copied = error ?? clipboard.readText();
     this.launcherWindow.show({
       mode: "prompt",
       home: os.homedir(),
-      prefill: text || (looksLikeError(copied) ? errorPrompt(copied) : ""),
+      prefill: text || (error || looksLikeError(copied) ? errorPrompt(copied) : ""),
       draft: !!text, // the user's own text, not a pasted error
       session: {
         id: session.id,
@@ -773,6 +804,19 @@ class BayloobApp {
     ipcMain.handle("focus", (_e, sessionId) => this.focus(session(sessionId)));
     ipcMain.on("music", (_e, action) => this.music?.control(action));
     ipcMain.on("open-launcher", () => this.openLauncher());
+    // "Fix this error?": into a session's prompt window, or a new session — the user still confirms
+    ipcMain.on("fix-error", (_e, sessionId) => {
+      const text = this.#copiedError;
+      if (!text) {
+        return;
+      }
+      const s = sessionId ? session(sessionId) : null;
+      if (s) {
+        this.openPromptBox(s, "", { error: text });
+      } else {
+        this.openLauncher(null, errorPrompt(text));
+      }
+    });
     ipcMain.on("overlay-keyboard", (_e, on) => this.overlay.setKeyboard(!!on));
     ipcMain.on("open-prompt", (_e, sessionId, text) => {
       const s = session(sessionId);

@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Settings → Watch clipboard (off by default): copying a stack trace (Python, JS/TS, PHP, Go, Java)
+  shows "Error copied — fix it?" in the pill with **Fix in <agent>** (prompt window pre-filled
+  "Fix this error:" + the trace) or **New session…**. Checked once a second, at most 20 KB, what's on
+  the clipboard when it starts isn't news, and nothing is ever sent without the user.
 - ⚔ Challenge report: when a challenger finishes, its done card lists every `file:line` it found with
   the problem; a click opens the file at that line (Settings editor, else VS Code `code -g`, else the
   default app). Only files inside the project can be opened.

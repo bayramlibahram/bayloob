@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onCollisions: cb => ipcRenderer.on("collisions", (_e, collisions) => cb(collisions)),
   onSoundConfig: cb => ipcRenderer.on("sound-config", (_e, config) => cb(config)),
   onRuleAllowed: cb => ipcRenderer.on("rule-allowed", (_e, info) => cb(info)),
+  onErrorCopied: cb => ipcRenderer.on("error-copied", (_e, info) => cb(info)),
+  fixError: sessionId => ipcRenderer.send("fix-error", sessionId),
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
   challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),
   openFinding: (sessionId, file, line) => ipcRenderer.invoke("open-finding", sessionId, file, line),

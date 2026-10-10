@@ -14,6 +14,7 @@ const DEFAULTS = {
   sounds: true, // UI sounds (permission card, done, …)
   soundVolume: 0.8, // 0..1
   soundToggles: {}, // sound name -> on/off, overriding the pack's default_enabled
+  watchClipboard: false, // opt-in: offer "Fix this error?" when a stack trace is copied
 };
 
 // How each environment variable maps onto a setting
@@ -27,6 +28,7 @@ const ENV = {
   sounds: () => (process.env.BAYLOOB_SOUNDS === "0" ? false : undefined),
   soundVolume: () => undefined,
   soundToggles: () => undefined,
+  watchClipboard: () => undefined,
 };
 
 const VALIDATE = {
@@ -37,6 +39,7 @@ const VALIDATE = {
   editor: v => String(v ?? "").trim(),
   music: v => v !== false,
   sounds: v => v !== false,
+  watchClipboard: v => v === true,
   soundToggles: v =>
     Object.fromEntries(
       Object.entries(v && typeof v === "object" ? v : {}).filter(

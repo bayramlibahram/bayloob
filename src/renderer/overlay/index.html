@@ -92,6 +92,8 @@
   .label .ruled code { font: 600 12px ui-monospace, monospace; }
   .immune.warn { margin-top: 8px; font-size: 12.5px; color: var(--waiting); }
   .immune code { font: 500 11.5px ui-monospace, monospace; }
+  .card.errcopy { border-color: color-mix(in srgb, var(--working) 45%, transparent); }
+  .card.errcopy .code { max-height: 3.2em; overflow: hidden; }
   .findings { margin-top: 10px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--waiting) 35%, transparent); overflow: hidden; }
   .findings.none { padding: 8px 12px; color: var(--done); border-color: color-mix(in srgb, var(--done) 35%, transparent); font-size: 12.5px; font-weight: 600; }
   .findings .fh { padding: 7px 12px; font-size: 12px; font-weight: 700; color: var(--waiting);
@@ -326,6 +328,8 @@
     replyTo: agent => `Reply to ${agent}…`, replySend: '✓ Send', replySendTip: 'Enter, then Enter again to send',
     replyConfirm: agent => `Enter again sends it to ${agent} · Esc to edit`, replyDialog: 'Open in the prompt window',
     replyFailed: 'Could not send',
+    errorCopied: 'Error copied — fix it?', lines: n => `${n} line${n === 1 ? '' : 's'}`,
+    fixIn: (agent, project) => `Fix in ${agent} · ${project}`, fixNew: 'New session…',
     findings: n => `⚔ Challenge report · ${n} finding${n === 1 ? '' : 's'}`, noFindings: '⚔ No problems found',
     openFinding: 'Open in the editor at this line',
     replyConfirmPaste: 'Enter again copies it and brings the terminal forward — paste with Ctrl+Shift+V',
@@ -338,6 +342,7 @@
   const COLORS = { idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
   const COOL_MS = 3000;
   const RULE_NOTE_MS = 4000;
+  const ERROR_NOTE_MS = 30_000; // how long "Error copied — fix it?" stays (longer while hovered)
   const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const STACK_MAX = 3; // agent tiles in the pill before "+N"
   const REMIND_MS = 60_000; // an unanswered permission card gets a reminder sound this often
@@ -464,6 +469,7 @@
     #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
     #permSince = new Map(); // permId -> when it appeared or was last reminded about
     #ruleTimer = null;
+    #errorTimer = null;
     #reply = { sid: null, text: '', confirm: false, focused: false, error: '' }; // the done card's reply box
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
     #prevStates = new Map();
@@ -574,7 +580,9 @@
 
       this.#expireToast();
       const perms = this.sessions.filter(s => s.perm).sort((a, b) => Number(a.perm.id) - Number(b.perm.id));
-      const card = perms.length ? this.#permCard(perms[0], perms.length - 1) : this.toast ? this.#doneCard() : null;
+      if (this.errorNote && Date.now() > this.errorNote.until && !this.hovering) { this.errorNote = null; }
+      const card = perms.length ? this.#permCard(perms[0], perms.length - 1)
+        : this.toast ? this.#doneCard() : this.errorNote ? this.#errorCard() : null;
       this.el.card.className = card ? `card ${card.kind}` : 'card';
       this.el.card.innerHTML = card ? card.html : '';
       this.#restoreReply();
@@ -653,6 +661,31 @@
       const stillDone = this.sessions.some(s => s.id === t.sid && s.state === 'done');
       const replying = this.#reply.sid === t.sid && (this.#reply.focused || this.#reply.text.trim());
       if (!stillDone || (Date.now() > t.until && !this.hovering && !replying)) { this.toast = null; }
+    }
+
+    // A stack trace was copied (Settings → Watch clipboard): offer to hand it to an agent — never automatically
+    setErrorCopied(info) {
+      this.errorNote = { ...info, until: Date.now() + ERROR_NOTE_MS };
+      this.render();
+      clearTimeout(this.#errorTimer);
+      this.#errorTimer = setTimeout(() => this.render(), ERROR_NOTE_MS + 50);
+    }
+
+    #errorCard() {
+      const e = this.errorNote;
+      // The agent to offer first: the one most recently active (not a read-only challenger)
+      const target = [...this.sessions].filter(s => s.role !== 'challenger').sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      const fix = target
+        ? `<button class="btn primary" data-act="fix-err" data-sid="${esc(target.id)}">${T.fixIn(esc(Agent.displayName(target.agent)), esc(target.project))}</button>`
+        : '';
+      return { kind: 'errcopy', html: `
+        <div class="head"><span>🐞</span><b>${T.errorCopied}</b> · ${T.lines(e.lines)}</div>
+        <div class="code">${esc(e.headline)}</div>
+        <div class="actions">
+          <button class="btn" data-act="err-dismiss">${T.dismiss}</button>
+          <button class="btn" data-act="fix-err" data-sid="">${T.fixNew}</button>
+          ${fix}
+        </div>` };
     }
 
     #cardHead(s, verb) {
@@ -958,6 +991,13 @@
         const r = await this.api?.challenge(b.dataset.sid);
         if (r?.ok === false && this.toast) { this.toast.hint = r.error; }
         this.render();
+      } else if (act === 'fix-err') {
+        this.errorNote = null;
+        this.api?.fixError(b.dataset.sid || null);
+        this.render();
+      } else if (act === 'err-dismiss') {
+        this.errorNote = null;
+        this.render();
       } else if (act === 'finding') {
         const r = await this.api?.openFinding(b.dataset.sid, b.dataset.file, Number(b.dataset.line));
         if (r?.ok === false && this.toast) { this.toast.hint = r.error; this.render(); }
@@ -1081,6 +1121,7 @@
     window.bayloobAPI.onCollisions?.(c => view.setCollisions(c));
     window.bayloobAPI.onSoundConfig?.(c => view.setSoundConfig(c));
     window.bayloobAPI.onRuleAllowed?.(r => view.setRuleAllowed(r));
+    window.bayloobAPI.onErrorCopied?.(e => view.setErrorCopied(e));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

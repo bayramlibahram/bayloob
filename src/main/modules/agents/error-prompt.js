@@ -18,6 +18,26 @@ function looksLikeError(text) {
   return s.length >= 8 && ERROR_SIGNS.some(re => re.test(s));
 }
 
+// Stricter than looksLikeError, for the clipboard watcher: only real stack traces, so copying a sentence
+// with "failed" in it never pops anything up
+const STACK_SIGNS = [
+  /Traceback \(most recent call last\)/, // Python
+  /^\s*at .+\(.+:\d+:\d+\)\s*$/m, // JS / TS frame
+  /^\s*at [\w.$<>]+ \(?[^\s()]+:\d+:\d+\)?\s*$/m, // JS frame without a function name in parens
+  /\b\w*(Error|Exception)\b:? .*\n(.*\n)*.*\b[\w./-]+\.\w+:\d+/, // "SomeError: …" followed by file:line
+  /^Stack trace:$/m, // PHP
+  /^\s*#\d+ .+\(\d+\): /m, // PHP frame
+  /^goroutine \d+ \[/m, // Go panic
+  /^\s*at [\w.$]+\([\w]+\.java:\d+\)/m, // Java / Kotlin
+];
+const STACK_MAX_BYTES = 20_000;
+
+/** Whether copied text is a stack trace (and not too big to be one). */
+function looksLikeStackTrace(text) {
+  const s = String(text || "");
+  return s.length >= 20 && s.length <= STACK_MAX_BYTES && STACK_SIGNS.some(re => re.test(s));
+}
+
 /** The tail of the error (the useful part), within size limits. */
 function trimError(text) {
   const lines = String(text).replace(/\r/g, "").trimEnd().split("\n");
@@ -33,4 +53,4 @@ function errorPrompt(text) {
   return `Fix this error:\n\n\`\`\`\n${trimError(text)}\n\`\`\``;
 }
 
-module.exports = { looksLikeError, trimError, errorPrompt };
+module.exports = { looksLikeError, looksLikeStackTrace, trimError, errorPrompt };

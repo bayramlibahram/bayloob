@@ -111,6 +111,11 @@
       <small>"Open workspace" runs it with the folder, e.g. <code>code</code>. Empty opens the file manager.</small>
     </div>
     <div class="field">
+      <span class="label">Watch clipboard</span>
+      <button type="button" class="switch" id="watchClipboard" role="switch" aria-checked="false" aria-label="Watch clipboard for errors"></button>
+      <small>When you copy a stack trace, offer to hand it to an agent. Nothing is sent without you.</small>
+    </div>
+    <div class="field">
       <span class="label">Dance to music</span>
       <button type="button" class="switch" id="music" role="switch" aria-checked="true" aria-label="Dance to music"></button>
     </div>
@@ -172,7 +177,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), mascot: $('mascot'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
-        music: $('music'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), watchClipboard: $('watchClipboard'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -182,6 +187,7 @@
       this.mascot = values.mascot;
       this.theme = values.theme;
       this.music = values.music;
+      this.watchClipboard = values.watchClipboard;
       this.sounds = values.sounds;
       this.soundToggles = { ...(values.soundToggles || {}) };
       this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
@@ -194,6 +200,7 @@
       this.#renderMascot();
       this.#renderTheme();
       this.#renderMusic();
+      this.#renderWatch();
       this.#renderSounds();
       this.#renderHooks();
       this.#renderExtension();
@@ -231,6 +238,10 @@
       const a = new Audio(`../../assets/sounds/${file}`);
       a.volume = Number(this.el.volume.value) / 100;
       a.play().catch(() => {});
+    }
+
+    #renderWatch() {
+      this.el.watchClipboard.setAttribute('aria-checked', this.watchClipboard);
     }
 
     #renderMusic() {
@@ -293,7 +304,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
-        mascot: this.mascot, theme: this.theme, music: this.music, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
+        mascot: this.mascot, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -313,6 +324,7 @@
         if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
       });
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
+      this.el.watchClipboard.addEventListener('click', () => { this.watchClipboard = !this.watchClipboard; this.#renderWatch(); });
       this.el.sounds.addEventListener('click', () => { this.sounds = !this.sounds; this.#renderSounds(); });
       this.el.soundMore.addEventListener('click', () => {
         const open = this.el.soundGrid.hidden;
