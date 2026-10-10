@@ -13,9 +13,15 @@ const PREFIX = "bl-";
 // submits). So the text always goes in as one bracketed paste, then Enter after a pause with margin.
 const ENTER_DELAY_MS = 150;
 
-/** How a prompt is typed: [{ paste }, { wait }, { key }] — pure, so it can be tested. */
+/**
+ * How a prompt is typed: [{ paste }, { wait }, { key }] — pure, so it can be tested. A prompt ending in an
+ * `@file` mention gets a trailing space: otherwise Claude Code's file suggestions are open and take the Enter.
+ */
 function promptSteps(text) {
-  const body = String(text).replace(/\r/g, "").trim();
+  let body = String(text).replace(/\r/g, "").trim();
+  if (/(^|\s)@\S+$/.test(body)) {
+    body += " ";
+  }
   return body ? [{ paste: body }, { wait: ENTER_DELAY_MS }, { key: "Enter" }] : [];
 }
 

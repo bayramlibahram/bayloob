@@ -15,6 +15,12 @@ test("a prompt is one paste, a pause, then a single Enter", () => {
     { key: "Enter" },
   ]);
   assert.deepEqual(promptSteps("   "), []);
+  // Ending in an @file mention: a space closes Claude Code's file suggestions, so Enter submits
+  assert.equal(
+    promptSteps("read this\n\n@/tmp/a.md @/tmp/b.md")[0].paste,
+    "read this\n\n@/tmp/a.md @/tmp/b.md "
+  );
+  assert.equal(promptSteps("mail me@example.com")[0].paste, "mail me@example.com");
   // Codex needs ≥ 50 ms between the text and Enter (measured); keep a margin
   assert.ok(ENTER_DELAY_MS >= 100);
 });
