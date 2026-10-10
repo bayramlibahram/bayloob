@@ -36,7 +36,8 @@
       }
       this.el = el;
       this.meta = meta;
-      this.opts = { sleepAfter: 5 * 60e3, particles: true, ...opts };
+      // onSleep(asleep): called when it falls asleep (true) and when a new state wakes it (false)
+      this.opts = { sleepAfter: 5 * 60e3, particles: true, onSleep: null, ...opts };
       el.classList.add("nv");
       el.innerHTML =
         '<div class="fx back"></div><div class="rig"></div><div class="fx front"></div>';
@@ -118,7 +119,10 @@
       this.state = state;
       this.img = state === "dance" ? "done" : state;
       this.el.dataset.s = state;
-      this.el.classList.remove("sleep");
+      if (this.el.classList.contains("sleep")) {
+        this.el.classList.remove("sleep");
+        this.opts.onSleep?.(false);
+      }
       this.timers.forEach(clearTimeout);
       this.timers = [];
       this.loops.forEach(a => {
@@ -224,6 +228,7 @@
         return;
       }
       this.el.classList.add("sleep");
+      this.opts.onSleep?.(true);
       const { eyes, lid } = this.cur();
       eyes.animate([{ transform: "scaleY(1)" }, { transform: "scaleY(.1)" }], {
         duration: 900,
