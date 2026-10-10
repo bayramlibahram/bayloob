@@ -112,6 +112,23 @@
   .say .hint, .ask .hint { font-size: 11.5px; color: var(--muted); min-height: 15px; }
   .say .hint.ok, .ask .hint.ok { color: var(--done); }
   .say .hint.err, .ask .hint.err { color: var(--waiting); }
+  /* confirm strip: what is about to happen, before it happens (Enter confirms, Esc / Edit goes back) */
+  .confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 8px 8px 12px; border-radius: 12px;
+    background: rgba(139,92,255,.09); border: 1px solid rgba(139,92,255,.35); animation: cin .15s ease-out; }
+  .confirm[hidden] { display: none; }
+  @keyframes cin { from { opacity: 0; transform: translateY(-3px); } }
+  .confirm .q { flex: 1; min-width: 0; color: var(--soft, #c9c7d4); font-size: 12.5px; overflow-wrap: anywhere; }
+  .confirm .q b { color: var(--text); }
+  .confirm code { font: 12px ui-monospace, monospace; color: var(--text); }
+  .confirm .badge { padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .confirm .badge.now { color: var(--done); background: rgba(79,213,154,.12); }
+  .confirm .badge.queue { color: var(--working); background: rgba(255,181,71,.12); }
+  .confirm .btn { padding: 6px 12px; }
+  .confirm .btn.on[type=submit] { background: var(--brand); border-color: transparent; color: #fff; }
+  .confirm .btn.on[type=submit]:hover { filter: brightness(1.1); background: var(--brand); }
+  /* the agent column is narrow: the sentence gets its own line, the badge and buttons go under it */
+  .say .confirm .q { flex: 1 0 100%; }
+  .say .confirm .badge { margin-right: auto; }
   .ask { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   .ask .box { align-items: center; }
   .ask .spark { color: #b28bff; font-size: 15px; }
@@ -202,6 +219,7 @@
         <form class="say" id="say" hidden autocomplete="off">
           <div class="box"><textarea id="sayText" rows="1" spellcheck="false"></textarea>
             <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+          <div class="confirm" id="sayConfirm" hidden></div>
           <div class="hint" id="sayHint"></div>
         </form>
       </div>
@@ -211,6 +229,7 @@
       <div class="box"><span class="spark">✦</span><input id="askText" spellcheck="false" placeholder="Ask Bayloob — what should be done?">
         <button type="submit" class="send" id="askSend" title="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
       <div class="askpick" id="askPick" hidden></div>
+      <div class="confirm" id="askConfirm" hidden></div>
       <div class="hint" id="askHint" hidden></div>
     </form>
 
@@ -231,6 +250,9 @@
   const T = {
     sayTo: (agent, project) => `Prompt to ${agent} · ${project}…`,
     sayHint: 'Enter sends · Shift+Enter new line', sayBusy: 'Busy — Enter adds it to the queue',
+    confirmSend: (agent, project) => `Send to <b>${agent}</b> · ${project}`, now: 'now', toQueue: 'to the queue',
+    confirmLaunch: (agent, cwd) => `Launch <b>${agent}</b> in <code>${cwd}</code>`, inWorktree: '⑂ new worktree',
+    edit: 'Edit', sendBtn: '✓ Send', queueBtn: '✓ Add to queue', launchBtn: '✓ Launch', confirmHint: 'Enter confirms · Esc goes back',
     sent: 'Sent ✓', queued: 'Queued ⏳ — goes out when the agent finishes its turn',
     askHint: 'Pick an agent and folder · Enter starts', startAgent: 'Start', worktree: '⑂ New worktree',
     notInstalled: 'not installed', folder: 'Folder', starting: 'Starting…', started: 'Started ✓', pickFolder: 'Choose a project folder',
@@ -334,7 +356,8 @@
       this.el = { panel: $('panel'), mascot: $('managerMascot'), status: $('status'), side: $('side'), listTitle: $('listTitle'),
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
-        saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint') };
+        saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
+        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
@@ -593,6 +616,7 @@
       this.el.say.hidden = !can;
       if (!can) { return; }
       if (this.sayFor !== s.id) {   // another session: its own empty box
+        if (this.#sayConfirming) { this.#confirmSay(false); }
         this.sayFor = s.id;
         this.el.sayText.value = '';
         this.#sayHint('');
@@ -602,6 +626,7 @@
         this.el.sayHint.textContent = BUSY.has(s.state) ? T.sayBusy : T.sayHint;
       }
       this.el.saySend.disabled = !this.el.sayText.value.trim();
+      if (this.#sayConfirming) { this.#renderSayConfirm(); } // busy may have changed: now vs queue
     }
 
     #sayHint(text, kind = '') {
@@ -612,9 +637,39 @@
       if (kind) { this.#sayTimer = setTimeout(() => { this.el.sayHint.dataset.kind = ''; this.el.sayHint.className = 'hint'; this.#renderSay(); }, 3500); }
     }
 
+    get #sayConfirming() { return !this.el.sayConfirm.hidden; }
+
+    // First Enter shows what will happen (sent now or queued); the second one sends
+    #confirmSay(on) {
+      this.el.sayConfirm.hidden = !on;
+      this.el.saySend.hidden = on;
+      this.el.sayText.readOnly = on;
+      if (on) {
+        this.#renderSayConfirm();
+        this.#sayHint(T.confirmHint);
+        this.el.sayConfirm.querySelector('[type=submit]')?.focus();
+      } else {
+        this.el.sayHint.dataset.kind = '';
+        this.#sayHint('');
+      }
+      this.#fit();
+    }
+
+    #renderSayConfirm() {
+      const s = this.sessions.find(x => x.id === this.sayFor);
+      if (!s) { return this.#confirmSay(false); }
+      const busy = BUSY.has(s.state);
+      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(s.project))}</span>
+        <span class="badge ${busy ? 'queue' : 'now'}">${busy ? T.toQueue : T.now}</span>
+        <button type="button" class="btn" data-edit>${T.edit}</button>
+        <button type="submit" class="btn on">${busy ? T.queueBtn : T.sendBtn}</button>`;
+    }
+
     async #send() {
       const text = this.el.sayText.value.trim();
       if (!text || !this.sayFor) { return; }
+      if (!this.#sayConfirming) { return this.#confirmSay(true); }
+      this.#confirmSay(false);
       this.el.saySend.disabled = true;
       const res = await this.api?.sendPrompt(this.sayFor, text);
       if (res?.ok) {
@@ -633,7 +688,8 @@
     async #askNext() {
       const text = this.el.askText.value.trim();
       if (!text) { return; }
-      if (!this.el.askPick.hidden) { return this.#askStart(); }
+      if (!this.el.askConfirm.hidden) { return this.#askStart(); }
+      if (!this.el.askPick.hidden) { return this.#confirmAsk(true); }
       const opts = await this.api?.launchOptions();
       if (!opts) { return; }
       this.askOpts = opts;
@@ -665,8 +721,29 @@
       this.el.askHint.className = `hint ${kind}`;
     }
 
+    // Between picking and launching: one line with everything that's about to start
+    #confirmAsk(on) {
+      if (on) {
+        this.askCwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
+        if (!this.askAgent || !this.askCwd) { return this.#askHint(T.pickFolder, 'err'); }
+        const a = this.askOpts.agents[this.askAgent];
+        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}</span>
+          <button type="button" class="btn" data-edit>${T.edit}</button>
+          <button type="submit" class="btn on">${T.launchBtn}</button>`;
+        this.#askHint(T.confirmHint);
+      } else {
+        this.#renderAskPick();
+        this.#askHint(T.askHint);
+      }
+      this.el.askPick.hidden = on;
+      this.el.askConfirm.hidden = !on;
+      this.el.askText.readOnly = on;
+      if (on) { this.el.askConfirm.querySelector('[type=submit]')?.focus(); } else { this.el.askText.focus(); }
+      this.#fit();
+    }
+
     async #askStart() {
-      const cwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
+      const cwd = this.askCwd;
       if (!this.askAgent || !cwd) { return this.#askHint(T.pickFolder, 'err'); }
       this.#askHint(T.starting);
       const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.el.askText.value.trim(), worktree: this.askWorktree });
@@ -681,8 +758,11 @@
 
     #askReset() {
       this.el.askText.value = '';
+      this.el.askText.readOnly = false;
       this.el.askPick.hidden = true;
       this.el.askPick.innerHTML = '';
+      this.el.askConfirm.hidden = true;
+      this.el.askConfirm.innerHTML = '';
       this.#askHint('');
       this.#fit();
     }
@@ -741,6 +821,12 @@
       this.el.settings.addEventListener('click', () => this.api?.openSettings());
       // Prompt to the selected agent: Enter sends, Shift+Enter is a new line
       this.el.say.addEventListener('submit', e => { e.preventDefault(); this.#send(); });
+      this.el.sayConfirm.addEventListener('click', e => {
+        if (e.target.closest('[data-edit]')) { this.#confirmSay(false); this.el.sayText.focus(); }
+      });
+      this.el.askConfirm.addEventListener('click', e => {
+        if (e.target.closest('[data-edit]')) { this.#confirmAsk(false); }
+      });
       this.el.sayText.addEventListener('input', () => { this.#grow(this.el.sayText); this.el.saySend.disabled = !this.el.sayText.value.trim(); });
       this.el.sayText.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.#send(); }
@@ -762,7 +848,10 @@
         if (e.target.closest?.('#say, #ask')) {
           if (e.key === 'Escape') {
             e.preventDefault();
-            if (!this.el.askPick.hidden) { this.#askReset(); } else { e.target.blur(); }
+            if (this.#sayConfirming && e.target.closest('#say')) { this.#confirmSay(false); this.el.sayText.focus(); }
+            else if (!this.el.askConfirm.hidden) { this.#confirmAsk(false); }
+            else if (!this.el.askPick.hidden) { this.#askReset(); }
+            else { e.target.blur(); }
           }
           return;
         }
