@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="../shared/theme.css">
 <style>
   :root {
-    --glass: rgba(14, 14, 18, 0.94);
+    --glass: rgba(16, 15, 21, 0.985); /* nearly solid: whatever is behind never shows through */
     --card: rgb(var(--ink) / 0.045);
     --line: rgb(var(--ink) / 0.08);
     --text: #f2f2f5;
@@ -24,24 +24,39 @@
   html, body { background: transparent; overflow: hidden; height: 100%;
     font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
     user-select: none; -webkit-font-smoothing: antialiased; }
-  body { display: flex; justify-content: center; align-items: flex-start; }
+  /* the pill floats just below the desktop's top bar (the window is placed there), with a little air */
+  body { display: flex; justify-content: center; align-items: flex-start; padding-top: 6px; }
   button { font: inherit; color: inherit; border: 0; cursor: pointer; background: none; }
 
   /* ---------- Pill ---------- */
   .pill {
+    position: relative;
     width: 340px; min-height: 58px;
     background: var(--glass);
-    border-radius: 0 0 20px 20px;
-    border: 1px solid var(--line); border-top: none;
-    box-shadow: 0 8px 28px rgb(var(--shade) / calc(.35 * var(--shade-k)));
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    box-shadow: 0 1px 0 rgb(var(--ink) / .06) inset, 0 10px 30px -6px rgb(var(--shade) / calc(.45 * var(--shade-k))),
+      0 2px 6px rgb(var(--shade) / calc(.2 * var(--shade-k)));
     overflow: hidden;
-    transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s;
+    transition: width .35s cubic-bezier(.2,.9,.3,1.2), border-radius .35s, box-shadow .4s, border-color .4s;
   }
+  /* the state shows as light, not just text: a hairline of colour along the top edge and a soft halo
+     (static — no endless animation, so an idle overlay costs nothing) */
+  .pill::before { content: ''; position: absolute; left: 18%; right: 18%; top: 0; height: 2px; border-radius: 0 0 2px 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0; transition: opacity .4s; }
+  .pill[data-state=thinking]::before, .pill[data-state=working]::before,
+  .pill[data-state=waiting]::before, .pill[data-state=done]::before { opacity: .9; }
+  .pill[data-state=thinking], .pill[data-state=working], .pill[data-state=waiting], .pill[data-state=done] {
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+    box-shadow: 0 1px 0 rgb(var(--ink) / .06) inset, 0 10px 30px -6px rgb(var(--shade) / calc(.45 * var(--shade-k))),
+      0 6px 26px -10px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  .pill:hover .tile { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgb(var(--ink) / .08), 0 5px 14px rgb(var(--shade) / calc(.35 * var(--shade-k))); }
   .pill.multi { width: 420px; } /* room for the agent stack next to the name */
-  .pill.open, .pill.has-card { width: 480px; border-radius: 0 0 26px 26px; }
+  .pill.open, .pill.has-card { width: 480px; border-radius: 22px; }
   .bar { position: relative; cursor: pointer; display: flex; align-items: center; gap: 10px; height: 58px; padding: 4px 14px 0 7px; }
   /* the manager mascot sits on its own tile, like an app icon docked to the bar */
-  .tile { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px;
+  .tile { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; transition: transform .2s, box-shadow .2s;
     background: linear-gradient(180deg, rgb(var(--ink) / .07), rgb(var(--ink) / .025));
     border: 1px solid rgb(var(--ink) / .1); box-shadow: inset 0 1px 0 rgb(var(--ink) / .06), 0 2px 8px rgb(var(--shade) / calc(.35 * var(--shade-k))); }
   .label { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -61,6 +76,19 @@
   .status.busy .dots i:nth-child(2) { animation-delay: .15s; }
   .status.busy .dots i:nth-child(3) { animation-delay: .3s; }
   @keyframes dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+  /* small bar buttons (sound, workspace panel): shown while the pill is open; the sound one also stays
+     visible while muted, so a silent Bayloob is never a mystery */
+  .barbtn { flex: none; width: 28px; height: 28px; display: none; place-items: center; border-radius: 9px; color: var(--muted);
+    transition: background .15s, color .15s; }
+  .pill.open .barbtn, .barbtn.muted { display: grid; }
+  .barbtn:hover { background: rgb(var(--ink) / .08); color: var(--text); }
+  .barbtn:disabled { opacity: .45; cursor: default; background: none; }
+  .barbtn .i { width: 17px; height: 17px; fill: currentColor; stroke: none; }
+  .barbtn .i .w { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .barbtn .off, .barbtn.muted .on { display: none; }
+  .barbtn.muted .off { display: block; }
+  .barbtn.muted { color: var(--waiting); }
+  .count + .barbtn { margin-left: 2px; }
   .chev { flex: none; width: 18px; height: 18px; color: var(--muted); transition: transform .3s, color .2s; }
   .pill.open .chev { transform: rotate(180deg); color: var(--text); }
   /* the top agent's own to-do list (TodoWrite / tasks): done / total along the bottom of the bar */
@@ -277,6 +305,8 @@
       <div class="label" id="label"><b>Bayloob</b> <span>starting…</span></div>
       <span class="status" id="status"><span class="dots"><i></i><i></i><i></i></span><span id="statusText"></span></span>
       <div class="count" id="count"></div>
+      <button type="button" class="barbtn" id="soundBtn" data-bar="sound"><svg class="i on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg><svg class="i off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="m16 9.5 5 5m0-5-5 5"/></svg></button>
+      <button type="button" class="barbtn" id="panelBtn" data-bar="panel" title="Workspace panel" aria-label="Open the workspace panel"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect class="w" x="3.5" y="4.5" width="17" height="15" rx="3"/><path class="w" d="M9.5 4.5v15M13 9.5h4M13 13h4"/></svg></button>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
       <div class="progress" id="progress"><i></i></div>
       <span class="plabel" id="plabel"></span>
@@ -328,6 +358,8 @@
     replyTo: agent => `Reply to ${agent}…`, replySend: '✓ Send', replySendTip: 'Enter, then Enter again to send',
     replyConfirm: agent => `Enter again sends it to ${agent} · Esc to edit`, replyDialog: 'Open in the prompt window',
     replyFailed: 'Could not send',
+    soundMute: 'Sounds on — click to mute', soundUnmute: 'Sounds off — click to turn on',
+    soundLocked: 'Sounds are turned off by BAYLOOB_SOUNDS=0',
     errorCopied: 'Error copied — fix it?', lines: n => `${n} line${n === 1 ? '' : 's'}`,
     fixIn: (agent, project) => `Fix in ${agent} · ${project}`, fixNew: 'New session…',
     findings: n => `⚔ Challenge report · ${n} finding${n === 1 ? '' : 's'}`, noFindings: '⚔ No problems found',
@@ -469,6 +501,9 @@
     #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
     #permSince = new Map(); // permId -> when it appeared or was last reminded about
     #ruleTimer = null;
+    #soundFeedback = false; // the bar's sound button was just used to switch sound on
+    soundOn = true;
+    soundLocked = false;
     #errorTimer = null;
     #reply = { sid: null, text: '', confirm: false, focused: false, error: '' }; // the done card's reply box
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -477,7 +512,7 @@
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), progress: $('progress'), plabel: $('plabel'), card: $('card'), list: $('list') };
+      this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), soundBtn: $('soundBtn'), progress: $('progress'), plabel: $('plabel'), card: $('card'), list: $('list') };
       // The manager falls asleep after a long idle and wakes on the next change: a soft sound for each
       this.mascot = new MascotView(this.el.mascot, { onSleep: asleep => asleep ? this.sounds.play('sleep') : this.sounds.playIfQuiet('wake') });
       this.#bindEvents();
@@ -502,7 +537,25 @@
       this.render();
     }
 
-    setSoundConfig(config) { this.sounds.configure(config); }
+    setSoundConfig(config) {
+      this.sounds.configure(config);
+      this.soundOn = !!config?.enabled;
+      this.soundLocked = !!config?.locked;
+      // Just switched on from the bar: a soft confirmation that sound is back
+      if (this.#soundFeedback && this.soundOn) { this.sounds.play('allow'); }
+      this.#soundFeedback = false;
+      this.#renderBarButtons();
+    }
+
+    #renderBarButtons() {
+      const b = this.el.soundBtn;
+      b.classList.toggle('muted', !this.soundOn);
+      b.disabled = this.soundLocked;
+      const label = this.soundLocked ? T.soundLocked : this.soundOn ? T.soundMute : T.soundUnmute;
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.setAttribute('aria-pressed', String(!this.soundOn));
+    }
 
     // One sound per update (the most important change); unanswered cards get a quiet reminder every minute
     #soundFor(list) {
@@ -565,6 +618,7 @@
       const state = top ? top.state : 'idle';
       const dancing = this.music?.playing && (state === 'idle' || state === 'done');
       document.documentElement.style.setProperty('--accent', COLORS[state]);
+      this.el.pill.dataset.state = state;
       // The manager mascot shows the most urgent state across all sessions
       this.mascot.set(MANAGER, dancing ? 'dance' : state);
 
@@ -962,6 +1016,15 @@
     async #onClick(e) {
       // The deaf warning opens Settings (where hooks and the extension are installed)
       if (e.target.closest('[data-act=settings]')) { return this.api?.openSettings(); }
+      // The bar's own buttons: sound on/off, workspace panel (they don't open or close the list)
+      const bb = e.target.closest('[data-bar]');
+      if (bb) {
+        e.stopPropagation();
+        if (bb.disabled) { return; }
+        if (bb.dataset.bar === 'sound') { this.#soundFeedback = !this.soundOn; this.api?.toggleSounds(); }
+        if (bb.dataset.bar === 'panel') { this.api?.togglePanel(); }
+        return;
+      }
       // A click on the top bar (mascot / label) opens the workspace panel
       if (e.target.closest('.bar')) { return this.api?.togglePanel(); }
       const b = e.target.closest('[data-act]');
