@@ -50,13 +50,22 @@ class HookInstaller {
   status() {
     try {
       const hooks = JSON.parse(fs.readFileSync(this.settingsFile, "utf8")).hooks || {};
-      const isOurs = cmd => /bayloob-hook|bayo-hook|scripts[\\/]hook\.js/.test(cmd || "");
-      const events = EVENTS.filter(ev =>
-        (hooks[ev] || []).some(g => (g.hooks || []).some(h => isOurs(h.command)))
+      const isOurs = cmd => /bayloob-hook|bayo-hook|(scripts|hooks)[\\/]hook\.js/.test(cmd || "");
+      const ours = EVENTS.flatMap(ev =>
+        (hooks[ev] || []).flatMap(g =>
+          (g.hooks || []).filter(h => isOurs(h.command)).map(h => ({ ev, cmd: h.command }))
+        )
       );
-      return { installed: events.length > 0, complete: events.length === EVENTS.length, events };
+      const events = [...new Set(ours.map(o => o.ev))];
+      const commands = [...new Set(ours.map(o => o.cmd))];
+      return {
+        installed: events.length > 0,
+        complete: events.length === EVENTS.length,
+        events,
+        commands,
+      };
     } catch {
-      return { installed: false, complete: false, events: [] };
+      return { installed: false, complete: false, events: [], commands: [] };
     }
   }
 
