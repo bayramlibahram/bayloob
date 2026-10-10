@@ -158,6 +158,10 @@
   .row.last::before { bottom: 50%; }
   .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* the agent's latest output, under its name */
+  /* uncommitted changes in the session's repo */
+  .row .diff { flex: none; font: 600 11.5px ui-monospace, "Ubuntu Mono", monospace; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.05); }
+  .row .diff .add { color: var(--done); }
+  .row .diff .del { color: var(--waiting); }
   .row .out { display: block; color: #8b8b96; font-size: 11.5px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .agent { color: var(--muted); font-size: 12px; }
   .row .st { font-size: 12px; }
@@ -213,6 +217,7 @@
     prev: 'Previous', playPause: 'Play / pause', next: 'Next',
     deaf: { 'not-installed': 'no hooks', broken: 'hook missing', unheard: 'agent silent' },
     deafTip: 'Bayloob can’t hear your agents — click to open Settings',
+    diffTip: d => `Uncommitted in this repo: ${d.files} file${d.files === 1 ? '' : 's'} changed${d.untracked ? ` (${d.untracked} new)` : ''}`,
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
@@ -323,6 +328,7 @@
     confirmStop = null;    // session id armed for stopping
     health = { ok: true, issues: [] };
     output = {};           // session id -> latest output line (only while the list is open)
+    diffs = {};            // session id -> { files, added, deleted, untracked } of its repo
     #permScroll = new Map(); // permId -> scrollTop of its command box, kept across re-renders
     #permRead = new Set();   // permIds whose whole command has been scrolled through
     #answers = new Map();    // permId -> Map(question -> Set(labels)), kept across re-renders
@@ -350,6 +356,8 @@
     setMusic(np) { this.music = np; this.render(); }
 
     setOutput(lines) { this.output = lines || {}; this.render(); }
+
+    setDiffs(diffs) { this.diffs = diffs || {}; this.render(); }
 
     setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
 
@@ -519,6 +527,7 @@
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
           <span class="name">${esc(s.project)} <span class="agent">${esc(Agent.displayName(s.agent))}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}</span>
+          ${this.#diffHtml(s.id)}
           <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}</span>
           ${this.#rowControls(s)}</div>`).join('');
     }
@@ -532,6 +541,13 @@
         s.managed ? `<button class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
         `<button class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}">${ICON_TERM}</button>`,
       ].join('');
+    }
+
+    // "+42 −7" for the session's repo; nothing when it's clean or not a repo
+    #diffHtml(id) {
+      const d = this.diffs[id];
+      if (!d || (!d.added && !d.deleted && !d.files)) { return ''; }
+      return `<span class="diff" title="${esc(T.diffTip(d))}"><span class="add">+${d.added}</span> <span class="del">−${d.deleted}</span></span>`;
     }
 
     #newSessionHtml() {
@@ -637,6 +653,7 @@
     window.bayloobAPI.onMusic(np => view.setMusic(np));
     window.bayloobAPI.onHealth?.(h => view.setHealth(h));
     window.bayloobAPI.onOutput?.(lines => view.setOutput(lines));
+    window.bayloobAPI.onDiffs?.(diffs => view.setDiffs(diffs));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };
