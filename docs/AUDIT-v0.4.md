@@ -22,7 +22,7 @@ Status: **done** = works as specified · **partial** = exists, gaps listed · **
 | F13 | Collision radar | partial | `sessions/collision-radar.js:14`, `windows/notifier.js:18` | "Move to new worktree" launches a **fresh** session there; moving the running agent (stash/patch) not done — spec asks to propose git steps first |
 | F14 | Reply without terminal | partial | `agents/prompt-delivery.js` (tmux → typed/queued, else clipboard + focus) | kitty / wezterm direct send-text: **blocked** — neither is installed here, flags unverifiable (rule 5) |
 | F15 | Workspace panel | done | `panel/index.html:357`, `workspace/workspace.service.js:12`, Docker `preload/panel.js:15` | Window list via GNOME extension (no `wmctrl` on this machine; X11 path not needed) |
-| F16 | Error → fix prompt | partial | `agents/error-prompt.js:16`, `app/bayloob-app.js:439` | Clipboard is read only when the prompt window opens; no opt-in watcher + "Fix this error?" toast |
+| F16 | Error → fix prompt | done | `agents/clipboard-watcher.js`, `error-prompt.js` (`looksLikeStackTrace`), error card in `overlay/index.html`, Settings → Watch clipboard | — |
 | F17 | Sounds | done | `shared/sounds.js` (`toggles`), Settings → "Choose sounds…", `config/settings.js` (`soundToggles`) | — |
 | F18 | Music | done | `music/music-watcher.js:35`, controls `overlay/index.html:831` | — |
 | F19 | Sleep / wake | done | `shared/novi.js:40` (`sleepAfter`, `onSleep`) | — |
