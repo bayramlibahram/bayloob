@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- The agent's prompt box in the panel: `/` opens shortcuts (`/test`, `/review`, `/explain`, `/continue`)
+  that fill in editable text; ↑ / ↓ in an empty box bring back earlier prompts to that agent; prompts
+  waiting for a busy agent are listed under the box, each removable.
 - Agent console in the workspace panel: the selected agent's turns read from its own transcript — your
   prompt, each step (Read / Edit / Bash… with the file or command, ✓ / ✗ and duration; consecutive reads
   folded into "Read · 3 files"), its answer — for Claude Code and Codex. Files are read incrementally

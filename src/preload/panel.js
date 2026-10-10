@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld("panelAPI", {
   docker: (action, id) => ipcRenderer.invoke("panel:docker", action, id),
   dockerLogs: id => ipcRenderer.invoke("panel:docker-logs", id),
   console: sessionId => ipcRenderer.invoke("panel:console", sessionId),
+  queue: sessionId => ipcRenderer.invoke("panel:queue", sessionId),
+  unqueue: (sessionId, index) => ipcRenderer.invoke("launcher:unqueue", sessionId, index),
   launchable: () => ipcRenderer.invoke("panel:launchable"),
   focus: sessionId => ipcRenderer.invoke("focus", sessionId),
   openWorkspace: sessionId => ipcRenderer.invoke("panel:open-workspace", sessionId),

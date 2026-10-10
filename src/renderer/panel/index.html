@@ -109,6 +109,22 @@
      They sit outside the parts that re-render on every event, so typing is never lost. */
   .say { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
   .say[hidden], .askpick[hidden] { display: none; }
+  .say { position: relative; }
+  /* the / shortcuts: a small menu just above the box */
+  .slash { position: absolute; left: 12px; right: 12px; bottom: calc(100% - 4px); display: flex; flex-direction: column; padding: 4px;
+    border-radius: 12px; background: var(--glass); border: 1px solid var(--line); box-shadow: 0 8px 24px rgb(var(--shade) / calc(.4 * var(--shade-k))); z-index: 5; }
+  .slash[hidden] { display: none; }
+  .slash button { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 8px; text-align: left; font-size: 12.5px; }
+  .slash button.on, .slash button:hover { background: rgba(139,92,255,.16); }
+  .slash code { font: 600 12px ui-monospace, monospace; color: var(--brand-soft); }
+  .slash span { color: var(--soft); }
+  .pqueue { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+  .pqueue[hidden] { display: none; }
+  .pqueue .cap { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .pqueue li:not(.cap) { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 9px; border-radius: 8px; background: rgb(var(--ink) / .04); font-size: 12px; }
+  .pqueue li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--softer); }
+  .pqueue li button { width: 20px; height: 20px; border-radius: 6px; color: var(--muted); }
+  .pqueue li button:hover { background: rgba(255,93,108,.15); color: var(--waiting); }
   .box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px;
     background: rgb(var(--ink) / .05); border: 1px solid var(--line); transition: border-color .15s; }
   .box:focus-within { border-color: rgba(139,92,255,.55); }
@@ -269,10 +285,12 @@
       <div class="detailcol">
         <section class="detail" id="detail"></section>
         <form class="say" id="say" hidden autocomplete="off">
+          <div class="slash" id="slash" hidden role="listbox"></div>
           <div class="box"><textarea id="sayText" rows="1" spellcheck="false"></textarea>
             <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
           <div class="confirm" id="sayConfirm" hidden></div>
           <div class="hint" id="sayHint"></div>
+          <ul class="pqueue" id="sayQueue" hidden></ul>
         </form>
       </div>
     </div>
@@ -309,6 +327,7 @@
     finishedIn: (agent, project) => `<span class="fhead"><b>${agent}</b> finished · ${project}</span>`, finishedMore: n => `+${n} more`,
     reply: 'Reply', dismissTip: 'Dismiss',
     continued: 'Continued from earlier', nFiles: n => `${n} files`,
+    queuedN: n => `Waiting for this agent · ${n}`, unqueueTip: 'Remove from the queue',
     sent: 'Sent ✓',
     handoff: '⇄ Continue in Bayloob', handoffTip: 'Move this conversation into tmux, so replies go straight in (you close it in its terminal once)',
     handoffStarted: 'Close it in its terminal (/exit) — Bayloob continues it in tmux',
@@ -368,6 +387,14 @@
   const RESUMABLE = new Set(['claude', 'codex']); // agents Bayloob can continue in tmux (--resume / resume)
   const emptyHtml = (icon, line, hint, size = '') =>
     `<div class="empty ${size}"><span class="ei">${icon || ''}</span><span><b>${line}</b><small>${hint}</small></span></div>`;
+  const HISTORY_MAX = 30;
+  // Prompt shortcuts: "/" in the agent's prompt box; the text goes into the box, to edit or send
+  const SLASH = [
+    { cmd: '/test', label: 'Run the tests and fix failures', text: "Run the project's tests and fix any failures." },
+    { cmd: '/review', label: 'Review the last change', text: 'Review your last change: look for bugs, edge cases and missing tests, then fix what you find.' },
+    { cmd: '/explain', label: 'Explain the last change', text: 'Briefly explain what you changed in your last turn and why.' },
+    { cmd: '/continue', label: 'Carry on', text: 'Continue.' },
+  ];
   const CONSOLE_MS = 2000; // how often the selected agent's console is refreshed
   const CONSOLE_TURNS = 8; // turns shown (the newest)
   const STEP_ICON = { bash: '›_', read: '◔', edit: '✎', write: '＋', search: '⌕', web: '◍', todo: '☑', agent: '⧉', question: '?', tool: '•' };
@@ -461,6 +488,10 @@
     #flashTimer = null;
     #sayTimer = null;
     #consoles = new Map(); // session id -> { turns | unavailable, at }
+    #histories = new Map(); // session id -> prompts sent, newest first
+    #histPos = -1;
+    #slashAt = 0;
+    #queueAt = 0;
     #consoleLoading = new Set();
     #prevStates = new Map(); // session id -> state at the previous update
     finished = [];         // ids of agents that just finished, newest first (the banner shows the first)
@@ -473,7 +504,7 @@
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
         saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
-        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished') };
+        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
@@ -845,7 +876,11 @@
         this.sayFor = s.id;
         this.el.sayText.value = '';
         this.#sayHint('');
+        this.#histPos = -1;
+        this.#renderQueue([]);
+        this.#queueAt = 0;
       }
+      this.#loadQueue();
       this.el.sayText.placeholder = T.sayTo(Agent.displayName(s.agent), s.project);
       if (!this.el.sayHint.dataset.kind) {
         this.el.sayHint.textContent = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
@@ -902,13 +937,76 @@
       this.el.saySend.disabled = true;
       const res = await this.api?.sendPrompt(this.sayFor, text);
       if (res?.ok) {
+        this.#remember(this.sayFor, text);
         this.el.sayText.value = '';
         this.#grow(this.el.sayText);
+        this.#loadQueue(true);
         this.#sayHint(res.via === 'clipboard' ? T.copiedPaste : res.queued ? T.queued : T.sent, 'ok');
       } else {
         this.#sayHint(res?.error || 'Could not send', 'err');
       }
       this.#renderSay();
+    }
+
+    // ---------- prompt box helpers: / shortcuts, history, queue ----------
+
+    // "/" at the start of an empty box opens the shortcuts; picking one fills in its text, to edit or send
+    #renderSlash() {
+      const v = this.el.sayText.value;
+      const open = /^\/\w*$/.test(v) && !this.#sayConfirming;
+      const list = open ? SLASH.filter(c => c.cmd.startsWith(v.toLowerCase())) : [];
+      this.el.slash.hidden = !list.length;
+      if (!list.length) { return; }
+      this.#slashAt = Math.min(this.#slashAt, list.length - 1);
+      this.el.slash.innerHTML = list.map((c, i) => `<button type="button" role="option" aria-selected="${i === this.#slashAt}" data-slash="${c.cmd}"
+        class="${i === this.#slashAt ? 'on' : ''}"><code>${c.cmd}</code><span>${esc(c.label)}</span></button>`).join('');
+    }
+
+    #applySlash(cmd) {
+      const c = SLASH.find(x => x.cmd === cmd);
+      if (!c) { return; }
+      this.el.sayText.value = c.text;
+      this.el.slash.hidden = true;
+      this.#grow(this.el.sayText);
+      this.el.saySend.disabled = false;
+      this.el.sayText.focus();
+      this.el.sayText.setSelectionRange(c.text.length, c.text.length);
+    }
+
+    // Prompts sent to each session, newest first (↑ / ↓ in an empty box walk through them)
+    #remember(id, text) {
+      const h = this.#histories.get(id) || [];
+      this.#histories.set(id, [text, ...h.filter(t => t !== text)].slice(0, HISTORY_MAX));
+      this.#histPos = -1;
+    }
+
+    #walkHistory(step) {
+      const h = this.#histories.get(this.sayFor) || [];
+      if (!h.length) { return false; }
+      const pos = Math.max(-1, Math.min(h.length - 1, this.#histPos + step));
+      if (pos === this.#histPos) { return true; }
+      this.#histPos = pos;
+      this.el.sayText.value = pos === -1 ? '' : h[pos];
+      this.#grow(this.el.sayText);
+      this.el.saySend.disabled = !this.el.sayText.value.trim();
+      return true;
+    }
+
+    // Prompts waiting for this agent (it's busy): listed under the box, each removable
+    async #loadQueue(now = false) {
+      const id = this.sayFor;
+      if (!id || !this.api?.queue || (!now && Date.now() - this.#queueAt < CONSOLE_MS)) { return; }
+      this.#queueAt = Date.now();
+      const list = (await this.api.queue(id).catch(() => [])) || [];
+      if (id !== this.sayFor) { return; }
+      this.#renderQueue(list);
+    }
+
+    #renderQueue(list) {
+      this.el.sayQueue.hidden = !list.length;
+      this.el.sayQueue.innerHTML = list.length
+        ? `<li class="cap">${T.queuedN(list.length)}</li>${list.map((t, i) => `<li><span title="${esc(t)}">${esc(t)}</span><button type="button" data-unqueue="${i}" title="${T.unqueueTip}" aria-label="${T.unqueueTip}">×</button></li>`).join('')}`
+        : '';
     }
 
     #grow(ta) { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`; }
@@ -1093,9 +1191,42 @@
       this.el.askConfirm.addEventListener('click', e => {
         if (e.target.closest('[data-edit]')) { this.#confirmAsk(false); }
       });
-      this.el.sayText.addEventListener('input', () => { this.#grow(this.el.sayText); this.el.saySend.disabled = !this.el.sayText.value.trim(); });
+      this.el.sayText.addEventListener('input', () => {
+        this.#histPos = -1;
+        this.#slashAt = 0;
+        this.#renderSlash(); this.#grow(this.el.sayText); this.el.saySend.disabled = !this.el.sayText.value.trim(); });
       this.el.sayText.addEventListener('keydown', e => {
+        // The / shortcuts menu takes the arrows, Enter / Tab and Esc while it's open
+        if (!this.el.slash.hidden) {
+          const n = this.el.slash.children.length;
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            this.#slashAt = (this.#slashAt + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+            return this.#renderSlash();
+          }
+          if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            return this.#applySlash(this.el.slash.children[this.#slashAt]?.dataset.slash);
+          }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.el.slash.hidden = true; return; }
+        }
+        // ↑ / ↓ in an empty box (or while walking the history) bring back earlier prompts
+        const ta = this.el.sayText;
+        if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && (!ta.value || this.#histPos !== -1) && !this.#sayConfirming) {
+          if (this.#walkHistory(e.key === 'ArrowUp' ? 1 : -1)) { e.preventDefault(); return; }
+        }
+        // Enter or Ctrl+Enter sends; Shift+Enter is a new line
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.#send(); }
+      });
+      this.el.slash.addEventListener('mousedown', e => {
+        const b = e.target.closest('[data-slash]');
+        if (b) { e.preventDefault(); this.#applySlash(b.dataset.slash); }
+      });
+      this.el.sayQueue.addEventListener('click', async e => {
+        const b = e.target.closest('[data-unqueue]');
+        if (!b || !this.sayFor) { return; }
+        b.disabled = true;
+        this.#renderQueue((await this.api?.unqueue(this.sayFor, Number(b.dataset.unqueue))) || []);
       });
       // Ask Bayloob: Enter → pick agent + folder → Enter starts
       this.el.ask.addEventListener('submit', e => { e.preventDefault(); this.#askNext(); });

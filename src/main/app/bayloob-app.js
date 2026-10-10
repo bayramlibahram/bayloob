@@ -1036,6 +1036,7 @@ class BayloobApp {
         return { ok: false, error: e.message };
       }
     });
+    ipcMain.handle("panel:queue", (_e, sessionId) => this.queue.list(String(sessionId)));
     ipcMain.handle("launcher:unqueue", (_e, sessionId, index) => {
       this.queue.remove(String(sessionId), Number(index));
       this.overlay.send("queues", this.queue.counts());
