@@ -195,6 +195,7 @@
     unhealthyN: n => `${n} unhealthy`, allHealthy: 'All healthy',
     needsExtension: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows.',
     start: 'Start', stop: 'Stop', restart: 'Restart', launched: name => `Launching ${name}…`,
+    waited: 'Agents waited', waitedTip: 'Today, agents spent this long waiting on your permission and question cards (screen-locked time not counted)',
     cpu: 'CPU', memory: 'Memory', metersTip: 'Apps in this view and the processes they started',
   };
   const STATUS_COLOR = { active: 'var(--done)', running: 'var(--thinking)', healthy: 'var(--done)', unhealthy: 'var(--waiting)', stopped: 'var(--idle)',
@@ -287,6 +288,7 @@
     }
     setSessions(list) { this.sessions = list; this.render(); }
     setWorkspace(snap) { this.apps = snap.apps; this.extension = snap.extension; this.render(); }
+    setBlocked(info) { this.blocked = info; this.#renderMeters(); }
     setStats(stats) { this.stats = stats; this.#renderMeters(); }
     setStatus(status) { this.status = status; this.#renderStatus(); }
 
@@ -460,7 +462,10 @@
         }
       }
       this.el.meters.title = T.metersTip;
-      this.el.meters.innerHTML = `<span class="meter">${ICONS.cpu}${T.cpu}<b>${pct(cpu)}</b></span><span class="sep"></span><span class="meter">${ICONS.mem}${T.memory}<b>${memory == null ? '—' : formatBytes(memory)}</b></span>`;
+      const waited = this.blocked?.today
+        ? `<span class="sep"></span><span class="meter" title="${T.waitedTip}">${ICONS.clock}${T.waited}<b>${formatWait(this.blocked.today)}</b></span>`
+        : '';
+      this.el.meters.innerHTML = `<span class="meter">${ICONS.cpu}${T.cpu}<b>${pct(cpu)}</b></span><span class="sep"></span><span class="meter">${ICONS.mem}${T.memory}<b>${memory == null ? '—' : formatBytes(memory)}</b></span>${waited}`;
     }
 
     #flash(text) {
@@ -561,6 +566,7 @@
     panelAPI.onStats(stats => view.setStats(stats));
     panelAPI.onStatus(status => view.setStatus(status));
     panelAPI.onWorkspace(snap => view.setWorkspace(snap));
+    panelAPI.onBlocked?.(info => view.setBlocked(info));
   } else {
     window.__demo = view; // opened in a plain browser: drive it from the console
   }
