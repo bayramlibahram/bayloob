@@ -4,7 +4,7 @@
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { WindowService } = require('./windows');
+const { WindowService } = require('./window.service');
 
 const run = (cmd, args) => new Promise(resolve => {
   execFile(cmd, args, { timeout: 3000 }, (err, stdout) => resolve({ ok: !err, out: String(stdout || '') }));
@@ -26,8 +26,8 @@ function pidChain(pid) {
 
 /** Tries each strategy in order (kitty → WezTerm → tmux → GNOME extension → X11) until one raises the window. */
 class TerminalFocuser {
-  constructor(scriptsDir, windows = new WindowService()) {
-    this.x11Script = path.join(scriptsDir, 'x11-focus.py');
+  constructor(toolsDir, windows = new WindowService()) {
+    this.x11Script = path.join(toolsDir, 'x11-focus.py');
     this.windows = windows;
   }
 

@@ -1,6 +1,6 @@
 // CPU and memory used by the agents Bayloob is watching: each agent process plus everything it started
 // (shells, test runners, language servers…). Read from /proc, so Linux only; elsewhere it reports nothing.
-const { ProcessTable } = require('./workspace/processes');
+const { ProcessTable } = require('../../infrastructure/system/process-table');
 
 class AgentStats {
   #table = new ProcessTable();

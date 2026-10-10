@@ -1,5 +1,5 @@
 const { BrowserWindow, screen } = require('electron');
-const path = require('path');
+const paths = require('../app/paths');
 
 /**
  * Base for Bayloob's focusable popups (launcher, workspace panel, settings): frameless, transparent,
@@ -11,7 +11,7 @@ class PopupWindow {
   #ready = null;
   #keepOpen = 0;   // > 0 while a dialog/menu of ours is open, so the resulting blur doesn't hide us
 
-  /** opts: { name, page, preload, width, height, placement: 'center' | 'top' } */
+  /** opts: { name, width, height, placement: 'center' | 'top' } — `name` picks renderer/<name>/ and preload/<name>.js */
   constructor(opts) {
     this.opts = opts;
   }
@@ -38,11 +38,11 @@ class PopupWindow {
       skipTaskbar: true,
       alwaysOnTop: true,
       show: false,
-      webPreferences: { preload: path.join(__dirname, this.opts.preload) },
+      webPreferences: { preload: paths.preload(this.opts.name) },
     });
     this.win.on('blur', () => { if (!this.#keepOpen) this.hide(); });
     this.win.on('closed', () => { this.win = null; this.#ready = null; });
-    this.#ready = this.win.loadFile(path.join(__dirname, this.opts.page));
+    this.#ready = this.win.loadFile(paths.page(this.opts.name));
   }
 
   async show(state) {

@@ -2,8 +2,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { HookInstaller } = require('../scripts/install-hooks');
-const { GnomeExtension } = require('./gnome-extension');
+const { HookInstaller } = require('../modules/hooks/hook-installer');
+const { GnomeExtension } = require('../infrastructure/desktop/gnome-extension');
 
 const AUTOSTART_FILE = path.join(os.homedir(), '.config', 'autostart', 'bayloob.desktop');
 
@@ -33,13 +33,10 @@ async function installExtension(dir) {
   }
 }
 
-/**
- * Returns an exit code (or a promise of one) when a CLI flag was handled, or null to start the app normally.
- * The extension lives next to the scripts: repo `gnome-extension/` or packaged `resources/gnome-extension`.
- */
-function runCli(args, scriptsDir) {
-  if (args.includes('--install-hooks')) return new HookInstaller(scriptsDir).install() ? 0 : 1;
-  if (args.includes('--install-extension')) return installExtension(path.join(scriptsDir, '..', 'gnome-extension'));
+/** Returns an exit code (or a promise of one) when a CLI flag was handled, or null to start the app normally. */
+function runCli(args, { hooksDir, extensionDir }) {
+  if (args.includes('--install-hooks')) return new HookInstaller(hooksDir).install() ? 0 : 1;
+  if (args.includes('--install-extension')) return installExtension(extensionDir);
   if (args.includes('--no-autostart')) { setAutostart(false); return 0; }
   if (args.includes('--autostart')) { setAutostart(true); return 0; }
   return null;

@@ -1,4 +1,4 @@
-// Shared by the overlay (index.html) and the workspace panel (panel.html): agent palette and small helpers.
+// Shared by the renderer pages (overlay, panel, launcher): agent palette and small helpers.
 // Loaded as a classic script, so these names are globals for the page's own script.
 
 // Every agent gets its own colors — same shape, different body.
@@ -6,6 +6,8 @@
 // "manager" is Bayloob itself: the main mascot, always purple; agent sessions are its subs.
 // Keep the agent colors in sync with src/agents.js.
 const MANAGER = 'manager';
+// Mascot packs, relative to a page in renderer/<page>/index.html
+const PACKS_URL = '../../assets/packs';
 const AGENTS = {
   manager: { name: 'Bayloob',     pack: 'purple', color: '#8b5cff', top: ['#d07bff', '#a24bf7', '#7a2cec'], bot: ['#8a45f5', '#5a24e0', '#2f12a8'] },
   claude:  { name: 'Claude Code', pack: 'coral',  color: '#ff7a5c', top: ['#ffb39e', '#ff7a5c', '#e0502f'], bot: ['#f0704f', '#c9452a', '#8c2a17'] },
@@ -31,7 +33,7 @@ class Agent {
   // A still image of the agent's raster mascot (stacked idle layers) — cheap enough for every list row
   static thumb(agent, state = 'idle') {
     const pack = Agent.palette(agent).pack;
-    return `<div class="thumb">${['body', 'lid', 'visor', 'eyes'].map(p => `<img src="packs/${pack}/${state}-${p}.png" alt="">`).join('')}</div>`;
+    return `<div class="thumb">${['body', 'lid', 'visor', 'eyes'].map(p => `<img src="${PACKS_URL}/${pack}/${state}-${p}.png" alt="">`).join('')}</div>`;
   }
 }
 

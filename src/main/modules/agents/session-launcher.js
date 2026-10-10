@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { agentCommand } = require('./agents');
-const { TerminalLauncher } = require('./terminal');
+const { TerminalLauncher } = require('../../infrastructure/system/terminal-launcher');
 
 const PREFIX = 'bl-';
 

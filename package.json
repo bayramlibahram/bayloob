@@ -1,7 +1,7 @@
 {
   "name": "bayloob",
   "productName": "Bayloob",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A local status overlay for AI coding agents (Claude Code, Codex, Gemini CLI)",
   "homepage": "https://baynovix.com",
   "author": {
@@ -9,7 +9,7 @@
     "email": "info@baynovix.com"
   },
   "license": "MIT",
-  "main": "src/main.js",
+  "main": "src/main/index.js",
   "packageManager": "bun@1.4.0",
   "scripts": {
     "start": "electron .",
@@ -31,18 +31,16 @@
     "executableName": "bayloob",
     "files": [
       "src/**/*",
-      "scripts/install-hooks.js",
       "package.json"
     ],
     "extraResources": [
       {
-        "from": "scripts",
-        "to": "scripts",
-        "filter": [
-          "bayloob-hook",
-          "hook.js",
-          "x11-focus.py"
-        ]
+        "from": "resources/hooks",
+        "to": "hooks"
+      },
+      {
+        "from": "resources/tools",
+        "to": "tools"
       },
       {
         "from": "gnome-extension",

@@ -1,6 +1,7 @@
 const { Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
-const { AGENTS } = require('./agents');
+const { ASSETS_DIR } = require('../app/paths');
+const { AGENTS } = require('../modules/agents/agents');
 
 /** Tray icon with New session, one-click relaunch of recent projects, and Quit. */
 class TrayMenu {
@@ -12,7 +13,7 @@ class TrayMenu {
   }
 
   create() {
-    const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png')).resize({ width: 22, height: 22 });
+    const icon = nativeImage.createFromPath(path.join(ASSETS_DIR, 'tray.png')).resize({ width: 22, height: 22 });
     this.tray = new Tray(icon);
     this.tray.setToolTip('Bayloob');
     return this;

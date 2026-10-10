@@ -176,9 +176,9 @@
     <div class="list" id="list"></div>
   </div>
 
-<script src="ui-common.js"></script>
-<script src="packs/meta.js"></script>
-<script src="novi.js"></script>
+<script src="../shared/ui-common.js"></script>
+<script src="../../assets/packs/meta.js"></script>
+<script src="../shared/novi.js"></script>
 <script>
   // Every UI string lives here — a language switcher later only needs to swap this object
   const T = {
@@ -286,7 +286,7 @@
         // A new agent color: replace the instance (each one runs its own frame loop)
         this.#novi?.destroy();
         this.#pack = pack;
-        this.#novi = new Novi(this.el, NOVI_META[pack], `packs/${pack}`, { sleepAfter: SLEEP_AFTER_MS });
+        this.#novi = new Novi(this.el, NOVI_META[pack], `${PACKS_URL}/${pack}`, { sleepAfter: SLEEP_AFTER_MS });
       }
       this.#novi.set(state);
     }

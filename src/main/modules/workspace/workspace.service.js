@@ -4,7 +4,7 @@
 const { AppCatalog } = require('./app-catalog');
 const { RunningApps } = require('./running-apps');
 const { FirefoxSession } = require('./firefox-session');
-const { DockerService } = require('./docker');
+const { DockerService } = require('./docker.service');
 
 const HISTORY_MAX = 8;
 const DOCKER_ID = 'docker';
@@ -92,9 +92,9 @@ class WorkspaceService {
 
 module.exports = { WorkspaceService };
 
-// `node src/workspace/workspace-service.js` prints a snapshot — handy to check what Bayloob sees
+// `node src/main/modules/workspace/workspace.service.js` prints a snapshot — handy to check what Bayloob sees
 if (require.main === module) {
-  const { WindowService } = require('../windows');
+  const { WindowService } = require('../../infrastructure/desktop/window.service');
   const ws = new WorkspaceService({ windows: new WindowService() });
   (async () => {
     await ws.snapshot();

@@ -1,5 +1,5 @@
 const { app, BrowserWindow, screen } = require('electron');
-const path = require('path');
+const paths = require('../app/paths');
 
 const IS_LINUX = process.platform === 'linux';
 const WIDTH = 440, HEIGHT = 560; // window size (the visible pill is smaller, see index.html)
@@ -29,7 +29,7 @@ class OverlayWindow {
       focusable: false,
       alwaysOnTop: true,
       type: IS_LINUX ? 'dock' : undefined, // stay above the GNOME top bar
-      webPreferences: { preload: path.join(__dirname, 'preload.js') },
+      webPreferences: { preload: paths.preload('overlay') },
     });
 
     this.win.setAlwaysOnTop(true, 'screen-saver');
@@ -44,14 +44,14 @@ class OverlayWindow {
       // macOS/Windows: transparent areas pass clicks through while mouse moves still reach the renderer
       this.win.setIgnoreMouseEvents(true, { forward: true });
     }
-    this.win.loadFile(path.join(__dirname, 'index.html'), { query: { mascot: this.mascot } });
+    this.win.loadFile(paths.page('overlay'), { query: { mascot: this.mascot } });
     return this;
   }
 
   /** Switches the mascot style ('novi' | 'svg') by reloading the page. */
   setMascot(mascot) {
     this.mascot = mascot;
-    this.win?.loadFile(path.join(__dirname, 'index.html'), { query: { mascot } });
+    this.win?.loadFile(paths.page('overlay'), { query: { mascot } });
   }
 
   onLoad(fn) { this.win?.webContents.on('did-finish-load', fn); }

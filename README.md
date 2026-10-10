@@ -192,7 +192,7 @@ The session list shows a still image of each agent's mascot, so a long list stay
 
 **Prefer the original flat mascot?** Run `BAYLOOB_MASCOT=svg bayloob`.
 
-**Adding a color:** each pack in `src/packs/<color>/` holds 5 states × 4 layers (256×256 PNG) and a
+**Adding a color:** each pack in `src/assets/packs/<color>/` holds 5 states × 4 layers (256×256 PNG) and a
 `layers.json`. After adding or re-cutting one, run `bun scripts/build-pack-meta.js`.
 
 ## Getting started
@@ -231,7 +231,7 @@ anything, and is safe to run again.
 
 ```toml
 # ~/.codex/config.toml
-notify = ["/opt/Bayloob/resources/scripts/bayloob-hook", "codex"]
+notify = ["/opt/Bayloob/resources/hooks/bayloob-hook", "codex"]
 ```
 
 For Gemini CLI, add the same command with `gemini` as the argument to the `hooks` section of
@@ -240,12 +240,13 @@ For Gemini CLI, add the same command with `gemini` as the argument to the `hooks
 ## How it works
 
 ```
-Claude Code hook ──┐                                               ┌── focus.js  (raise the terminal)
-Codex notify ──────┼─► bayloob-hook ──HTTP──► server.js ───────────┼── music.js  (MPRIS via gdbus)
-Gemini CLI hook ───┘   (pure bash)   ◄─decision─                   └── IPC ──► index.html (mascot, cards)
+Claude Code hook ──┐                                        ┌── TerminalFocuser   (raise the terminal)
+Codex notify ──────┼─► bayloob-hook ──HTTP──► EventServer ───┼── MusicWatcher      (MPRIS via gdbus)
+Gemini CLI hook ───┘   (pure bash)   ◄─decision─  │          └── IPC ──► renderer/overlay (mascot, cards)
+                                                SessionStore ──► renderer/panel (workspace control)
 
-launcher.html ──IPC──► session-launcher.js ──► tmux new-session ──► terminal.js (opens a window)
-                                           ──► tmux send-keys / kill-session
+renderer/launcher ──IPC──► SessionLauncher ──► tmux new-session ──► TerminalLauncher (opens a window)
+                                            ──► tmux send-keys / kill-session
 ```
 
 The hook is a dependency-free bash script that talks to `127.0.0.1:7777` over `/dev/tcp`.
@@ -253,41 +254,35 @@ A normal event costs about 10 ms. Nothing leaves your machine, and the server on
 local processes: requests from browser pages (an `Origin` header) or from a foreign `Host`
 (DNS rebinding) are refused.
 
-| File | Class | Role |
-|---|---|---|
-| `src/main.js` | `BayloobApp` | Entry point. Wires everything below to the windows over IPC |
-| `src/session-launcher.js` | `SessionLauncher` | Starts agents in tmux; sends prompts, stops, reattaches |
-| `src/terminal.js` | `TerminalLauncher` | Opens a command in whichever terminal emulator you have |
-| `src/launcher-window.js` | `LauncherWindow` | The focusable popup for new sessions and prompts (`launcher.html`) |
-| `src/recent-projects.js` | `RecentProjects` | Remembers where you launched agents |
-| `src/tray.js` | `TrayMenu` | Tray icon: new session, relaunch recent, quit |
-| `src/agents.js` | — | The agents Bayloob can launch and their command lines |
-| `src/server.js` | `EventServer`, `SessionStore` | HTTP endpoint for hooks; sessions and the permission queue |
-| `src/overlay-window.js` | `OverlayWindow` | The transparent, click-through, always-on-top window |
-| `src/notifier.js` | `Notifier` | Desktop notifications for "needs approval" and "done" |
-| `src/popup-window.js` | `PopupWindow` | Base for the focusable popups: launcher, panel, settings |
-| `src/panel-window.js` | `PanelWindow` | The workspace overview (`panel.html`) |
-| `src/settings-window.js` | `SettingsWindow` | The settings form (`settings.html`) |
-| `src/settings.js` | `Settings` | Saved settings, with environment variables taking precedence |
-| `src/activity.js` | — | Turns hook events into activity lines ("Editing Header.jsx") |
-| `src/stats.js` | `AgentStats` | CPU and memory of agent process trees, from `/proc` |
-| `src/ui-common.js` | `Agent` | Agent palette and helpers shared by the overlay, the panel and the launcher |
-| `src/windows.js` | `WindowService` | Lists and raises windows through the GNOME extension |
-| `src/gnome-extension.js` | `GnomeExtension` | Installs and checks the extension |
-| `src/workspace/` | `WorkspaceService`, `RunningApps`, `AppCatalog`, `ProcessTable`, `FirefoxSession`, `DockerService`, `AppActions` | Running apps, installed apps, Firefox tabs, Docker, and the actions on them |
-| `gnome-extension/` | `BayloobExtension` | GNOME Shell extension: window list / activate over D-Bus |
-| `src/focus.js` | `TerminalFocuser` | Raises the right terminal: kitty / WezTerm / tmux / X11 |
-| `src/music.js` | `MusicWatcher` | What's playing over MPRIS, play / pause / next / prev |
-| `src/cli.js` | — | `--install-hooks`, `--autostart`, `--no-autostart` |
-| `src/index.html` | `OverlayView`, `NoviMascotView`, `SvgMascotView` | The pill: mascot, cards and session list |
-| `src/novi.js` | `Novi` | Animation engine for the layered raster mascot |
-| `src/packs/` | — | Mascot color packs (5 states × 4 layers each) and the generated `meta.js` |
-| `scripts/build-pack-meta.js` | — | Bundles every pack's `layers.json` into `src/packs/meta.js` |
-| `scripts/bayloob-hook` | — | The hook. Waits for your answer only on `PermissionRequest` |
-| `scripts/hook.js` | — | Same hook in Node, for Windows (permission requests included) |
-| `scripts/install-hooks.js` | `HookInstaller` | Safely merges hooks into `~/.claude/settings.json` |
-| `scripts/x11-focus.py` | — | Activates an X11 window by PID or `WINDOWID` (ctypes, no deps) |
-| `design/` | — | Mascot reference art and earlier mascot prototypes |
+The code is split by Electron process, and the main process by layer (see
+[docs/architecture.md](docs/architecture.md)):
+
+```
+src/
+  main/                         Electron main process (Node)
+    index.js                    entry: a CLI flag, or start the app
+    app/                        composition root: BayloobApp (wiring + IPC), cli.js, paths.js
+    config/                     Settings (settings.json, env vars win)
+    modules/                    one folder per feature
+      sessions/                 EventServer (hook HTTP), SessionStore, activity lines, notifications
+      agents/                   agent definitions, SessionLauncher (tmux), recent projects, agent stats
+      workspace/                WorkspaceService, RunningApps, AppCatalog, FirefoxSession, Docker, AppActions
+      hooks/                    HookInstaller (~/.claude/settings.json)
+      music/                    MusicWatcher (MPRIS)
+    infrastructure/             adapters to the OS
+      desktop/                  WindowService (GNOME extension), GnomeExtension, TerminalFocuser
+      system/                   ProcessTable (/proc), TerminalLauncher
+    windows/                    OverlayWindow, PopupWindow → Launcher/Panel/Settings windows, tray
+  preload/                      one contextBridge API per page
+  renderer/                     overlay/, launcher/, panel/, settings/ — each an index.html
+    shared/                     ui-common.js (agent palette, helpers), novi.js (mascot engine)
+  assets/                       mascot packs (5 colors × 5 states × 4 layers) and the tray icon
+resources/                      shipped outside the asar: hooks/ (bayloob-hook, hook.js), tools/ (x11-focus.py)
+gnome-extension/                GNOME Shell extension: window list / activate over D-Bus
+scripts/                        dev tools: install-hooks, build-pack-meta, simulate
+test/                           unit tests (node --test)
+build/  design/  docs/          packaging, mascot art and prototypes, docs and screenshots
+```
 
 ### Linux notes
 
