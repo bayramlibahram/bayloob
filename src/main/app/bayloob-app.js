@@ -10,6 +10,7 @@ const { AgentStats } = require("../modules/agents/agent-stats");
 const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
 const { pickChallenger, challengePrompt } = require("../modules/agents/challenge");
 const { PromptQueue } = require("../modules/agents/prompt-queue");
+const { PromptDelivery } = require("../modules/agents/prompt-delivery");
 const { RecentProjects } = require("../modules/agents/recent-projects");
 const { SessionLauncher } = require("../modules/agents/session-launcher");
 const { BlockedClock } = require("../modules/sessions/blocked-clock");
@@ -106,6 +107,13 @@ class BayloobApp {
   #radarTimer = null;
   tokens = new TokenUsage();
   queue = new PromptQueue();
+  delivery = new PromptDelivery({
+    queue: this.queue,
+    typeInto: (pane, text) => this.launcher.sendPrompt(pane, text),
+    copy: text => clipboard.writeText(text),
+    focus: session => this.focus(session),
+    onQueued: () => this.overlay.send("queues", this.queue.counts()),
+  });
   todos = new TodoProgress();
   #receipts = new Map(); // session id -> receipt of its last finished turn
   #lastStates = new Map(); // session id -> state at the previous change
@@ -403,7 +411,7 @@ class BayloobApp {
     if (!session) {
       return;
     }
-    const canPrompt = !!session.term?.tmux && !session.perm;
+    const canPrompt = !session.perm;
     const menu = Menu.buildFromTemplate([
       { label: "Open terminal", click: () => this.focus(session) },
       { label: "Send a prompt…", enabled: canPrompt, click: () => this.openPromptBox(session) },
@@ -460,6 +468,11 @@ class BayloobApp {
     });
   }
 
+  /** Types (tmux), queues (busy) or copies (other terminals) a prompt for a session — see PromptDelivery. */
+  deliverPrompt(s, text) {
+    return this.delivery.deliver(s, text);
+  }
+
   // An error the user just copied (failing test, stack trace…) pre-fills the prompt, ready to send
   // `text`: a draft to continue (e.g. typed into a done card); otherwise a copied error pre-fills it
   openPromptBox(session, text = "") {
@@ -475,6 +488,7 @@ class BayloobApp {
         project: session.project,
         agentName: AGENTS[session.agent]?.name || session.agent,
         busy: PromptQueue.isBusy(session),
+        paste: !session.term?.tmux, // not in tmux: the prompt is copied for the user to paste
         queue: this.queue.list(session.id),
       },
     });
@@ -726,7 +740,7 @@ class BayloobApp {
     ipcMain.on("overlay-keyboard", (_e, on) => this.overlay.setKeyboard(!!on));
     ipcMain.on("open-prompt", (_e, sessionId, text) => {
       const s = session(sessionId);
-      if (s?.term?.tmux) {
+      if (s) {
         this.openPromptBox(s, typeof text === "string" ? text : "");
       }
     });
@@ -739,14 +753,8 @@ class BayloobApp {
     // From a receipt: ask the agent to run its tests (queued if it's busy again by then)
     ipcMain.on("ask-tests", (_e, sessionId) => {
       const s = session(sessionId);
-      if (!s?.term?.tmux) {
-        return;
-      }
-      const prompt = "Run the project's tests and fix any failures.";
-      if (PromptQueue.isBusy(s)) {
-        this.queue.add(s.id, prompt);
-      } else {
-        this.launcher.sendPrompt(s.term.tmux, prompt).catch(() => {});
+      if (s) {
+        this.deliverPrompt(s, "Run the project's tests and fix any failures.").catch(() => {});
       }
     });
 
@@ -762,16 +770,10 @@ class BayloobApp {
     ipcMain.handle("launcher:send-prompt", async (_e, sessionId, text) => {
       const s = session(sessionId);
       try {
-        if (!s?.term?.tmux) {
-          throw new Error("This session is no longer running in tmux");
+        if (!s) {
+          throw new Error("This session has ended");
         }
-        if (PromptQueue.isBusy(s)) {
-          this.queue.add(s.id, String(text));
-          this.overlay.send("queues", this.queue.counts());
-          return { ok: true, queued: true };
-        }
-        await this.launcher.sendPrompt(s.term.tmux, String(text));
-        return { ok: true };
+        return await this.deliverPrompt(s, String(text));
       } catch (e) {
         return { ok: false, error: e.message };
       }

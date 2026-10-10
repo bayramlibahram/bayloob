@@ -20,7 +20,7 @@ Status: **done** = works as specified · **partial** = exists, gaps listed · **
 | F11 | Delivery receipt | done | `sessions/receipt.js:23`, `overlay/index.html:292` | Claude Code only (reads its transcript); Codex/Gemini: no receipt — limitation |
 | F12 | ⚔ Challenge | partial | `agents/challenge.js:13`, read-only flags `agents/agents.js:10` | No "Challenge report" card (parse `path:line`, open in editor); no policy auto-deny for the challenger session (defense in depth); Gemini has no read-only flag |
 | F13 | Collision radar | partial | `sessions/collision-radar.js:14`, `windows/notifier.js:18` | "Move to new worktree" launches a **fresh** session there; moving the running agent (stash/patch) not done — spec asks to propose git steps first |
-| F14 | Reply without terminal | partial | `overlay/index.html:704`, `panel/index.html:418`, `agents/prompt-queue.js:7` | Delivery is tmux-only; kitty / wezterm / clipboard + focus fallback missing |
+| F14 | Reply without terminal | partial | `agents/prompt-delivery.js` (tmux → typed/queued, else clipboard + focus) | kitty / wezterm direct send-text: **blocked** — neither is installed here, flags unverifiable (rule 5) |
 | F15 | Workspace panel | done | `panel/index.html:357`, `workspace/workspace.service.js:12`, Docker `preload/panel.js:15` | Window list via GNOME extension (no `wmctrl` on this machine; X11 path not needed) |
 | F16 | Error → fix prompt | partial | `agents/error-prompt.js:16`, `app/bayloob-app.js:439` | Clipboard is read only when the prompt window opens; no opt-in watcher + "Fix this error?" toast |
 | F17 | Sounds | done | `shared/sounds.js` (`toggles`), Settings → "Choose sounds…", `config/settings.js` (`soundToggles`) | — |

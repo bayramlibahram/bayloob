@@ -137,6 +137,7 @@
   .confirm code { font: 12px ui-monospace, monospace; color: var(--text); }
   .confirm .badge { padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
   .confirm .badge.now { color: var(--done); background: rgba(79,213,154,.12); }
+  .confirm .badge.paste { color: var(--brand-soft); background: rgba(139,92,255,.12); }
   .confirm .badge.queue { color: var(--working); background: rgba(255,181,71,.12); }
   .confirm .btn { padding: 6px 12px; }
   .confirm .btn.on[type=submit] { background: var(--brand); border-color: transparent; color: #fff; }
@@ -273,7 +274,9 @@
     taskDone: 'Task completed.',
     finishedIn: (agent, project) => `<span class="fhead"><b>${agent}</b> finished · ${project}</span>`, finishedMore: n => `+${n} more`,
     reply: 'Reply', dismissTip: 'Dismiss',
-    sent: 'Sent ✓', queued: 'Queued ⏳ — goes out when the agent finishes its turn',
+    sent: 'Sent ✓',
+    toPaste: '📋 copy & paste', pasteBtn: '✓ Copy & open terminal', copiedPaste: 'Copied ✓ — paste it in the terminal with Ctrl+Shift+V',
+    sayPaste: 'Not in tmux: Enter copies it and brings the terminal forward to paste', queued: 'Queued ⏳ — goes out when the agent finishes its turn',
     askHint: 'Pick an agent and folder · Enter starts', startAgent: 'Start', worktree: '⑂ New worktree',
     notInstalled: 'not installed', folder: 'Folder', starting: 'Starting…', started: 'Started ✓', pickFolder: 'Choose a project folder',
     clashConflict: (who, files) => `Editing the same files as ${who}: ${files}`,
@@ -393,7 +396,7 @@
       this.#prevStates = new Map(this.sessions.map(s => [s.id, s.state]));
       // Opened after an agent finished: still offer the reply for turns that ended in the last few minutes
       this.finished = this.sessions
-        .filter(s => s.state === 'done' && s.term?.tmux && Date.now() - s.updatedAt < FINISHED_RECENT_MS)
+        .filter(s => s.state === 'done' && Date.now() - s.updatedAt < FINISHED_RECENT_MS)
         .sort((a, b) => b.updatedAt - a.updatedAt).map(s => s.id);
       this.collisions = state.collisions || {};
       this.status = state.status || null;
@@ -407,7 +410,7 @@
       // Agents that just finished their turn, newest first, until replied to or dismissed
       for (const s of list) {
         const old = this.#prevStates.get(s.id);
-        if (s.state === 'done' && old && old !== 'done' && s.term?.tmux) {
+        if (s.state === 'done' && old && old !== 'done') {
           this.finished = [s.id, ...this.finished.filter(id => id !== s.id)];
         }
       }
@@ -681,7 +684,7 @@
     // The selected agent's prompt box: only for sessions running in tmux and not waiting on a permission
     #renderSay() {
       const s = !this.launchMode && this.current?.kind === 'agent' ? this.current.data : null;
-      const can = !!s?.term?.tmux && !s.perm;
+      const can = !!s && !s.perm;
       this.el.say.hidden = !can;
       if (!can) { return; }
       if (this.sayFor !== s.id) {   // another session: its own empty box
@@ -692,7 +695,7 @@
       }
       this.el.sayText.placeholder = T.sayTo(Agent.displayName(s.agent), s.project);
       if (!this.el.sayHint.dataset.kind) {
-        this.el.sayHint.textContent = BUSY.has(s.state) ? T.sayBusy : T.sayHint;
+        this.el.sayHint.textContent = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
       }
       this.el.saySend.disabled = !this.el.sayText.value.trim();
       if (this.#sayConfirming) { this.#renderSayConfirm(); } // busy may have changed: now vs queue
@@ -727,11 +730,14 @@
     #renderSayConfirm() {
       const s = this.sessions.find(x => x.id === this.sayFor);
       if (!s) { return this.#confirmSay(false); }
-      const busy = BUSY.has(s.state);
+      // tmux: typed in now, or queued while busy. Any other terminal: copied for the user to paste
+      const paste = !s.term?.tmux;
+      const busy = !paste && BUSY.has(s.state);
+      const [cls, badge, btn] = paste ? ['paste', T.toPaste, T.pasteBtn] : busy ? ['queue', T.toQueue, T.queueBtn] : ['now', T.now, T.sendBtn];
       this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(s.project))}</span>
-        <span class="badge ${busy ? 'queue' : 'now'}">${busy ? T.toQueue : T.now}</span>
+        <span class="badge ${cls}">${badge}</span>
         <button type="button" class="btn" data-edit>${T.edit}</button>
-        <button type="submit" class="btn on">${busy ? T.queueBtn : T.sendBtn}</button>`;
+        <button type="submit" class="btn on">${btn}</button>`;
     }
 
     async #send() {
@@ -744,7 +750,7 @@
       if (res?.ok) {
         this.el.sayText.value = '';
         this.#grow(this.el.sayText);
-        this.#sayHint(res.queued ? T.queued : T.sent, 'ok');
+        this.#sayHint(res.via === 'clipboard' ? T.copiedPaste : res.queued ? T.queued : T.sent, 'ok');
       } else {
         this.#sayHint(res?.error || 'Could not send', 'err');
       }
