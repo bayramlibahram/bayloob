@@ -86,3 +86,29 @@
   --cat-workflow: #5a32d0;
   --cat-analysis: #1d5fd6;
 }
+
+/* Reduced motion (every page): nothing slides, spins, bounces or dances — opacity may still fade, briefly */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: opacity !important;
+    transition-duration: 120ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Text for screen readers only (live announcements: "Task needs you", a new permission card) */
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

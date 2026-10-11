@@ -4,6 +4,8 @@
 // Compact mode (size < 60px, e.g. the 34px mascot in the pill): code glyphs and sparks are off, and the
 // remaining particles stay small and close to the mascot, so they fit inside the pill instead of being clipped.
 (() => {
+  // The OS "reduce motion" setting (live: it applies to the next animation once changed)
+  const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)");
   const CSS = `
   .nv { position: relative; display: inline-block; }
   .nv .rig { position: absolute; inset: 0; transform-origin: 50% 88%; }
@@ -28,6 +30,9 @@
 
   class Novi {
     constructor(el, meta, base, opts = {}) {
+      if (REDUCED.matches) {
+        opts = { ...opts, particles: false };
+      }
       if (!injected) {
         const s = document.createElement("style");
         s.textContent = CSS;
@@ -65,6 +70,26 @@
       this.loops = [];
       this._tick = this._tick.bind(this);
       this._raf = 0;
+    }
+
+    // Reduced motion (the OS setting): no motion at all — the mascot shows its state as a still picture.
+    // CSS can't stop Web Animations, so every one goes through here. A pose that holds (fill: forwards — the
+    // closed eyes of sleep, the raised lid of waiting) jumps straight to its last frame; everything else is skipped.
+    _anim(el, frames, opts) {
+      if (REDUCED.matches) {
+        if (opts?.fill === "forwards") {
+          return el.animate(frames, { ...opts, duration: 0, delay: 0, iterations: 1 });
+        }
+        return {
+          cancel() {},
+          finish() {},
+          pause() {},
+          play() {},
+          finished: Promise.resolve(),
+          onfinish: null,
+        };
+      }
+      return el.animate(frames, opts);
     }
 
     // The frame loop only runs while something needs per-frame updates (particles, thinking sparks);
@@ -139,7 +164,8 @@
         });
       }
       if (prev !== null) {
-        this.rig.animate(
+        this._anim(
+          this.rig,
           [{ transform: "scale(.9)" }, { transform: "scale(1.04)" }, { transform: "scale(1)" }],
           { duration: 320, easing: "cubic-bezier(.3,1.5,.5,1)", composite: "add" }
         );
@@ -151,7 +177,7 @@
       this.timers.push(setTimeout(fn, ms));
     }
     loop(el, frames, opts) {
-      const a = el.animate(frames, { iterations: Infinity, ...opts });
+      const a = this._anim(el, frames, { iterations: Infinity, ...opts });
       this.loops.push(a);
       return a;
     }
@@ -164,12 +190,18 @@
         { transform: "scaleY(.08)", offset: 0.45 },
         { transform: "scaleY(1)" },
       ];
-      e.animate(f, { duration: 150, iterations: times, composite: "add", easing: "ease-in-out" });
+      this._anim(e, f, {
+        duration: 150,
+        iterations: times,
+        composite: "add",
+        easing: "ease-in-out",
+      });
     }
     // One breath. Calm states breathe now and then rather than continuously: an endless animation keeps the
     // transparent always-on-top window redrawing every frame (~12% CPU idle vs ~2% without it).
     breathe(duration = 2400, depth = 0.025) {
-      this.rig.animate(
+      this._anim(
+        this.rig,
         [
           { transform: "scale(1)" },
           { transform: `scale(${1 + depth}, ${1 - depth})` },
@@ -191,7 +223,8 @@
     glance() {
       const dx = pick([-1, 1]) * rnd(3, 6),
         dy = rnd(-2, 2);
-      this.cur().eyes.animate(
+      this._anim(
+        this.cur().eyes,
         [
           { translate: "0 0" },
           { translate: `${dx}% ${dy}%`, offset: 0.15 },
@@ -230,12 +263,12 @@
       this.el.classList.add("sleep");
       this.opts.onSleep?.(true);
       const { eyes, lid } = this.cur();
-      eyes.animate([{ transform: "scaleY(1)" }, { transform: "scaleY(.1)" }], {
+      this._anim(eyes, [{ transform: "scaleY(1)" }, { transform: "scaleY(.1)" }], {
         duration: 900,
         fill: "forwards",
         easing: "ease-in",
       });
-      lid.animate([{ transform: "none" }, { transform: "rotate(2.5deg) translateY(1.5%)" }], {
+      this._anim(lid, [{ transform: "none" }, { transform: "rotate(2.5deg) translateY(1.5%)" }], {
         duration: 1200,
         fill: "forwards",
         easing: "ease-in-out",
@@ -303,7 +336,8 @@
     _waiting() {
       // the lid stays open, a "!" pops out, red ripples, an occasional knock
       const { lid, eyes } = this.cur();
-      lid.animate(
+      this._anim(
+        lid,
         [
           { transform: "none" },
           { transform: "rotate(-16deg) translateY(-9%)", offset: 0.6 },
@@ -311,7 +345,7 @@
         ],
         { duration: 420, fill: "forwards", easing: "cubic-bezier(.3,1.6,.5,1)" }
       );
-      eyes.animate([{ transform: "scale(1)" }, { transform: "scale(1.18)" }], {
+      this._anim(eyes, [{ transform: "scale(1)" }, { transform: "scale(1.18)" }], {
         duration: 250,
         fill: "forwards",
       });
@@ -328,7 +362,8 @@
         if (this.state !== "waiting") {
           return;
         }
-        this.rig.animate(
+        this._anim(
+          this.rig,
           [
             { translate: "0 0" },
             { translate: "-3% 0" },
@@ -344,7 +379,8 @@
     }
     _done() {
       // the lid flips up and drops back, confetti, a happy jump
-      this.cur().lid.animate(
+      this._anim(
+        this.cur().lid,
         [
           { transform: "none" },
           { transform: "rotate(-28deg) translateY(-16%)", offset: 0.35 },
@@ -353,7 +389,8 @@
         ],
         { duration: 900, easing: "ease-out" }
       );
-      this.rig.animate(
+      this._anim(
+        this.rig,
         [
           { translate: "0 0" },
           { translate: "0 -14%", offset: 0.35 },
@@ -368,7 +405,8 @@
         if (this.state !== "done") {
           return;
         }
-        this.cur().eyes.animate(
+        this._anim(
+          this.cur().eyes,
           [{ translate: "0 0" }, { translate: "0 -2.5%" }, { translate: "0 0" }],
           { duration: 380, iterations: 2 }
         );
