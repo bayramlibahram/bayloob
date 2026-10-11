@@ -392,6 +392,7 @@
       step: (n, what, status) => `Runbook step ${n} ${status}: ${what}`,
     },
     useAlt: 'Decisions take Alt+A (or Alt+P / Alt+R), or a click — not Enter',
+    useAltRun: 'A step runs on Alt+Enter (focus on its card) or a click — not Enter',
     loading: 'Loading…', noLog: 'Nothing logged yet', noLogHint: 'Every stage, agent and decision is written here as it happens.',
     noSteps: 'The plan has no steps', noStepsHint: 'Nothing will run on the host. Stop the plan, or retry the task with a note.', retry: 'Retry', noInstances: 'No agent has started yet',
     loadFailed: name => `Couldn’t load ${name === '#log' ? 'the log' : name}`,
@@ -664,7 +665,7 @@
         <div class="tt">${ICON.flow}<b>${esc(t.title)}</b></div>
         <div class="ln"><span class="chip out">${esc(t.project.name)}</span>${esc(PATTERN[t.template.id] || t.template.name)}</div>
         <div class="ln"><span class="chip c" style="--c:${color}"><span class="d${col === 'running' ? ' live' : ''}"></span>${esc(stageText)}</span></div>
-        ${why}${waiting && col === 'queued' ? `<div class="ln" style="color:var(--working)">${esc(waiting.waiting)}</div>` : ''}
+        ${why}${waiting ? `<div class="ln" style="color:var(--working)" title="${esc(waiting.waiting)}">${esc(waiting.waiting)}</div>` : ''}
         ${this.#cardUsage(t) || `<div class="agents">${builders.map(a => `<span>${novi(a.adapter)}×${a.count}</span>`).join('')}</div>`}
         <div class="ln">${ICON.clock}<span class="num">${elapsed(t)}</span>${best ? `<span class="diff"><span class="a">+${best.added}</span> <span class="r">−${best.deleted}</span></span>` : ''}</div>
       </button>`;
@@ -1077,7 +1078,7 @@
     }
 
     #openTask(id) {
-      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'runbook' ? 'runbook' : this.tasks.get(id)?.gate?.kind === 'decision' ? 'decision' : this.tasks.get(id)?.gate?.kind === 'pick' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
+      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'runbook' ? 'runbook' : this.tasks.get(id)?.gate?.kind === 'decision' ? 'decision' : this.tasks.get(id)?.gate?.kind === 'pick' || this.tasks.get(id)?.gate?.kind === 'merge' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
       this.open = id;
       this.view = 'detail';
       this.composing = null;
@@ -1267,12 +1268,13 @@
       // A decision is never taken by a bare Enter / Space on a focused button (Tab lands there easily):
       // only by a click or its Alt shortcut. The buttons that just open a note or a confirmation stay free.
       const bareDecision = e => !e.altKey && (e.key === 'Enter' || e.key === ' ')
-        && !['changes', 'retry', 'abort'].includes(e.target.closest?.('[data-decide]')?.dataset.decide ?? 'changes');
+        && (!['changes', 'retry', 'abort'].includes(e.target.closest?.('[data-decide]')?.dataset.decide ?? 'changes')
+          || !!e.target.closest?.('[data-ops="run"]')); // a runbook step runs on Alt+Enter or a click, never a bare Enter
       document.addEventListener('keyup', e => { if (bareDecision(e)) { e.preventDefault(); } });
       document.addEventListener('keydown', async e => {
         if (bareDecision(e)) {
           e.preventDefault();
-          return this.toast(T.useAlt);
+          return this.toast(e.target.closest?.('[data-ops="run"]') ? T.useAltRun : T.useAlt);
         }
         if (this.view === 'builder') {
           let r = this.builder.onKey(e, this.el.main);

@@ -938,6 +938,8 @@ class BayloobApp {
       prefill,
       draft,
       home: os.homedir(),
+      // Operations: whether a runbook has hosts to run on (only names and environments)
+      hosts: (this.settings.get("hosts") || []).map(h => ({ name: h.name, env: h.env })),
     });
   }
 

@@ -258,7 +258,8 @@
     customizeLater: 'This pattern arrives with a later step', yourTemplates: 'Your templates', nStages: n => `${n} stages`,
     tplRuns: name => `Runs your template <b>${name}</b>:`, tplProblems: 'Your template has problems — fix them in Customize stages…',
     sources: 'Log sources · collected read-only into the task', sourcePh: 'e.g. journalctl -u php8.3-fpm --since "-6h"', add: 'Add',
-    opsPlan: 'Also prepare an operations plan', opsSub: 'arrives with operations (a later step) — for now the run ends with the report',
+    opsPlan: 'Also prepare an operations plan', opsSub: 'the Arbiter turns the findings into a runbook — steps you run one by one, each only after you confirm it',
+    opsNoHosts: 'No hosts in Settings → Hosts yet: its steps can only run on this machine.',
     gatesCap: 'Gates — where you’ll be asked', load: 'Parallel load',
     rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rTerminal: 'Terminal', rPrompt: 'Prompt', rFiles: 'Files', edit: 'Edit',
     inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
@@ -696,7 +697,7 @@
         ${a.preset === 'incident' ? `<div class="label">${T.sources}</div>
           <ul class="sources">${a.logSources.map((s, i) => `<li><span>${esc(s)}</span><button type="button" class="iconbtn" data-unsource="${i}" aria-label="Remove">${I('x')}</button></li>`).join('')}</ul>
           <div class="field"><input id="source" placeholder="${esc(T.sourcePh)}" spellcheck="false" aria-label="Log source" class="mono"><button type="button" class="btn sm" data-addsource>${I('plus')}${T.add}</button></div>` : ''}
-        <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}</small></span></button>
+        <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}${a.opsPlan && !this.state.hosts?.length ? ` ${T.opsNoHosts}` : ''}</small></span></button>
         <span title="${T.customizeTipAnalysis}"><button type="button" class="expander" data-customize>${I('edit')}${T.customize}</button></span>`;
     }
 
@@ -748,7 +749,7 @@
       if (c.category === 'analysis') {
         const a = c.analysis;
         const n = TaskShape.total(a.agents);
-        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ' The operations plan comes with a later step; this run ends with the report.' : ''}`;
+        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ` Then an operations plan: steps ${this.state.hosts?.length ? 'on your hosts' : 'on this machine (no hosts in Settings yet)'}, each run only when you confirm it.` : ''}`;
       }
       const tpl = this.#template(c);
       if (tpl) {
@@ -908,9 +909,13 @@
         if (e.target.id === 'source' && e.key === 'Enter') { e.preventDefault(); return this.#addSource(); }
         // Enter (or Ctrl+Enter) goes on; Shift+Enter is a new line; a focused button handles its own Enter
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-          if (e.target.closest?.('button') && e.target !== this.el.next) { return; }
+          if (e.target.closest?.('button:not([role="radio"])') && e.target !== this.el.next) { return; }
           e.preventDefault();
           if (this.step === 1 && /^[~/]/.test(this.query.trim())) { return this.#setProject(this.query); }
+          // A project's name typed in the search: that project, not the one picked before
+          const q = this.step === 1 ? this.query.trim().toLowerCase() : '';
+          const hit = q && this.state.recent.find(r => r.name.toLowerCase().includes(q) || r.cwd.toLowerCase().includes(q));
+          if (hit && hit.cwd !== this.cfg.project.cwd) { return this.#setProject(hit.cwd); }
           this.#next();
         }
       });
