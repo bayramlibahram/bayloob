@@ -409,3 +409,15 @@ test("started from your files as they are: the winner is applied to them instead
   assert.equal(task.merged.applied, true);
   assert.equal(task.status, "done");
 });
+
+test("a turn end from before the current turn started is ignored (Codex's rollout says done until the next turn)", async () => {
+  const env = setup();
+  const task = await startBest(env);
+  const [planner] = env.runner.sessions;
+  const started = task.instances[0].startedAt;
+  assert.equal(env.engine.turnEnded(planner.paneId, "old answer", { at: started - 1000 }), false);
+  assert.equal(task.instances[0].status, "running");
+  assert.equal(env.engine.turnEnded(planner.paneId, "the plan", { at: started + 1000 }), true);
+  await env.engine.settled(task.id);
+  assert.equal(env.store.readArtifact(task.id, "plan.md"), "the plan");
+});

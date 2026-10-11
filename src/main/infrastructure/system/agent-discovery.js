@@ -87,7 +87,9 @@ function lastCodexState(file, size, from = 0, fallbackAt = Date.now()) {
           return null;
         }
         const parsedAt = Date.parse(ev.timestamp);
-        return { state, statusAt: Number.isFinite(parsedAt) ? parsedAt : fallbackAt };
+        // task_complete carries the turn's final answer (the workflow engine's artifact for Codex)
+        const message = state === "done" ? (ev.payload?.last_agent_message ?? null) : null;
+        return { state, statusAt: Number.isFinite(parsedAt) ? parsedAt : fallbackAt, message };
       } catch {
         return null;
       }
@@ -248,6 +250,7 @@ class AgentDiscovery {
         cwd: meta.cwd || cwd,
         state: status?.state || "idle",
         statusAt: status?.statusAt || null,
+        message: status?.message ?? null,
         transcript: null,
         term: this.#term(pid),
       });

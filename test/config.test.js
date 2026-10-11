@@ -104,3 +104,13 @@ test("agents and limits: defaults, clamping, unknown agents dropped", () => {
   assert.equal(again.get("agents").gemini.max, 2);
   assert.deepEqual(again.get("limits"), { total: 1, perProject: 4, minFreeGB: 2 });
 });
+
+test("pill size: s, m or l (anything else falls back to l, the original size)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
+  const s = new Settings(path.join(dir, "settings.json"));
+  assert.equal(s.get("pillSize"), "l");
+  s.save({ pillSize: "s" });
+  assert.equal(s.get("pillSize"), "s");
+  s.save({ pillSize: "xl" });
+  assert.equal(s.get("pillSize"), "l");
+});

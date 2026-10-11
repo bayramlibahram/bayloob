@@ -22,7 +22,7 @@
   /* ---------- Pill ---------- */
   .pill {
     position: relative;
-    width: 340px; min-height: 58px;
+    width: 340px; min-height: var(--bar-h, 58px);
     background: var(--surface-solid);
     border-radius: 20px;
     border: 1px solid var(--line);
@@ -53,14 +53,29 @@
   .pill.open .count { display: none; }
   /* open, the tools sit at the right edge and the gaps tighten a little, so the name keeps its room */
   .pill.open .bar { gap: 8px; }
-  .pill.open #soundBtn { margin-left: auto; }
-  .bar { position: relative; cursor: pointer; display: flex; align-items: center; gap: 10px; height: 58px; padding: 4px 14px 0 7px; }
+  .pill.open #voiceBtn { margin-left: auto; }
+  .pill.open #soundBtn.muted { margin-left: auto; }
+  .pill.open #soundBtn.muted ~ #voiceBtn { margin-left: -6px; }
+  /* open, mute and full view sit in the ⋯ row; a muted sound stays on the bar as a red reminder */
+  .pill.open #soundBtn:not(.muted), .pill.open #fullBtn { display: none; }
+  .moremenu { display: none; justify-content: flex-end; gap: 6px; padding: 0 14px 8px; }
+  .pill.open.more .moremenu { display: flex; }
+  .moremenu button { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    background: rgb(var(--ink) / .07); color: var(--soft); }
+  .moremenu button:hover { background: rgb(var(--ink) / .12); color: var(--text); }
+  .moremenu button:disabled { opacity: .45; cursor: default; }
+  .moremenu svg { width: 15px; height: 15px; fill: currentColor; }
+  .moremenu svg .w { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .bar { position: relative; cursor: pointer; display: flex; align-items: center; gap: 10px; height: var(--bar-h, 58px); padding: 4px 14px 0 7px; }
   /* the manager mascot sits on its own tile, like an app icon docked to the bar */
-  .tile { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; transition: transform .2s, box-shadow .2s;
+  .tile { flex: none; width: var(--tile, 46px); height: var(--tile, 46px); display: grid; place-items: center; border-radius: calc(var(--tile, 46px) * .3); transition: transform .2s, box-shadow .2s;
     background: linear-gradient(180deg, rgb(var(--ink) / .07), rgb(var(--ink) / .025));
     border: 1px solid rgb(var(--ink) / .1); box-shadow: inset 0 1px 0 rgb(var(--ink) / .06), 0 2px 8px rgb(var(--shade) / calc(.35 * var(--shade-k))); }
   .label { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .label b { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
+  .label b { font-weight: 700; font-size: var(--label, 16px); letter-spacing: -.01em; }
+  /* Settings → Pill size: the mascot's tile, and the bar's height and name with it (L is the original) */
+  .pill[data-size=s] { --tile: 28px; --mascot: 24px; --bar-h: 40px; --label: 14px; }
+  .pill[data-size=m] { --tile: 36px; --mascot: 30px; --bar-h: 48px; --label: 15px; }
   .label span { color: var(--muted); }
   /* status chip: "••• Thinking" in the state's colour; the dots pulse while the agent is busy */
   .clash { margin-left: 6px; font-size: 13px; cursor: help; }
@@ -180,6 +195,7 @@
 
   /* ---------- Mascot (based on the Baynovix logo) ---------- */
   .mascot { position: relative; width: 38px; height: 38px; flex: none; --ring: var(--accent); }
+  .tile .mascot { width: var(--mascot, 38px); height: var(--mascot, 38px); }
   .mascot.mini { width: 26px; height: 26px; }
   .mascot[data-s=idle], .mascot[data-s=dance] { --ring: var(--brand); }
   .mascot svg { width: 100%; height: 100%; overflow: visible; display: block;
@@ -384,11 +400,13 @@
       <button type="button" class="barbtn" id="soundBtn" data-bar="sound"><svg class="i on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg><svg class="i off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="m16 9.5 5 5m0-5-5 5"/></svg></button>
       <button type="button" class="barbtn" id="voiceBtn" data-bar="voice" title="Voice prompt (recorded and transcribed on this machine)" aria-label="Voice prompt"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect class="w" x="9" y="3.5" width="6" height="11" rx="3"/><path class="w" d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3"/></svg></button>
       <button type="button" class="barbtn" id="fullBtn" data-bar="full" title="Full view" aria-label="Full view"><svg class="i grow" viewBox="0 0 24 24" aria-hidden="true"><path class="w" d="M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5 13.5 10.5M4.5 19.5l6-6"/></svg><svg class="i shrink" viewBox="0 0 24 24" aria-hidden="true"><path class="w" d="M19.5 10H14V4.5M4.5 14H10v5.5M14 10l5.5-5.5M10 14l-5.5 5.5"/></svg></button>
+      <button type="button" class="barbtn" id="moreBtn" data-bar="more" title="More: sounds, full view" aria-label="More" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg></button>
       <button type="button" class="barbtn" id="panelBtn" data-bar="panel" title="Workspace panel" aria-label="Open the workspace panel"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect class="w" x="3.5" y="4.5" width="17" height="15" rx="3"/><path class="w" d="M9.5 4.5v15M13 9.5h4M13 13h4"/></svg></button>
       <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
       <div class="progress" id="progress"><i></i></div>
       <span class="plabel" id="plabel"></span>
     </div>
+    <div class="moremenu" id="moremenu" role="menu"></div>
     <div class="usage" id="usage" title="Agents running"></div>
     <div class="card" id="card"></div>
     <div class="voice" id="voice" data-s="off">
@@ -450,6 +468,7 @@
     menuHint: 'Bayloob picks the option you click in the terminal for you',
     soundMute: 'Sounds on — click to mute', soundUnmute: 'Sounds off — click to turn on',
     soundLocked: 'Sounds are turned off by BAYLOOB_SOUNDS=0',
+    menuMute: 'Mute sounds', menuUnmute: 'Turn sounds on', menuFull: 'Full view', menuShrink: 'Exit full view',
     movingToBayloob: 'moving to Bayloob', cancel: 'Cancel',
     closeToContinue: agent => `Close ${agent} in its terminal (<code>/exit</code>). Bayloob then continues it in tmux.`,
     errorCopied: 'Error copied — fix it?', lines: n => `${n} line${n === 1 ? '' : 's'}`,
@@ -737,6 +756,29 @@
       this.#renderBarButtons();
     }
 
+    #more = false; // the ⋯ row (mute, full view) is open
+
+    #renderMore() {
+      const pill = this.el.pill;
+      const open = this.#more && pill.classList.contains('open');
+      pill.classList.toggle('more', open);
+      document.getElementById('moreBtn').setAttribute('aria-expanded', String(open));
+      document.getElementById('moreBtn').classList.toggle('on', open);
+      if (!open) { return; }
+      const sound = this.soundOn
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="m16 9.5 5 5m0-5-5 5"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="M15.5 9a4.2 4.2 0 0 1 0 6"/></svg>';
+      const full = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="w" d="M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5 13.5 10.5M4.5 19.5l6-6"/></svg>';
+      document.getElementById('moremenu').innerHTML =
+        `<button type="button" role="menuitem" data-bar="sound"${this.soundLocked ? ` disabled title="${T.soundLocked}"` : ''}>${sound}${this.soundOn ? T.menuMute : T.menuUnmute}</button>` +
+        `<button type="button" role="menuitem" data-bar="full">${full}${this.full ? T.menuShrink : T.menuFull}</button>`;
+    }
+
+    setAppearance(a) {
+      this.el.pill.dataset.size = ['s', 'm'].includes(a?.pillSize) ? a.pillSize : 'l';
+      this.render();
+    }
+
     #renderBarButtons() {
       const b = this.el.soundBtn;
       b.classList.toggle('muted', !this.soundOn);
@@ -745,6 +787,7 @@
       b.title = label;
       b.setAttribute('aria-label', label);
       b.setAttribute('aria-pressed', String(!this.soundOn));
+      this.#renderMore();
     }
 
     // One sound per update (the most important change); unanswered cards get a quiet reminder every minute
@@ -860,6 +903,9 @@
       if (card?.kind.split(' ')[0] === 'perm') { this.#syncPermScroll(); }
 
       this.#paint(this.el.list, this.#listHtml() + this.#newSessionHtml() + this.#musicHtml());
+      // The ⋯ row closes with the pill
+      if (!this.el.pill.classList.contains('open')) { this.#more = false; }
+      this.#renderMore();
     }
 
     // Chip next to the name ("••• Thinking") and the to-do progress of the agent the pill shows
@@ -1464,6 +1510,9 @@
         if (bb.dataset.bar === 'panel') { this.api?.togglePanel(); }
         if (bb.dataset.bar === 'voice') { this.#voiceOpen(); }
         if (bb.dataset.bar === 'full') { this.#setFull(!this.full); }
+        if (bb.dataset.bar === 'more') { this.#more = !this.#more; }
+        else if (bb.closest('#moremenu')) { this.#more = false; }
+        this.#renderMore();
         return;
       }
       // A click on the top bar (mascot / label) opens the workspace panel
@@ -1690,9 +1739,10 @@
     window.bayloobAPI.onRuleAllowed?.(r => view.setRuleAllowed(r));
     window.bayloobAPI.onErrorCopied?.(e => view.setErrorCopied(e));
     window.bayloobAPI.onTaskGates?.(g => view.setTaskGates(g));
+    window.bayloobAPI.onAppearance?.(a => view.setAppearance(a));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
-    window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };
+    window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open(), setAppearance: a => view.setAppearance(a), view };
   }
   view.render(); // first paint; the first list from main is the baseline for sounds, not news
 </script>

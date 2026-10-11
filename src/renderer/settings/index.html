@@ -107,6 +107,10 @@
       <div class="seg" id="mascot"><button type="button" data-v="novi">Novi (3D)</button><button type="button" data-v="svg">Classic</button></div>
     </div>
     <div class="field">
+      <span class="label">Pill size</span>
+      <div class="seg" id="pillSize" title="The mascot's tile in the pill — the pill's height follows"><button type="button" data-v="s">S</button><button type="button" data-v="m">M</button><button type="button" data-v="l">L</button></div>
+    </div>
+    <div class="field">
       <span class="label">Theme</span>
       <div class="seg" id="theme"><button type="button" data-v="system">System</button><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button></div>
     </div>
@@ -211,7 +215,7 @@
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { form: $('form'), mascot: $('mascot'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
+      this.el = { form: $('form'), mascot: $('mascot'), pillSize: $('pillSize'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
         agentSum: $('agentSum'), agentsMore: $('agentsMore'), agentGrid: $('agentGrid'),
         music: $('music'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
@@ -221,6 +225,7 @@
       this.state = state;
       const { values, locked, detectedTerminal } = state;
       this.mascot = values.mascot;
+      this.pillSize = values.pillSize || 'l';
       this.theme = values.theme;
       this.music = values.music;
       this.watchClipboard = values.watchClipboard;
@@ -259,6 +264,7 @@
     #renderMascot() {
       const locked = this.state.locked.includes('mascot');
       for (const b of this.el.mascot.children) { b.setAttribute('aria-pressed', b.dataset.v === this.mascot); b.disabled = locked; }
+      for (const b of this.el.pillSize.children) { b.setAttribute('aria-pressed', b.dataset.v === this.pillSize); }
     }
 
     #renderSounds() {
@@ -383,7 +389,7 @@
       this.el.save.disabled = true;
       const res = await this.api?.save({
         agents: this.agents, limits: this.limits,
-        mascot: this.mascot, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
+        mascot: this.mascot, pillSize: this.pillSize, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -401,6 +407,10 @@
       this.el.mascot.addEventListener('click', e => {
         const b = e.target.closest('[data-v]');
         if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
+      });
+      this.el.pillSize.addEventListener('click', e => {
+        const b = e.target.closest('[data-v]');
+        if (b) { this.pillSize = b.dataset.v; this.#renderMascot(); }
       });
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
       this.el.shellTmux.addEventListener('click', async () => {
