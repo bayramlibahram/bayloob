@@ -271,6 +271,7 @@ class BayloobApp {
       store: this.tasks,
       scheduler: this.scheduler,
       capacity: () => this.#capacity(),
+      arbiterThreshold: () => this.settings.get("arbiterConfidence"),
       workspace: new TaskWorkspace({ git: this.git }),
       runner: new TaskRunner({
         launcher: this.launcher,

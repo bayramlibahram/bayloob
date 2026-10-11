@@ -159,6 +159,25 @@
   .cand .ch small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cand .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .strip { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px; font-size: 12px; background: color-mix(in srgb, var(--c) 11%, transparent); color: var(--c); font-weight: 600; }
+  /* The Arbiter's decision: its ranking with score bars, confidence, risks */
+  .dec { display: flex; flex-direction: column; gap: 12px; max-width: 1080px; }
+  .dec .top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); }
+  .dec .top b { font-size: 14px; }
+  .conf { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--soft); }
+  .conf .bar, .rank .bar { width: 120px; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; }
+  .conf .bar i, .rank .bar i { display: block; height: 100%; background: var(--c, var(--brand)); border-radius: 3px; }
+  .risks { list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+  .risks li { display: flex; gap: 8px; align-items: flex-start; }
+  .risks li.high { color: var(--waiting); font-weight: 600; }
+  .rank { display: grid; grid-template-columns: 40px minmax(150px, 220px) 150px 1fr auto; align-items: center; gap: 10px 14px; padding: 10px 14px; border-radius: 14px; background: var(--raised); border: 1.5px solid var(--line); }
+  .rank.win { border-color: var(--brand); }
+  .rank.mine { border-color: var(--done); }
+  .rank .n { font-weight: 700; font-size: 18px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+  .rank .who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .rank .who small { display: block; color: var(--muted); font-size: 11.5px; }
+  .rank .sc { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .rank ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--soft); }
+  .sev { display: inline-block; min-width: 58px; text-align: center; }
   /* Split work: the planner's subtasks and the files each owns */
   .subs { display: flex; flex-direction: column; gap: 8px; max-width: 980px; }
   .sub { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 14px; padding: 10px 12px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); }
@@ -307,7 +326,7 @@
     noTasks: 'No tasks yet', noTasksHint: 'Start one with New task → Agentic workflow (Pipeline or Best-of-N).',
     category: { workflow: 'Agentic workflow', analysis: 'Analysis', single: 'Single agent' },
     status: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', stopped: 'Stopped', failed: 'Failed' },
-    tabs: { overview: 'Overview', plan: 'Plan', candidates: 'Candidates', tests: 'Tests', reviews: 'Reviews', log: 'Log' },
+    tabs: { overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
     stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
     stopped: 'Stopped. Worktrees and branches are kept until you delete them.',
     queuedN: n => `${n} queued`, runningN: n => `${n} running`, of: (a, b) => `${a} of ${b}`,
@@ -330,16 +349,23 @@
     gate: {
       approve: { approve: 'Approve', changes: 'Request changes', abort: 'Abort' },
       pick: { pick: 'Pick', retry: 'Retry with note', abort: 'Abort' },
-      merge: { merge: 'Merge', keep: 'Keep branch', abort: 'Abort' },
+      decision: { accept: 'Accept decision', pick: 'Pick', retry: 'Retry with note', abort: 'Abort' },
+      merge: { merge: 'Merge', keep: 'Keep branch', pick: 'Pick another', abort: 'Abort' },
       'tests-failed': { continue: 'Continue anyway', retry: 'Retry with note', abort: 'Abort' },
       interrupted: { retry: 'Run again', abort: 'Abort' },
       violation: { continue: 'Continue anyway', abort: 'Abort' },
       failed: { retry: 'Try again', abort: 'Abort' },
     },
-    mergeInto: b => `Merge into ${b}`, applyFiles: 'Apply to my files', yourFiles: b => `your files on ${b} (uncommitted included)`, pickFirst: 'Pick a candidate first (Candidates tab)',
+    mergeInto: b => `Merge into ${b}`, applyFiles: 'Apply to my files', yourFiles: b => `your files on ${b} (uncommitted included)`, pickFirst: 'Choose a candidate first (Decision or Candidates tab)',
+    noDecision: 'No decision yet', noDecisionHint: 'The Arbiter decides after the tests and reviews — its ranking appears here.',
+    ownerPicks: 'This workflow has no Arbiter agent — you pick in Candidates.',
+    verdict: { select: 'Keeps', retry: 'Wants another round', merge_ideas: 'Merge ideas into', escalate: 'Leaves it to you' },
+    confidence: 'confidence', risks: 'Risks', score: s => `${s}/10`, arbiterAnswer: 'The Arbiter’s answer',
+    noReport: 'No report yet', noReportHint: 'The Arbiter merges the reviews when they are all in.', reportBad: 'The Arbiter’s report couldn’t be read — see each review in Reviews',
+    sev: { high: 'High', medium: 'Medium', low: 'Low' },
     notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
     send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
-    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'Until the Arbiter (command 06), you pick the candidate', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
+    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
     ago: at => timeAgo(at),
     log: {
       started: e => e.fromWorktree ? `Task started from your files as they were (on ${e.branch || '?'})` : `Task started from ${String(e.base || '').slice(0, 8)} on ${e.branch || '?'}`,
@@ -362,6 +388,11 @@
       'trusted-folder': () => 'Answered the folder-trust question (task worktree)',
       subtasks: e => e.error ? `The plan's subtasks can't be used: ${e.error}` : `The plan has ${e.count} subtasks${e.overlaps ? ` · ${e.overlaps} overlap(s)` : ' · no overlaps'}`,
       integrated: e => `Integrated ${(e.parts || []).join(', ')} into ${e.branch}`,
+      'arbiter-input': e => `Input for the Arbiter prepared (${e.chars} chars)`,
+      'arbiter-invalid': e => `The Arbiter's answer couldn't be used${e.reasked ? ' again' : ' — asked again'}: ${e.error}`,
+      arbiter: e => `Arbiter: ${e.decision}${e.winner ? ` ${e.winner}` : ''} · confidence ${e.confidence}${e.high ? ` · ${e.high} high risk(s)` : ''}`,
+      report: e => `Arbiter merged the reviews: ${e.findings} finding(s)`,
+      override: e => `You chose ${e.candidate} over the Arbiter's ${e.arbiter}`,
       'integrate-failed': e => `Integration stopped: ${e.error}${e.conflicts?.length ? ` (${e.conflicts.join(', ')})` : ''}`,
       stop: () => 'You stopped the task',
       error: e => `Engine error: ${e.error}`,
@@ -559,10 +590,11 @@
         return `${i ? '<span class="sline"></span>' : ''}<div class="sstep ${cls}"${i === t.stage && live ? ' aria-current="step"' : ''}><span class="si">${inner}</span><span>${esc(s.title)} <small>${esc(this.#stageNote(t, s, st))}</small></span></div>`;
       }).join('');
       const board = !t.template.stages.some(s => s.role === 'builder');
-      const tabs = board ? [['overview'], ['reviews', t.instances.filter(i => i.status === 'done').length || ''], ['log']]
-        : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['tests'], ['log']];
+      const arb = t.template.stages.some(s => s.role === 'arbiter' && s.agents?.length);
+      const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ['reviews', t.instances.filter(i => i.role === 'reviewer' && i.status === 'done').length || ''], ['log']]
+        : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['decision'], ['tests'], ['log']];
       if (!tabs.some(([k]) => k === this.tab)) { this.tab = 'overview'; }
-      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), log: () => this.#log(t) }[this.tab]();
+      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), log: () => this.#log(t) }[this.tab]();
       return `<div class="dhead"><div class="t">
           <button class="crumb" type="button" data-act="board">${ICON.back} ${T.back}</button>
           <h1>${esc(t.title)}</h1>
@@ -588,7 +620,9 @@
         const tested = t.candidates.filter(c => c.tests && c.tests.ok !== null);
         return tested.length ? `${T.of(tested.filter(c => c.tests.ok).length, tested.length)} pass` : '';
       }
-      if (s.role === 'arbiter') { return t.winner ? t.winner : st.status === 'waiting' ? 'you pick' : ''; }
+      if (s.role === 'arbiter' && t.report) { return `${t.report.findings.length} findings`; }
+      if (s.role === 'arbiter' && t.arbiter) { return t.arbiter.winner ? `${t.arbiter.winner} · ${t.arbiter.confidence}` : t.arbiter.decision; }
+      if (s.role === 'arbiter') { return t.winner ? t.winner : st.status === 'waiting' ? 'you pick' : s.agents?.[0] ? Agent.displayName(s.agents[0].adapter) : ''; }
       if (s.action === 'merge') { return t.merged ? `into ${t.merged.into}` : ''; }
       if (s.gate === 'human' && st.status === 'done') { return 'approved'; }
       if (round.length > 1) { return `×${round.length}`; }
@@ -653,9 +687,56 @@
         }).join('')}</div><br>`;
     }
 
+    // The Arbiter's decision: the candidates ranked with its reasons; choose another here before Pick
+    #decision(t) {
+      const d = t.arbiter;
+      if (!d) {
+        const own = !t.template.stages.some(s => s.role === 'arbiter' && s.agents?.length);
+        return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noDecision}</b>${own ? T.ownerPicks : T.noDecisionHint}</div>`;
+      }
+      const picking = !!t.gate?.actions.includes('pick');
+      const picked = this.picked.get(t.id);
+      const ranked = [...d.ranking, ...t.candidates.filter(c => c.status === 'active' && !d.ranking.some(r => r.candidate === c.id)).map(c => ({ candidate: c.id, score: null, reasons: [] }))];
+      const confC = d.confidence >= 0.6 ? 'var(--done)' : 'var(--working)';
+      const answer = [...t.instances].reverse().find(i => i.role === 'arbiter' && i.artifact);
+      const text = answer ? this.#artifact(t.id, answer.artifact) : null;
+      return `<div class="dec">
+        <div class="top">${novi(d.adapter || 'codex')}<b>${esc(T.verdict[d.decision] || d.decision)}${d.winner ? ` ${esc(d.winner)}` : ''}</b>
+          <span class="conf"><span class="bar" role="img" aria-label="${T.confidence} ${d.confidence}"><i style="width:${d.confidence * 100}%;--c:${confC}"></i></span>${T.confidence} ${d.confidence.toFixed(2)}</span>
+          ${d.retry ? `<span style="color:var(--soft);font-size:12.5px">“${esc(d.retry)}”</span>` : ''}</div>
+        ${d.risks.length ? `<div><div class="label" style="margin-bottom:6px">${T.risks}</div><ul class="risks">${d.risks.map(r => `<li class="${r.high ? 'high' : ''}">${r.high ? ICON.warn : '·'}<span>${esc(r.text)}</span></li>`).join('')}</ul></div>` : ''}
+        ${ranked.map((r, i) => {
+          const c = t.candidates.find(x => x.id === r.candidate);
+          const tests = c?.tests ? (c.tests.skipped ? T.testsSkip : c.tests.ok ? T.testsPass : T.testsFail) : T.testsNot;
+          const mine = picked === r.candidate || (t.winner === r.candidate && t.winner !== d.winner);
+          return `<div class="rank${r.candidate === d.winner ? ' win' : ''}${mine ? ' mine' : ''}">
+            <span class="n">${i + 1}</span>
+            <span class="who">${novi(c?.adapter || 'claude')}<span><b>${esc(r.candidate)}</b><small>${esc(tests)}${c?.diff ? ` · +${c.diff.added} −${c.diff.deleted}` : ''}</small></span></span>
+            <span class="sc">${r.score === null ? '—' : `<span class="bar"><i style="width:${r.score * 10}%"></i></span>${T.score(r.score)}`}</span>
+            <ul>${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+            ${picking && c?.status === 'active' ? `<button class="btn sm${picked === r.candidate ? ' primary' : ''}" type="button" data-pick="${esc(r.candidate)}">${picked === r.candidate ? `${ICON.check} ${T.chosen}` : T.choose}</button>` : '<span></span>'}
+          </div>`;
+        }).join('')}
+        ${text ? `<details class="more"><summary>${T.arbiterAnswer}</summary><div class="md">${renderMarkdown(text)}</div></details>` : ''}
+      </div>`;
+    }
+
+    // Review board: the Arbiter's one list, duplicates merged, by severity
+    #report(t) {
+      const r = t.report;
+      if (!r) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noReport}</b>${T.noReportHint}</div>`; }
+      if (r.error) { return `<div class="banner" style="--c:var(--waiting);margin:0">${ICON.warn}<span><b>${T.reportBad}</b><br>${esc(r.error)}</span></div>`; }
+      const col = { high: 'var(--waiting)', medium: 'var(--working)', low: 'var(--idle)' };
+      return `<div class="cards">${r.summary ? `<div class="card md">${renderMarkdown(r.summary)}</div>` : ''}
+        <table class="tbl"><thead><tr><th>Severity</th><th>Where</th><th>Problem</th><th>Found by</th></tr></thead><tbody>
+        ${r.findings.map(f => `<tr><td><span class="chip c sev" style="--c:${col[f.severity]}">${T.sev[f.severity]}</span></td>
+          <td class="mono">${esc(f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : '—')}</td><td>${esc(f.problem)}</td><td>${esc(f.reviewers.join(', '))}</td></tr>`).join('')}
+        </tbody></table></div>`;
+    }
+
     // Review board: every reviewer's answer on its own, with its findings count (the Arbiter merges them from 06)
     #reviews(t) {
-      const done = t.instances.filter(i => i.artifact);
+      const done = t.instances.filter(i => i.artifact && i.role === 'reviewer');
       if (!done.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noReviews}</b>${T.noReviewsHint}</div>`; }
       return `<div class="cands">${done.map(i => {
         const text = this.#artifact(t.id, i.artifact);
@@ -668,7 +749,7 @@
 
     #candidates(t) {
       if (!t.candidates.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noCands}</b>${T.noCandsHint}</div>`; }
-      const picking = t.gate?.kind === 'pick';
+      const picking = !!t.gate?.actions.includes('pick');
       const picked = this.picked.get(t.id);
       return `<div class="cands">${t.candidates.map(c => {
         const builder = [...t.instances].reverse().find(i => i.candidate === c.id && i.role === 'builder');
@@ -735,11 +816,12 @@
           <button class="btn" type="button" data-act="cancel">${T.cancel}</button>
           <button class="btn danger" type="button" data-act="abort-yes">${T.yesAbort}</button></div>`;
       }
-      const picked = this.picked.get(t.id) || (t.candidates.filter(x => x.status === 'active').length === 1 ? t.candidates.find(x => x.status === 'active').id : null);
-      const primary = g.actions.find(a => ['approve', 'pick', 'merge'].includes(a)) || g.actions.find(a => a === 'retry' && g.kind !== 'pick' && g.kind !== 'tests-failed') || null;
+      const picked = this.picked.get(t.id) || (g.kind === 'pick' && t.candidates.filter(x => x.status === 'active').length === 1 ? t.candidates.find(x => x.status === 'active').id : null);
+      const primary = g.actions.find(a => ['accept', 'approve', 'merge'].includes(a)) || g.actions.find(a => a === 'pick') || g.actions.find(a => a === 'retry' && g.kind !== 'pick' && g.kind !== 'tests-failed') || null;
       const btn = a => {
         if (a === 'pick') {
-          return `<button class="btn primary" type="button" data-decide="pick" ${picked ? '' : `disabled title="${T.pickFirst}"`}>${ICON.check} ${picked ? `${labels.pick} ${esc(picked)}` : labels.pick} <kbd>Alt A</kbd></button>`;
+          const main = primary === 'pick';
+          return `<button class="btn${main ? ' primary' : ''}" type="button" data-decide="pick" ${picked ? '' : `disabled title="${T.pickFirst}"`}>${main ? `${ICON.check} ` : ''}${picked ? `${labels.pick} ${esc(picked)}` : labels.pick} <kbd>${main ? 'Alt A' : 'Alt P'}</kbd></button>`;
         }
         const text = a === 'merge' ? (t.base.fromWorktree ? T.applyFiles : T.mergeInto(esc(t.base.branch))) : labels[a] || a;
         const cls = a === primary ? 'btn primary' : a === 'abort' ? 'btn danger' : 'btn';
@@ -775,7 +857,7 @@
     }
 
     #openTask(id) {
-      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'pick' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
+      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'decision' ? 'decision' : this.tasks.get(id)?.gate?.kind === 'pick' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
       this.open = id;
       this.view = 'detail';
       this.composing = null;
@@ -857,7 +939,7 @@
             return this.render();
           }
           if (a === 'abort') { this.composing = { gate: t.gate.id, action: 'abort' }; return this.render(); }
-          if (a === 'pick') { return this.#decide(t, 'pick', { candidate: this.picked.get(t.id) || t.candidates.find(x => x.status === 'active')?.id }); }
+          if (a === 'pick') { return this.#decide(t, 'pick', { candidate: this.picked.get(t.id) || (t.gate.kind === 'pick' ? t.candidates.find(x => x.status === 'active')?.id : null) }); }
           decide.disabled = true;
           if (!(await this.#decide(t, a))) { decide.disabled = false; }
           return;
@@ -897,6 +979,12 @@
         if (e.altKey && (e.key === 'a' || e.key === 'A') && this.view === 'detail' && t?.gate) {
           e.preventDefault();
           return this.el.main.querySelector('.actions .btn.primary:not(:disabled)')?.click();
+        }
+        // Alt+P pick another · Alt+R retry with a note (never a bare Enter on a decision)
+        const alt = e.altKey && { p: 'pick', r: 'retry' }[e.key.toLowerCase()];
+        if (alt && this.view === 'detail' && t?.gate?.actions.includes(alt)) {
+          e.preventDefault();
+          return this.el.main.querySelector(`.actions [data-decide="${alt}"]:not(:disabled)`)?.click();
         }
         if (this.view === 'detail' && !e.target.matches?.('input, textarea') && (e.key === '[' || e.key === ']')) {
           const keys = Object.keys(T.tabs);

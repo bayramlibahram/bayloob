@@ -75,6 +75,9 @@ class FakeWorkspace {
   diffstat() {
     return Promise.resolve({ files: 2, added: 10, deleted: 1 });
   }
+  diff(root, sha, branch) {
+    return Promise.resolve(`diff --git a/cart.js b/cart.js\n+// ${branch}`);
+  }
   testCommand() {
     return Promise.resolve(this.testCommandValue);
   }
@@ -128,9 +131,23 @@ const BEST = {
   arbiter: "codex",
 };
 
-async function startBest(env, workflow = BEST) {
+// Without an Arbiter agent the owner picks (templates may leave it out); a Review board then has no Arbiter stage
+function ownerPicks(template) {
+  const builders = template.stages.some(s => s.role === "builder");
+  return {
+    ...template,
+    stages: template.stages
+      .filter(s => builders || s.role !== "arbiter")
+      .map(s =>
+        s.role === "arbiter" ? { id: s.id, title: s.title, role: "arbiter", gate: "arbiter" } : s
+      ),
+  };
+}
+
+async function startBest(env, workflow = BEST, { arbiter = false } = {}) {
   const config = draft(env.store, workflow);
-  await env.engine.start(config, templateFor(config));
+  const template = templateFor(config);
+  await env.engine.start(config, arbiter ? template : ownerPicks(template));
   await env.engine.settled(config.id);
   return env.engine.get(config.id);
 }
@@ -315,7 +332,7 @@ test("Pipeline: the reviewer runs read-only once per candidate and its review is
     agents: { claude: 1 },
     reviewer: "codex",
   });
-  await env.engine.start(config, templateFor(config));
+  await env.engine.start(config, ownerPicks(templateFor(config)));
   const task = env.engine.get(config.id);
   await env.engine.settled(task.id);
   await endTurn(env, task, env.runner.sessions[0], "plan");
@@ -398,7 +415,7 @@ test("started from your files as they are: the winner is applied to them instead
   await decide(env, task, "approve");
   await endTurn(env, task, env.runner.by({ role: "builder" })[0], "built");
   await decide(env, task, "pick", { candidate: "build-1" });
-  assert.equal(task.gate.title, "Apply the winner to your files?");
+  assert.equal(task.gate.title, "Apply build-1 to your files?");
   await decide(env, task, "merge");
   assert.deepEqual(env.workspace.merges, []);
   assert.deepEqual(env.workspace.applies[0], {
@@ -606,4 +623,200 @@ test("Review board: reviewers × N read-only on the change, each review kept on 
   assert.equal(task.status, "done");
   assert.equal(task.candidates.length, 0);
   assert.equal(env.workspace.merges.length, 0); // nothing is changed
+});
+
+// ---------- the Arbiter ----------
+
+const decision = obj =>
+  `Reasoning.\n\n\`\`\`json\n${JSON.stringify({ retry_instructions: null, risks: [], ranking: [], confidence: 0.9, ...obj })}\n\`\`\``;
+
+async function toArbiter(env, { arbiterThreshold } = {}) {
+  if (arbiterThreshold) {
+    env.engine.arbiterThreshold = () => arbiterThreshold;
+  }
+  const task = await startBest(env, BEST, { arbiter: true });
+  await endTurn(env, task, env.runner.sessions[0], "the plan");
+  await decide(env, task, "approve");
+  for (const b of env.runner.by({ role: "builder" })) {
+    await endTurn(env, task, b, "built");
+  }
+  return task;
+}
+
+test("Arbiter: one read-only agent gets every candidate; a confident select goes to your merge", async () => {
+  const env = setup();
+  const task = await toArbiter(env);
+  const [arb] = env.runner.by({ role: "arbiter" });
+  assert.equal(arb.adapter, "codex"); // the dialog's Arbiter
+  assert.equal(arb.mode, "read-only");
+  assert.equal(arb.cwd, "/w/shop-ro");
+  assert.match(arb.prompt, /correctness against the task and the plan/); // the rubric
+  for (const id of ["build-1", "build-2", "build-3"]) {
+    assert.match(arb.prompt, new RegExp(`# Candidate ${id}[\\s\\S]*Tests: pass`));
+  }
+  assert.match(env.store.readArtifact(task.id, "arbiter-input.md"), /\+\/\/ bayloob\/.*\/build-3/);
+
+  await endTurn(
+    env,
+    task,
+    arb,
+    decision({
+      decision: "select",
+      winner: "build-3",
+      ranking: [
+        { candidate: "build-3", score: 9, reasons: ["small"] },
+        { candidate: "build-1", score: 5, reasons: [] },
+      ],
+    })
+  );
+  assert.equal(task.winner, "build-3");
+  assert.equal(task.arbiter.confidence, 0.9);
+  assert.equal(task.gate.kind, "merge");
+  assert.equal(task.gate.title, "Merge build-3 (the Arbiter's pick)?");
+  assert.deepEqual(task.gate.actions, ["merge", "keep", "pick", "abort"]);
+
+  // You pick another one right at the merge gate: logged as an override, still your click to merge
+  await decide(env, task, "pick", { candidate: "build-1" });
+  assert.equal(task.winner, "build-1");
+  assert.equal(task.gate.title, "Merge build-1?");
+  await decide(env, task, "merge");
+  assert.equal(env.workspace.merges[0].branch, `bayloob/${task.id}/build-1`);
+  const override = env.store.log(task.id).find(e => e.event === "override");
+  assert.deepEqual([override.arbiter, override.candidate], ["build-3", "build-1"]);
+});
+
+test("Arbiter: an unusable answer is asked again once in its own session, then you decide", async () => {
+  const env = setup();
+  const task = await toArbiter(env);
+  const [arb] = env.runner.by({ role: "arbiter" });
+  await endTurn(env, task, arb, "build-2 is best");
+  assert.match(env.runner.prompts.at(-1)[1], /couldn't be used: The answer has no JSON block/);
+  await endTurn(env, task, arb, decision({ decision: "select", winner: "build-7" }));
+  assert.equal(task.gate.kind, "decision");
+  assert.match(task.gate.detail, /"winner" must be one of/);
+  assert.deepEqual(task.gate.actions, ["pick", "retry", "abort"]); // nothing to accept
+  assert.equal(env.runner.by({ role: "arbiter" }).length, 1); // the same session, asked once
+});
+
+test("Arbiter: low confidence or a high risk stops at the Decision gate; Accept takes its winner", async () => {
+  const env = setup();
+  const task = await toArbiter(env);
+  await endTurn(
+    env,
+    task,
+    env.runner.by({ role: "arbiter" })[0],
+    decision({
+      decision: "select",
+      winner: "build-2",
+      confidence: 0.4,
+      ranking: [{ candidate: "build-2", score: 7, reasons: ["ok"] }],
+    })
+  );
+  assert.equal(task.gate.kind, "decision");
+  assert.match(task.gate.title, /isn't sure/);
+  assert.equal(task.gate.arbiter.winner, "build-2");
+  await decide(env, task, "accept");
+  assert.equal(task.winner, "build-2");
+  assert.equal(task.gate.kind, "merge");
+
+  const env2 = setup();
+  const t2 = await toArbiter(env2);
+  await endTurn(
+    env2,
+    t2,
+    env2.runner.by({ role: "arbiter" })[0],
+    decision({
+      decision: "select",
+      winner: "build-1",
+      risks: ["high: drops the orders table"],
+    })
+  );
+  assert.match(t2.gate.title, /high risk/);
+});
+
+test("Arbiter: retry goes back to the builders with its instructions, once; then you decide", async () => {
+  const env = setup();
+  const task = await toArbiter(env);
+  await endTurn(
+    env,
+    task,
+    env.runner.by({ role: "arbiter" })[0],
+    decision({
+      decision: "retry",
+      retry_instructions: "Handle an empty cart",
+    })
+  );
+  // Every builder continues in its own session with the Arbiter's instructions
+  const retried = env.runner.prompts.filter(([, text]) => /Handle an empty cart/.test(text));
+  assert.equal(retried.length, 3);
+  for (const b of env.runner.by({ role: "builder" })) {
+    await endTurn(env, task, b, "again");
+  }
+  const second = env.runner.by({ role: "arbiter" });
+  assert.equal(second.length, 2); // a fresh Arbiter on the new round
+  await endTurn(env, task, second[1], decision({ decision: "retry", retry_instructions: "More" }));
+  assert.equal(task.gate.kind, "decision");
+  assert.match(task.gate.title, /rounds are used up/);
+});
+
+test("Arbiter: merge ideas sends the best candidate the others' diffs", async () => {
+  const env = setup();
+  const task = await toArbiter(env);
+  await endTurn(
+    env,
+    task,
+    env.runner.by({ role: "arbiter" })[0],
+    decision({
+      decision: "merge_ideas",
+      winner: "build-2",
+      ranking: [{ candidate: "build-2", score: 8, reasons: ["clean"] }],
+      retry_instructions: "Take build-1's validation",
+    })
+  );
+  const [, text] = env.runner.prompts.at(-1);
+  assert.match(text, /take the good ideas of the other candidates/);
+  assert.match(text, /Take build-1's validation/);
+  assert.match(text, /build-1:\n.*\n\+\/\/ bayloob\/.*\/build-1/);
+  assert.doesNotMatch(text, /build-2:\n/);
+  assert.equal(task.instances.at(-1).candidate, "build-2");
+});
+
+test("Review board: the Arbiter merges the findings into one ranked report", async () => {
+  const env = setup();
+  env.workspace.reviewRange = () => Promise.resolve({ from: "a", to: "b", label: "x" });
+  const task = await startBest(
+    env,
+    { pattern: "board", agents: { claude: 1, codex: 1 }, arbiter: "claude" },
+    { arbiter: true }
+  );
+  const [r1, r2] = env.runner.by({ role: "reviewer" });
+  await endTurn(env, task, r1, "a.js:3 — off by one");
+  await endTurn(env, task, r2, "a.js:3 — loop runs once too often");
+  const [arb] = env.runner.by({ role: "arbiter" });
+  assert.match(
+    arb.prompt,
+    /## Reviewer: claude \(review\.md\)[\s\S]*off by one[\s\S]*## Reviewer: codex/
+  );
+  await endTurn(
+    env,
+    task,
+    arb,
+    "```json\n" +
+      JSON.stringify({
+        summary: "One bug, found twice.",
+        findings: [
+          {
+            severity: "high",
+            file: "a.js",
+            line: 3,
+            problem: "off by one",
+            reviewers: ["claude", "codex"],
+          },
+        ],
+      }) +
+      "\n```"
+  );
+  assert.equal(task.status, "done");
+  assert.equal(task.report.findings.length, 1);
+  assert.equal(task.report.summary, "One bug, found twice.");
 });

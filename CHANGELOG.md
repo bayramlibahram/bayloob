@@ -3,6 +3,33 @@
 ## Unreleased
 
 ### Added
+- **Arbiter** (orchestration 06): one read-only agent decides between the candidates.
+  - **Agent:** Codex by default, or the one picked in New task. The New task dialog suggests one that isn't
+    building.
+  - **Input:** Bayloob gives it the goal, the plan, and each candidate's diff, tests and reviews.
+  - **Output:** exactly one JSON block, checked against a schema. An unusable answer is asked again once; after
+    that, you decide.
+  - **What happens next:**
+    - **Select:** its winner goes on to your merge. You can still *Pick another* there, and the override is
+      logged.
+    - **Retry:** the builders get its instructions.
+    - **Merge ideas:** the best candidate takes the others' diffs.
+    - **Escalate:** you decide.
+  - **When you decide anyway:** below the confidence setting (Settings → Agents → Arbiter, default 0.6), on a
+    high risk, or when it escalates. The new **Decision** gate offers Accept / Pick another / Retry / Abort
+    (Alt+A / Alt+P / Alt+R).
+  - **Decision tab:** the candidates ranked, with score bars, reasons, confidence and risks; *Choose this one*
+    picks another.
+  - **Review board:** the Arbiter merges the reviews into one **Report**, with duplicates removed, sorted by
+    severity, showing who found each one.
+  - **Workflow builder:** the Arbiter stage has its agent, prompt and rubric ("Judges by"). Remove the agent and
+    you pick instead.
+  - **Checked with real agents on a toy repo:**
+    - Best-of-N: Claude planned, two Claude builders worked, the tests passed, and Codex as the Arbiter chose
+      build-2 at confidence 0.99. The owner picked build-1 at the merge gate instead; the override was logged and
+      build-1 was merged.
+    - Review board: Claude and Codex reviewed, and Claude as the Arbiter merged the reviews into 9 findings. The
+      top one was a real half-cent rounding bug, ranked first.
 - **Split work** (orchestration 05):
   - The planner splits the task into subtasks, each owning its files, in a JSON block.
   - Bayloob checks that no file or folder is owned twice. An overlap, or subtasks it can't read, stop at a gate

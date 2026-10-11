@@ -7,6 +7,7 @@ section of the Workspace window (04b) with the workflow builder (04c).
 | File | Role |
 |---|---|
 | `src/shared/workflow-templates.js` | Stage schema, validation (plain-language errors), built-ins Pipeline, Best-of-N, Split work and Review board, prompt variables |
+| `src/main/modules/tasks/arbiter.js` | The Arbiter: its input (goal, plan, per candidate: diff, tests, reviews, metrics), the decision / report schema, when the owner decides |
 | `src/main/modules/tasks/subtasks.js` | Split work: the planner's subtasks (JSON block), file disjointness, what each builder is told |
 | `src/main/modules/tasks/task-engine.js` | State machine: stages, instances, candidates, gates, loops, restart recovery |
 | `src/main/modules/tasks/task-store.js` | `tasks/<id>/config.json`, `state.json` (atomic), `log.jsonl`, `artifacts/` |
@@ -37,6 +38,28 @@ section of the Workspace window (04b) with the workflow builder (04c).
 
   Each reviewer's answer is kept on its own (`review.md`, `review.2.md` …) with its findings. They are merged once
   the Arbiter arrives (06).
+- **Arbiter** (command 06): an `arbiter` stage with one read-only agent.
+  - **Input:** Bayloob writes `arbiter-input.md`:
+    - goal and approved plan;
+    - per candidate: diff, test result and output, reviews, build time.
+
+    The input goes into the prompt, capped at 70 000 characters. A read-only Claude can't read files outside its
+    worktree, so the input can't be a separate file.
+  - **Output:** exactly one JSON block `{decision, winner, ranking, retry_instructions, risks, confidence}`, checked
+    against a schema. An invalid answer is asked again once, in the same session, with the error; after that the
+    owner decides.
+  - **What each decision does:**
+    - `select` → the winner goes on to the merge gate. That gate also offers *Pick another*; an override is logged.
+    - `retry` → the builders get its instructions.
+    - `merge_ideas` → the best candidate continues, with the other candidates' diffs in its prompt.
+    - `escalate` → the owner decides.
+
+    `retry` and `merge_ideas` get one round; after that the owner decides.
+  - **When the owner decides anyway** (the `decision` gate): confidence below the setting (Settings → Agents → Arbiter,
+    default 0.6), a risk starting with "high", or `escalate`. A gate is opened even after `select`.
+  - **Review board:** the Arbiter instead merges the reviews into one report `{summary, findings: [{severity, file,
+    line, problem, reviewers}]}`, sorted by severity.
+  - An `arbiter` stage without an agent still means the owner picks.
 - **Loops**: `onFail: { goto, prompt, maxLoops }`. Failing tests send only the failing candidates back,
   into their own sessions. After `maxLoops` such a candidate drops out. If none is left, the owner decides.
 
@@ -44,8 +67,9 @@ section of the Workspace window (04b) with the workflow builder (04c).
 | Gate | When | Actions |
 |---|---|---|
 | `approve` | After a stage with `gate: human` (the plan); always when split subtasks overlap or can't be read | approve · changes (note → same session) · abort — no approve for unreadable subtasks |
-| `pick` | `gate: arbiter`, until command 06 | pick a candidate · retry (note → builders) · abort |
-| `merge` | Last stage | merge (base branch, clean tree, `--no-ff`; conflict → undone, listed) · keep branches · abort |
+| `pick` | An arbiter stage without an agent | pick a candidate · retry (note → builders) · abort |
+| `decision` | The Arbiter isn't sure, sees a high risk, escalates, its answer can't be used, or its rounds are used up | accept (its winner) · pick another · retry (note) · abort |
+| `merge` | Last stage | merge (base branch, clean tree, `--no-ff`; conflict → undone, listed) · keep branches · pick another (when more than one is left) · abort |
 | `tests-failed` | No candidate passes | continue anyway · retry with a note · abort |
 | `interrupted` | A session ended mid-turn, or after a restart | retry · abort |
 | `violation` | A read-only agent changed files | continue · abort |

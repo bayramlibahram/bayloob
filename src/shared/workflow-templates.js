@@ -16,6 +16,9 @@
 // stage with `split` runs one builder per subtask (its agents take turns), and the `integrate` action merges
 // their branches into one candidate that the later stages test, review and merge.
 // A task without builders (Review board) reviews what it started from: {{diff}} is the command that shows it.
+// Arbiter: a stage with role arbiter and one read-only agent decides between the candidates (gate "arbiter") or,
+// without builders, merges the reviewers' findings. Bayloob writes its input to the artifact arbiter-input.md.
+// An arbiter stage without agents leaves the pick to the owner.
 (root => {
   const ROLES = ["planner", "builder", "tester", "reviewer", "arbiter", "you"];
   const MODES = ["writes", "read-only", "plan"];
@@ -37,6 +40,9 @@
     subtask: "This builder's subtask and the files it owns (Split work)",
     parts: "How many builders the plan may be split between (Split work)",
     diff: "The git command that shows the change under review (Review board)",
+    rubric: "What the Arbiter judges by (its stage's rubric)",
+    "artifact:arbiter-input.md":
+      "Everything the Arbiter decides on: goal, plan, each candidate's diff, tests and reviews",
     "artifact:plan.md": "The approved plan",
     "artifact:test-output": "This candidate's test output",
     "artifact:review.md": "This candidate's review",
@@ -115,6 +121,49 @@
     "{{task}}"
   );
 
+  const ARBITER_PROMPT = lines(
+    "You are the Arbiter: decide which candidate to keep. Judge by this rubric:",
+    "{{rubric}}",
+    "Everything you need is below; you may also run read-only git commands (git diff, git show). Do not change any file.",
+    "Answer with your reasoning in a few lines, then end with exactly one JSON block:",
+    "```json",
+    '{"decision": "select", "winner": "build-2", "ranking": [{"candidate": "build-2", "score": 8.5, "reasons": ["..."]}], "retry_instructions": null, "risks": [], "confidence": 0.8}',
+    "```",
+    "- decision: select (keep the winner) · retry (they should all try again — say how in retry_instructions) ·",
+    "merge_ideas (the winner should take the good ideas of the others) · escalate (the owner has to decide).",
+    '- Rank every candidate, score 0–10. Start a risk with "high:" when it is serious. confidence: 0 to 1.',
+    "",
+    "{{artifact:arbiter-input.md}}"
+  );
+
+  const BOARD_ARBITER_PROMPT = lines(
+    "You are the Arbiter of a review board. Merge the reviewers' findings below into one list: remove duplicates",
+    "(the same problem in other words), drop findings that are wrong (check the code with read-only git commands",
+    "if you need to), and rank them by severity. Do not change any file.",
+    "Answer with a short summary, then end with exactly one JSON block:",
+    "```json",
+    '{"summary": "One or two sentences.", "findings": [{"severity": "high", "file": "src/a.js", "line": 12, "problem": "...", "reviewers": ["claude", "codex"]}]}',
+    "```",
+    "severity: high, medium or low.",
+    "",
+    "{{artifact:arbiter-input.md}}"
+  );
+
+  const CODE_RUBRIC =
+    "correctness against the task and the plan; tests passing; size and scope of the diff; risk; readability; review findings resolved";
+
+  const arbiterStage = (gate = "arbiter") => ({
+    id: "decide",
+    title: "Arbiter",
+    role: "arbiter",
+    mode: "read-only",
+    agents: [{ adapter: "codex", count: 1 }],
+    prompt: ARBITER_PROMPT,
+    rubric: CODE_RUBRIC,
+    artifact: "decision.md",
+    gate,
+  });
+
   const BUILTINS = {
     pipeline: {
       id: "pipeline",
@@ -162,7 +211,7 @@
           artifact: "review.md",
           gate: "always",
         },
-        { id: "decide", title: "Decide", role: "arbiter", gate: "arbiter" },
+        arbiterStage(),
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
       ],
     },
@@ -204,7 +253,7 @@
           gate: "tests-pass",
           onFail: { goto: "build", prompt: FIX_TESTS_PROMPT, maxLoops: 1 },
         },
-        { id: "decide", title: "Decide", role: "arbiter", gate: "arbiter" },
+        arbiterStage(),
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
       ],
     },
@@ -261,7 +310,7 @@
           artifact: "review.md",
           gate: "always",
         },
-        { id: "decide", title: "Decide", role: "arbiter", gate: "arbiter" },
+        arbiterStage(),
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
       ],
     },
@@ -283,6 +332,16 @@
           parallel: true,
           prompt: BOARD_PROMPT,
           artifact: "review.md",
+          gate: "always",
+        },
+        {
+          id: "consolidate",
+          title: "Arbiter",
+          role: "arbiter",
+          mode: "read-only",
+          agents: [{ adapter: "codex", count: 1 }],
+          prompt: BOARD_ARBITER_PROMPT,
+          artifact: "report.md",
           gate: "always",
         },
       ],
@@ -339,7 +398,20 @@
       if (!GATES.includes(s.gate)) {
         add(`${name}: pick a gate (${GATES.join(", ")})`);
       }
-      const agentStage = !s.action && s.role !== "you" && s.role !== "arbiter";
+      const deciding = s.role === "arbiter" && Array.isArray(s.agents) && s.agents.length > 0;
+      const agentStage = !s.action && s.role !== "you" && (s.role !== "arbiter" || deciding);
+      if (deciding) {
+        const n = s.agents.reduce((a, x) => a + Number(x?.count || 0), 0);
+        if (n !== 1) {
+          add(`${name}: the Arbiter is exactly one agent`);
+        }
+        if (s.mode !== "read-only") {
+          add(`${name}: the Arbiter only reads — its mode must be "read-only"`);
+        }
+        if (builders && s.gate !== "arbiter") {
+          add(`${name}: an Arbiter after builders decides — its gate must be "Arbiter"`);
+        }
+      }
       if (s.action && !ACTIONS.includes(s.action)) {
         add(`${name}: unknown action "${s.action}"`);
       }
@@ -359,6 +431,9 @@
       }
       if (s.action === "merge" && !builders) {
         add(`${name}: there is nothing to merge without a build stage before it`);
+      }
+      if (s.gate === "arbiter" && s.role !== "arbiter") {
+        add(`${name}: the "Arbiter" gate belongs to an Arbiter stage`);
       }
       if (s.gate === "arbiter" && !builders) {
         add(`${name}: the Arbiter picks between candidates — add a build stage before it`);
@@ -488,6 +563,9 @@
       if (s.role === "builder" && builders.length) {
         s.agents = builders;
       }
+      if (s.role === "arbiter" && s.agents?.length && w.arbiter) {
+        s.agents = [{ adapter: w.arbiter, count: 1 }];
+      }
       // A Review board's reviewers are the agents picked in the dialog
       if (s.role === "reviewer" && w.pattern === "board" && builders.length) {
         s.agents = builders;
@@ -501,6 +579,7 @@
   const builtin = id => (BUILTINS[id] ? clone(BUILTINS[id]) : null);
 
   const api = {
+    CODE_RUBRIC,
     ROLES,
     MODES,
     ACTIONS,

@@ -17,13 +17,19 @@
 //               testCommand(root) → string | null, runTests(dir, command) → { ok, code, output },
 //               merge({ root, branch, into, message }) → { ok, error?, conflicts? },
 //               integrate({ root, taskId, sha, candidate, branches }) → { ok, dir, branch, head, error?, conflicts? },
-//               reviewRange({ root, sha, head, fromWorktree }) → { from, to, label } }
+//               reviewRange({ root, sha, head, fromWorktree }) → { from, to, label },
+//               diff(root, sha, branch) → text }
 // Nothing destructive or outward-facing happens without decide() from the human: merging is a gate action,
 // worktrees and branches are never deleted here.
 const { EventEmitter } = require("node:events");
-const { renderPrompt, validateTemplate } = require("../../../shared/workflow-templates");
+const {
+  renderPrompt,
+  validateTemplate,
+  CODE_RUBRIC,
+} = require("../../../shared/workflow-templates");
 const { parseFindings } = require("../agents/challenge-report");
 const { parseSubtasks, overlaps, describeSubtask } = require("./subtasks");
+const { arbiterInput, parseDecision, parseReport, needsOwner } = require("./arbiter");
 
 const ARTIFACT_IN_PROMPT = 12_000; // an artifact pasted into a prompt keeps its tail beyond this
 const CHANGES_PROMPT = `The owner asked for changes:
@@ -32,13 +38,22 @@ const CHANGES_PROMPT = `The owner asked for changes:
 Do it, then answer again in the same form as before.`;
 const RETRY_PROMPT = `The owner asks for another attempt:
 {{note}}`;
+const REASK_PROMPT = `Your answer couldn't be used: {{note}}
+Answer again, ending with exactly one JSON block in the form asked for.`;
+const MERGE_IDEAS_PROMPT = `The Arbiter kept your change and asks you to take the good ideas of the other candidates into it:
+{{note}}
+
+Then run the project's tests again.`;
+const ARBITER_LOOPS = 1; // rounds the Arbiter may send back (retry / merge ideas) before you decide
+const OTHER_DIFF_MAX = 8_000;
 const ENDED = new Set(["done", "failed", "stopped", "interrupted"]);
 const OPEN = new Set(["running", "needs-you"]);
 const INTEGRATED = "integrate-1"; // the candidate a split build's parts are merged into
 
 const GATE_ACTIONS = {
   approve: ["approve", "changes", "abort"], // after a stage the owner reviews (the plan)
-  pick: ["pick", "retry", "abort"], // the Arbiter's gate until command 06: the owner picks the winner
+  pick: ["pick", "retry", "abort"], // an arbiter stage without an agent: the owner picks the winner
+  decision: ["accept", "pick", "retry", "abort"], // the Arbiter's decision needs the owner (accept: its winner)
   merge: ["merge", "keep", "abort"],
   "tests-failed": ["continue", "retry", "abort"], // no candidate passed its tests
   interrupted: ["retry", "abort"], // an agent's session ended before its turn did
@@ -62,9 +77,17 @@ class TaskEngine extends EventEmitter {
   #chains = new Map(); // id → promise: one change at a time per task
   #pumping = false;
 
-  constructor({ store, scheduler, runner, workspace, capacity = () => undefined, now = Date.now }) {
+  constructor({
+    store,
+    scheduler,
+    runner,
+    workspace,
+    capacity = () => undefined,
+    now = Date.now,
+    arbiterThreshold = () => 0.6,
+  }) {
     super();
-    Object.assign(this, { store, scheduler, runner, workspace, capacity, now });
+    Object.assign(this, { store, scheduler, runner, workspace, capacity, now, arbiterThreshold });
     scheduler.on("released", () => this.pump());
   }
 
@@ -282,8 +305,14 @@ class TaskEngine extends EventEmitter {
       if ((action === "changes" || action === "retry") && !plainRetry && !note) {
         return { ok: false, error: "Write what should change" };
       }
-      if (action === "pick" && !task.candidates.some(c => c.id === candidate)) {
+      if (action === "pick" && !this.#active(task).some(c => c.id === candidate)) {
         return { ok: false, error: "Pick one of the candidates" };
+      }
+      if (action === "accept") {
+        candidate = gate.arbiter?.winner || null;
+        if (!candidate) {
+          return { ok: false, error: "The Arbiter didn't pick a winner — pick one yourself" };
+        }
       }
       this.#log(task, "you", `gate:${action}`, {
         gate: gate.kind,
@@ -291,6 +320,11 @@ class TaskEngine extends EventEmitter {
         note,
         candidate,
       });
+      // You overrule the Arbiter: logged with what it had chosen
+      const chose = task.arbiter?.winner;
+      if (action === "pick" && chose && candidate !== chose) {
+        this.#log(task, "you", "override", { arbiter: chose, candidate });
+      }
       if (action === "abort") {
         await this.#stop(task, "aborted at a gate");
         return { ok: true };
@@ -313,9 +347,15 @@ class TaskEngine extends EventEmitter {
         case "changes":
           await this.#runStage(task, { prompt: CHANGES_PROMPT, vars: { note }, reuse: true });
           break;
+        case "accept":
         case "pick":
           task.winner = candidate;
-          await this.#advance(task);
+          if (gate.kind === "merge") {
+            // Another candidate than the Arbiter's, right before merging: still your click to merge it
+            this.#openGate(task, "merge", this.#mergeTitle(task), this.#mergeExtra(task));
+          } else {
+            await this.#advance(task);
+          }
           break;
         case "retry":
           if (gate.kind === "interrupted" || gate.kind === "failed") {
@@ -424,17 +464,16 @@ class TaskEngine extends EventEmitter {
     } else if (st.action === "integrate") {
       await this.#integrate(task);
     } else if (st.action === "merge") {
-      this.#openGate(
-        task,
-        "merge",
-        task.base.fromWorktree ? "Apply the winner to your files?" : "Merge the winner?"
-      );
-    } else if (st.role === "arbiter") {
-      // Command 06 brings the Arbiter; until then the owner picks between the candidates
+      this.#openGate(task, "merge", this.#mergeTitle(task), this.#mergeExtra(task));
+    } else if (st.role === "arbiter" && !st.agents?.length) {
+      // No Arbiter agent in this template: the owner picks between the candidates
       this.#openGate(task, "pick", "Pick the candidate to keep");
     } else if (st.role === "you") {
       this.#openGate(task, "approve", st.title);
     } else {
+      if (st.role === "arbiter" && !prompt) {
+        await this.#prepareArbiter(task);
+      }
       this.#queueAgents(task, st, state.round, { only, prompt, vars, reuse });
       if (!task.instances.some(i => i.stage === st.id && i.round === state.round)) {
         await this.#checkStage(task); // nobody to run (no candidate left for this round)
@@ -608,6 +647,7 @@ class TaskEngine extends EventEmitter {
       subtask: cand?.subtask ? describeSubtask(task.subtasks?.list || [], cand.subtask) : "",
       parts: st?.split && splitBuild ? splitBuild.agents.reduce((n, a) => n + a.count, 0) : "",
       diff: task.review ? `git diff ${task.review.from}..${task.review.to}` : "",
+      rubric: st?.rubric || CODE_RUBRIC,
       ...inst.vars,
     };
     return renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
@@ -759,6 +799,10 @@ class TaskEngine extends EventEmitter {
   }
 
   async #applyGate(task, st, round) {
+    if (st.role === "arbiter" && st.agents?.length) {
+      await this.#arbiterAnswered(task, st, round);
+      return;
+    }
     // Split work: subtasks that can't run or that share files are never started without you
     const split = st.split && st.role === "planner" ? task.subtasks : null;
     if (split && (split.error || split.overlaps.length)) {
@@ -849,6 +893,164 @@ class TaskEngine extends EventEmitter {
       return;
     }
     await this.#advance(task);
+  }
+
+  // ---------- the Arbiter ----------
+
+  // What it decides on, as one artifact (arbiter-input.md) its prompt carries
+  async #prepareArbiter(task) {
+    const builders = task.template.stages.some(s => s.role === "builder");
+    let input;
+    if (!builders) {
+      const reviews = task.instances
+        .filter(i => i.role === "reviewer" && i.status === "done" && i.artifact)
+        .map(i => ({
+          reviewer: `${i.adapter} (${i.artifact})`,
+          text: this.#readArtifact(task, i.artifact) || "",
+        }));
+      input = arbiterInput({ goal: task.text, reviews, range: task.review });
+    } else {
+      const candidates = [];
+      for (const c of this.#active(task)) {
+        const built = task.instances.filter(
+          i => i.candidate === c.id && i.role === "builder" && i.endedAt
+        );
+        const ms = built.reduce((n, i) => n + (i.endedAt - (i.startedAt || i.endedAt)), 0);
+        candidates.push({
+          id: c.id,
+          adapter: c.adapter,
+          branch: c.branch,
+          diffstat: c.diff,
+          diff: await this.workspace
+            .diff?.(task.project.root, task.base.sha, c.branch)
+            .catch(e => `(diff failed: ${e.message})`),
+          tests: c.tests,
+          testOutput: this.#readArtifact(task, `test-output.${c.id}.txt`),
+          reviews: [this.#artifactFor(task, "review.md", c.id)].filter(Boolean),
+          minutes: built.length ? Math.round(ms / 6000) / 10 : null,
+        });
+      }
+      input = arbiterInput({
+        goal: task.text,
+        plan: this.#readArtifact(task, "plan.md"),
+        candidates,
+      });
+    }
+    this.store.writeArtifact(task.id, "arbiter-input.md", input);
+    this.#log(task, "engine", "arbiter-input", { chars: input.length });
+  }
+
+  // Its answer: checked, re-asked once when it can't be used, then mapped to what the engine allows
+  async #arbiterAnswered(task, st, round) {
+    const state = task.stages[task.stage];
+    const inst = [...round].reverse().find(i => i.status === "done");
+    const text = (inst?.artifact && this.#readArtifact(task, inst.artifact)) || "";
+    const board = !task.template.stages.some(s => s.role === "builder");
+    const parsed = board
+      ? parseReport(text)
+      : parseDecision(
+          text,
+          this.#active(task).map(c => c.id)
+        );
+    if (!parsed.ok) {
+      this.#log(task, "engine", "arbiter-invalid", {
+        error: parsed.error,
+        reasked: !!state.reasked,
+      });
+      if (!state.reasked) {
+        state.reasked = true;
+        await this.#runStage(task, {
+          prompt: REASK_PROMPT,
+          vars: { note: parsed.error },
+          reuse: true,
+        });
+        return;
+      }
+      state.reasked = false;
+      if (board) {
+        task.report = { error: parsed.error, summary: "", findings: [] };
+        await this.#advance(task);
+        return;
+      }
+      this.#openGate(task, "decision", "The Arbiter's answer couldn't be used — you decide", {
+        detail: parsed.error,
+        actions: ["pick", "retry", "abort"],
+      });
+      return;
+    }
+    state.reasked = false;
+    if (board) {
+      task.report = parsed.report;
+      this.#log(task, "agent", "report", { findings: parsed.report.findings.length });
+      await this.#advance(task);
+      return;
+    }
+    const d = { ...parsed.decision, adapter: inst.adapter, at: this.now() };
+    task.arbiter = d;
+    this.#log(task, "agent", "arbiter", {
+      decision: d.decision,
+      winner: d.winner,
+      confidence: d.confidence,
+      high: d.risks.filter(r => r.high).length,
+    });
+    const threshold = this.arbiterThreshold();
+    let why = needsOwner(d, threshold);
+    const again = d.decision === "retry" || d.decision === "merge_ideas";
+    if (!why && again && state.loops >= ARBITER_LOOPS) {
+      why = "The Arbiter wants another round, but its rounds are used up";
+    }
+    if (why) {
+      this.#openGate(task, "decision", why, {
+        arbiter: d,
+        actions: d.winner ? GATE_ACTIONS.decision : ["pick", "retry", "abort"],
+      });
+      return;
+    }
+    if (d.decision === "select") {
+      task.winner = d.winner;
+      await this.#advance(task);
+      return;
+    }
+    state.loops += 1;
+    const build = this.#builderIndex(task);
+    if (d.decision === "retry") {
+      await this.#goto(task, build, {
+        only: this.#active(task).map(c => c.id),
+        prompt: RETRY_PROMPT,
+        vars: { note: d.retry },
+      });
+      return;
+    }
+    // merge_ideas: the best candidate continues, with the others' diffs in front of it
+    const keep = d.winner || d.ranking[0]?.candidate;
+    const others = [];
+    for (const c of this.#active(task).filter(x => x.id !== keep)) {
+      const diff = await this.workspace
+        .diff?.(task.project.root, task.base.sha, c.branch)
+        .catch(() => "");
+      others.push(`${c.id}:\n${tail(String(diff || ""), OTHER_DIFF_MAX)}`);
+    }
+    await this.#goto(task, build, {
+      only: [keep],
+      prompt: MERGE_IDEAS_PROMPT,
+      vars: {
+        note: [d.retry || d.ranking.find(r => r.candidate === keep)?.reasons.join("; "), ...others]
+          .filter(Boolean)
+          .join("\n\n"),
+      },
+    });
+  }
+
+  #mergeTitle(task) {
+    const by = task.arbiter?.winner === task.winner ? " (the Arbiter's pick)" : "";
+    return task.base.fromWorktree
+      ? `Apply ${task.winner || "the winner"}${by} to your files?`
+      : `Merge ${task.winner || "the winner"}${by}?`;
+  }
+
+  // At the merge gate you can still choose another candidate than the Arbiter's
+  #mergeExtra(task) {
+    return this.#active(task).length > 1 ? { actions: ["merge", "keep", "pick", "abort"] } : {};
   }
 
   // Split work: the parts' branches merged into one candidate (in its own worktree), which the later stages

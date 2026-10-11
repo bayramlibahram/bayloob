@@ -159,6 +159,11 @@ class TaskWorkspace {
     return parseShortstat(await run(root, ["diff", "--shortstat", `${sha}...${branch}`]));
   }
 
+  /** The candidate's whole change against the base (for the Arbiter's input). */
+  diff(root, sha, branch) {
+    return run(root, ["diff", "--no-color", `${sha}...${branch}`], 60_000);
+  }
+
   testCommand(root) {
     return detectTests(root);
   }

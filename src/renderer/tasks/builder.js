@@ -58,7 +58,7 @@
       builder: "Builder",
       tester: "Built-in: run tests",
       reviewer: "Reviewer",
-      arbiter: "Decide",
+      arbiter: "Arbiter",
       integrate: "Built-in: integrate parts",
       you: "You merge",
     },
@@ -66,14 +66,18 @@
       always: "Go on",
       human: "Ask me",
       "tests-pass": "Tests pass",
-      arbiter: "Arbiter (you pick for now)",
+      arbiter: "Arbiter decides",
       "no-findings": "No review findings",
     },
     modes: { plan: "plan", "read-only": "read-only", writes: "writes" },
     testerNote: "Runs the project’s own test command in every candidate’s worktree.",
     integrateNote:
       "Merges the split build’s parts into one branch in its own worktree; a conflict between parts stops for you.",
-    arbiterNote: "Until the Arbiter arrives (command 06), you pick the winner here.",
+    arbiterNote: "No Arbiter agent: you pick the winner here.",
+    addArbiter: "Let an agent decide",
+    rubric: "Judges by",
+    arbiterTip:
+      "One read-only agent ranks the candidates; below your confidence setting, or on a high risk, you decide",
     mergeNote:
       "You merge the winner into the branch the task started from — nothing is merged until you click.",
     kinds: {
@@ -137,7 +141,10 @@
       action: "integrate",
       gate: "always",
     }),
-    decide: () => ({ id: "decide", title: "Decide", role: "arbiter", gate: "arbiter" }),
+    // The Arbiter as the built-ins have it: one read-only agent, its prompt and rubric
+    decide: () => ({
+      ...WorkflowTemplates.builtin("bestofn").stages.find(s => s.role === "arbiter"),
+    }),
     merge: () => ({ id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" }),
   };
   const AGENT_ROLES = new Set(["planner", "builder", "reviewer"]);
@@ -253,7 +260,7 @@
 
     #stageHtml(s, i) {
       const t = this.edit.template;
-      const agentStage = AGENT_ROLES.has(s.role);
+      const agentStage = AGENT_ROLES.has(s.role) || (s.role === "arbiter" && !!s.agents?.length);
       const issues = this.edit.issues.filter(x => x.stage === i);
       const total = (s.agents || []).reduce((a, x) => a + Number(x.count || 0), 0);
       const gates = Object.keys(B.gates).filter(
@@ -287,7 +294,7 @@
       let body = "";
       if (agentStage) {
         body += (s.agents || []).map((a, k) => this.#slotHtml(s, i, a, k)).join("");
-        body += `<div class="row"><button class="btn sm ghost" type="button" data-addagent="${i}">${ICO.plus} ${B.addAgent}</button>
+        body += `<div class="row">${s.role === "arbiter" ? `<label class="check" title="${B.arbiterTip}">${B.rubric} <input class="mono" style="min-width:420px" data-f="rubric" data-i="${i}" value="${esc(s.rubric || "")}" spellcheck="false"></label>` : `<button class="btn sm ghost" type="button" data-addagent="${i}">${ICO.plus} ${B.addAgent}</button>`}
           ${s.role === "reviewer" ? `<label class="check"><input type="checkbox" data-c="perCandidate" data-i="${i}"${s.perCandidate ? " checked" : ""}> ${B.perCandidate}</label>` : ""}
           ${B.split[s.role] ? `<label class="check" title="${B.splitTip[s.role]}"><input type="checkbox" data-c="split" data-i="${i}"${s.split ? " checked" : ""}> ${B.split[s.role]}</label>` : ""}
           ${s.role !== "builder" ? `<label class="check">${B.saveAs} <input class="small mono" data-f="artifact" data-i="${i}" value="${esc(s.artifact || "")}" placeholder="answer.md" spellcheck="false"></label>` : ""}</div>`;
@@ -295,7 +302,7 @@
       } else if (s.role === "tester") {
         body += `<p class="hint">${B.testerNote}</p>`;
       } else if (s.role === "arbiter") {
-        body += `<p class="hint">${B.arbiterNote}</p>`;
+        body += `<p class="hint">${B.arbiterNote} <button class="btn sm ghost" type="button" data-arbiter="${i}">${ICO.plus} ${B.addArbiter}</button></p>`;
       } else if (s.action === "integrate") {
         body += `<p class="hint">${B.integrateNote}</p>`;
       } else {
@@ -432,6 +439,8 @@
         t[f] = el.value;
       } else if (f === "title") {
         s.title = el.value;
+      } else if (f === "rubric") {
+        s.rubric = el.value;
       } else if (f === "artifact") {
         s.artifact = el.value.trim() || undefined;
       } else if (f === "prompt") {
@@ -522,6 +531,14 @@
         this.#move(i, Number(d.move));
       } else if (d.del !== undefined) {
         t.stages.splice(Number(d.del), 1);
+      } else if (d.arbiter !== undefined) {
+        const old = t.stages[Number(d.arbiter)];
+        t.stages[Number(d.arbiter)] = {
+          ...KINDS.decide(),
+          id: old.id,
+          title: old.title,
+          gate: old.gate,
+        };
       } else if (d.addagent !== undefined) {
         t.stages[i].agents = [...(t.stages[i].agents || []), { adapter: "claude", count: 1 }];
       } else if (d.delagent) {

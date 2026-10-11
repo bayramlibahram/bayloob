@@ -115,13 +115,13 @@
 <body>
   <form class="panel" id="form" autocomplete="off">
     <div class="title"><b>Settings</b><kbd>Esc</kbd></div>
-    <nav class="tabs" role="tablist" aria-label="Settings" id="tabs">
+    <div class="tabs" role="tablist" aria-label="Settings" id="tabs">
       <button type="button" class="tab" role="tab" data-tab="general" aria-selected="true">General</button>
       <button type="button" class="tab" role="tab" data-tab="integrations">Integrations</button>
       <button type="button" class="tab" role="tab" data-tab="sounds">Sounds</button>
       <button type="button" class="tab" role="tab" data-tab="agents">Agents</button>
       <button type="button" class="tab" role="tab" data-tab="permissions">Permissions</button>
-    </nav>
+    </div>
 
     <section class="pane" data-pane="general" role="tabpanel">
     <div class="field">
@@ -197,6 +197,11 @@
       <button type="button" class="link" id="agentsMore" aria-expanded="false">Agents and limits…</button>
       <div class="agentgrid" id="agentGrid" hidden></div>
     </div>
+    <div class="field">
+      <span class="label">Arbiter</span>
+      <div class="seg" id="arbiterConfidence" title="Below this confidence, the Arbiter's pick waits for you"><button type="button" data-v="0.5">0.5</button><button type="button" data-v="0.6">0.6</button><button type="button" data-v="0.7">0.7</button><button type="button" data-v="0.8">0.8</button><button type="button" data-v="0.9">0.9</button></div>
+      <small>Its pick goes on to your merge only at this confidence or above, with no high risk. You always click merge.</small>
+    </div>
     </section>
 
     <section class="pane" data-pane="permissions" role="tabpanel" hidden>
@@ -255,7 +260,7 @@
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { form: $('form'), mascot: $('mascot'), pillSize: $('pillSize'), uiScale: $('uiScale'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
+      this.el = { form: $('form'), mascot: $('mascot'), pillSize: $('pillSize'), uiScale: $('uiScale'), arbiterConfidence: $('arbiterConfidence'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
         agentSum: $('agentSum'), agentsMore: $('agentsMore'), agentGrid: $('agentGrid'),
         music: $('music'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
@@ -267,6 +272,7 @@
       this.mascot = values.mascot;
       this.pillSize = values.pillSize || 'l';
       this.uiScale = Number(values.uiScale) || 1;
+      this.arbiterConfidence = Number(values.arbiterConfidence) || 0.6;
       this.theme = values.theme;
       this.music = values.music;
       this.watchClipboard = values.watchClipboard;
@@ -314,6 +320,7 @@
       for (const b of this.el.mascot.children) { b.setAttribute('aria-pressed', b.dataset.v === this.mascot); b.disabled = locked; }
       for (const b of this.el.pillSize.children) { b.setAttribute('aria-pressed', b.dataset.v === this.pillSize); }
       for (const b of this.el.uiScale.children) { b.setAttribute('aria-pressed', Math.abs(Number(b.dataset.v) - this.uiScale) < 0.01); }
+      for (const b of this.el.arbiterConfidence.children) { b.setAttribute('aria-pressed', Math.abs(Number(b.dataset.v) - this.arbiterConfidence) < 0.01); }
     }
 
     #renderSounds() {
@@ -463,7 +470,7 @@
       this.el.save.disabled = true;
       const res = await this.api?.save({
         agents: this.agents, limits: this.limits,
-        mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
+        mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -481,6 +488,10 @@
       this.el.mascot.addEventListener('click', e => {
         const b = e.target.closest('[data-v]');
         if (b && !b.disabled) { this.mascot = b.dataset.v; this.#renderMascot(); }
+      });
+      this.el.arbiterConfidence.addEventListener('click', e => {
+        const b = e.target.closest('button[data-v]');
+        if (b) { this.arbiterConfidence = Number(b.dataset.v); this.#renderMascot(); }
       });
       this.el.uiScale.addEventListener('click', e => {
         const b = e.target.closest('[data-v]');

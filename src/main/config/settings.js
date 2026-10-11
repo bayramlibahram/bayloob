@@ -17,6 +17,7 @@ const clampInt = (v, lo, hi, fb) =>
 const DEFAULTS = {
   mascot: "novi", // 'novi' (layered raster) or 'svg' (the original flat one)
   pillSize: "l", // the pill's mascot tile: 's' 28 px, 'm' 36 px, 'l' 46 px (the pill's height follows)
+  arbiterConfidence: 0.6, // below it, the Arbiter's pick waits for you (workflow tasks)
   uiScale: 1, // the workspace, its dialogs and Settings: 0.9 … 1.4 (Ctrl + / Ctrl − / Ctrl 0)
   theme: "system", // 'system' (follows GNOME), 'light' or 'dark'
   shortcut: "CommandOrControl+Alt+Space", // global shortcut for the launcher; '' turns it off
@@ -36,6 +37,7 @@ const ENV = {
   mascot: () => process.env.BAYLOOB_MASCOT,
   pillSize: () => undefined,
   uiScale: () => undefined,
+  arbiterConfidence: () => undefined,
   theme: () => process.env.BAYLOOB_THEME,
   shortcut: () => process.env.BAYLOOB_SHORTCUT,
   terminal: () => process.env.BAYLOOB_TERMINAL,
@@ -53,6 +55,10 @@ const VALIDATE = {
   mascot: v => (v === "svg" ? "svg" : "novi"),
   pillSize: v => (["s", "m"].includes(v) ? v : "l"),
   uiScale: v => clampScale(v),
+  arbiterConfidence: v => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= 1 ? Math.round(n * 100) / 100 : 0.6;
+  },
   theme: v => (["light", "dark"].includes(v) ? v : "system"),
   shortcut: v => String(v ?? "").trim(),
   terminal: v => String(v ?? "").trim(),
