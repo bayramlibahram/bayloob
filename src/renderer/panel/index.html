@@ -256,13 +256,25 @@
   .say .confirm .badge { margin-right: auto; }
   .ask { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   /* Ask Bayloob: one line until there's more, then it grows (four lines, then it scrolls) */
-  .ask .box { align-items: flex-end; }
-  .ask .box textarea { max-height: 96px; padding: 3px 0; overflow-y: auto; }
-  .ask .box .spark { align-self: center; }
+  /* The composer (both boxes): a round bar — + (attach) on the left, the response format as plain text, a round
+     send; Ask Bayloob is one row that grows upward, the agent's box puts its tools under the text */
+  .box { border-radius: 24px; border-color: rgb(var(--ink) / .06); background: rgb(var(--ink) / .06); }
+  .ask .box { align-items: flex-end; gap: 4px; padding: 6px; }
+  .ask .box textarea { max-height: 96px; padding: 8px 6px; overflow-y: auto; align-self: center; }
+  .say .box { border-radius: 22px; padding: 10px 6px 6px 14px; }
+  .box .attach { width: 36px; height: 36px; border-radius: 50%; color: var(--soft); }
+  .box .attach:hover { background: rgb(var(--ink) / .08); color: var(--text); }
+  .box .attach svg { width: 20px; height: 20px; stroke-width: 1.9; }
+  .say .box .tools { margin-left: -8px; }
+  .box .send { width: 36px; height: 36px; border-radius: 50%; }
+  .box .send .i { width: 18px; height: 18px; stroke-width: 2.2; }
+  .box .fmtpick { height: 32px; padding: 0 24px 0 10px; border: 0; border-radius: 999px; background-color: transparent; color: var(--soft); font-size: 13px;
+    appearance: none; cursor: pointer; background-repeat: no-repeat; background-position: right 7px center; background-size: 12px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238f8e9b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+  .box .fmtpick:hover, .box .fmtpick:focus-visible { background-color: rgb(var(--ink) / .08); color: var(--text); }
   /* the response format a prompt goes into (as set in Settings, another, or none) */
   .fmtpick { flex: none; max-width: 170px; height: 30px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 12px; }
   .fmtpick:hover { color: var(--text); }
-  .ask .spark { color: var(--brand-soft); font-size: 15px; }
   .askpick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .pick { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
     border: 1px solid var(--line); background: var(--raised); color: var(--soft); }
@@ -504,10 +516,10 @@
           <div class="sugg" id="saySugg" hidden></div>
           <div class="box"><textarea id="sayText" rows="1" spellcheck="false" aria-label="Prompt to the agent" aria-describedby="sayHint" aria-autocomplete="list" aria-controls="slash"></textarea>
             <div class="tools">
-            <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
+            <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
 <select class="fmtpick" id="sayFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
             <span class="count" id="sayCount"></span>
-            <button type="submit" class="send" id="saySend" title="Send (Enter)" aria-label="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>
+            <button type="submit" class="send" id="saySend" title="Send (Enter)" aria-label="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></div></div>
           <ul class="atts" id="sayAtts" hidden></ul>
           <ul class="pastes" id="sayPastes" hidden></ul>
           <div class="confirm" id="sayConfirm" hidden></div>
@@ -518,11 +530,10 @@
     </div>
 
     <form class="ask" id="ask" autocomplete="off">
-      <div class="box"><span class="spark">✦</span><textarea id="askText" rows="1" spellcheck="false" aria-label="Ask Bayloob" placeholder="Ask Bayloob — what should be done?"></textarea>
+      <div class="box"><button type="button" class="attach" id="askAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><textarea id="askText" rows="1" spellcheck="false" aria-label="Ask Bayloob" placeholder="Ask Bayloob — what should be done?"></textarea>
 <select class="fmtpick" id="askFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
-        <button type="button" class="attach" id="askAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
         <span class="count" id="askCount"></span>
-        <button type="submit" class="send" id="askSend" title="Next (Enter)" aria-label="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+        <button type="submit" class="send" id="askSend" title="Next (Enter)" aria-label="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></div>
       <ul class="atts" id="askAtts" hidden></ul>
       <ul class="pastes" id="askPastes" hidden></ul>
       <div class="askpick" id="askPick" hidden></div>
