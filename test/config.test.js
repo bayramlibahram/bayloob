@@ -115,13 +115,14 @@ test("pill size: s, m or l (anything else falls back to l, the original size)", 
   assert.equal(s.get("pillSize"), "l");
 });
 
-test("UI scale: 0.9 … 1.4 in steps of 0.1 (100 % when it isn't a number)", () => {
+test("UI scale: 0.9 … 1.5 on a 0.05 grid (100 % when it isn't a number)", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
   const s = new Settings(path.join(dir, "settings.json"));
   assert.equal(s.get("uiScale"), 1);
   for (const [given, kept] of [
-    [1.25, 1.3],
-    [2, 1.4],
+    [1.25, 1.25],
+    [1.27, 1.25],
+    [2, 1.5],
     [0.5, 0.9],
     ["x", 1],
     [1.1000000001, 1.1],
@@ -129,4 +130,17 @@ test("UI scale: 0.9 … 1.4 in steps of 0.1 (100 % when it isn't a number)", () 
     s.save({ uiScale: given });
     assert.equal(s.get("uiScale"), kept, String(given));
   }
+});
+
+test("Ctrl + / Ctrl − walk the UI scale's steps; a scale between steps goes to the next one", () => {
+  const { stepScale } = require("../src/main/windows/ui-scale");
+  assert.equal(stepScale(1, 1), 1.1);
+  assert.equal(stepScale(1.1, 1), 1.25);
+  assert.equal(stepScale(1.25, 1), 1.4);
+  assert.equal(stepScale(1.4, 1), 1.5);
+  assert.equal(stepScale(1.5, 1), 1.5);
+  assert.equal(stepScale(1.2, 1), 1.25); // saved before the steps changed
+  assert.equal(stepScale(1.2, -1), 1.1);
+  assert.equal(stepScale(0.9, -1), 0.9);
+  assert.equal(stepScale(1.4, 0), 1);
 });

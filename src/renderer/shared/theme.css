@@ -36,7 +36,7 @@
   --primary-fg: #ffffff;
   --btn-primary-bg: var(--primary-bg);
   --btn-primary-fg: var(--primary-fg);
-  --focus: rgba(139, 92, 255, 0.7);
+  --focus: #b28bff; /* opaque: a keyboard focus ring needs ≥ 3:1 on every surface */
 
   /* states (agents, tasks, results) */
   --idle: #9a99a6;
@@ -74,7 +74,7 @@
   --brand: #6a3fe0;
   --brand-soft: #5a32d0;
   --primary-bg: #6a3fe0;
-  --focus: rgba(106, 63, 224, 0.6);
+  --focus: #6a3fe0;
   --idle: #625f78;
   --thinking: #1d5fd6;
   --working: #8f5200;

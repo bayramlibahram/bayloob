@@ -94,5 +94,30 @@ for (const [name, theme] of [
     );
   }
 }
+// Marks outside theme.css, ≥ 3:1 on every surface: each agent's colour (its dot, ring and mascot accent,
+// from ui-common.js) and the keyboard focus ring (translucent, so blended over the surface first).
+// Disabled controls are exempt (WCAG 1.4.3), so their faded opacity isn't checked.
+const ui = fs.readFileSync(path.join(__dirname, "../src/renderer/shared/ui-common.js"), "utf8");
+const agents = [...ui.matchAll(/^ {2}(\w+): \{\n(?: {4}.*\n)*? {4}color: "(#[0-9a-f]{6})"/gim)].map(
+  m => [m[1], m[2]]
+);
+for (const [name, theme] of [
+  ["dark", dark],
+  ["light", light],
+]) {
+  const focus = rgba(theme.focus) || { rgb: hex(theme.focus), a: 1 };
+  for (const [label, colour] of [
+    ...agents.map(([k, c]) => [`agent ${k}`, () => hex(c)]),
+    ["focus ring", s => focus.rgb.map((c, i) => Math.round(c * focus.a + s[i] * (1 - focus.a)))],
+  ]) {
+    const cells = SURFACES.map(sf => {
+      const bg = surface(theme, sf);
+      const r = ratio(colour(bg), bg);
+      failed += r >= 3 ? 0 : 1;
+      return `${r.toFixed(2)}${r >= 3 ? " " : "✗"}`.padStart(15);
+    });
+    console.log(`${name.padEnd(6)} ${label.padEnd(16)}${cells.join("")}   (needs 3)`);
+  }
+}
 console.log(failed ? `\n✗ ${failed} below the minimum` : "\n✓ every token meets its minimum");
 process.exit(failed ? 1 : 0);

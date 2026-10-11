@@ -73,7 +73,7 @@ const { OverlayWindow } = require("../windows/overlay-window");
 const { PanelWindow } = require("../windows/panel-window");
 const { SettingsWindow } = require("../windows/settings-window");
 const { AppWindow } = require("../windows/app-window");
-const { uiScale } = require("../windows/ui-scale");
+const { uiScale, stepScale } = require("../windows/ui-scale");
 const { TrayMenu } = require("../windows/tray");
 
 const IS_LINUX = process.platform === "linux";
@@ -1571,9 +1571,7 @@ class BayloobApp {
     ipcMain.on("open-tasks", (_e, id) => this.openTasks(id ? String(id) : null));
     // Ctrl + / Ctrl − / Ctrl 0 in any workspace window: one step of the UI scale (0 = back to 100 %)
     ipcMain.on("ui-scale", (_e, step) => {
-      const s = Number(step);
-      const next = s === 0 ? 1 : uiScale.factor + (s > 0 ? 0.1 : -0.1);
-      this.settings.save({ uiScale: next });
+      this.settings.save({ uiScale: stepScale(uiScale.factor, Math.sign(Number(step) || 0)) });
     });
 
     // Workflow templates (the builder): the owner's own; built-ins are read-only

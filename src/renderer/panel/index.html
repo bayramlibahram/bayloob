@@ -474,7 +474,7 @@
       </button>
     </footer>
 
-    <div class="pal" id="pal" hidden role="dialog" aria-label="Go to">
+    <div class="pal" id="pal" hidden role="dialog" aria-modal="true" aria-label="Go to">
       <label class="pin"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="palText" spellcheck="false" aria-label="Command palette" autocomplete="off" placeholder="Go to a section or an agent, or run an action…"><kbd>Esc</kbd></label>
       <div class="plist" id="palList" role="listbox"></div>
@@ -754,7 +754,8 @@
     #coolTimer = null;
     #pressing = false;      // a mouse button is held on the details: re-rendering now would swallow the click
     #renderLater = false;
-    #inboxSeen = null;      // the Inbox's item keys at the last render (null before the first)
+    #inboxSeen = null;
+    #palReturn = null;      // what had focus before the palette opened      // the Inbox's item keys at the last render (null before the first)
     #palAt = 0;
     #palCmds = [];
     #prevStates = new Map(); // session id -> state at the previous update
@@ -1824,6 +1825,7 @@
     // ---------- Ctrl+K: jump to a section or an agent, or run an action ----------
 
     #openPal() {
+      this.#palReturn = document.activeElement; // focus goes back there when the palette closes
       this.el.pal.hidden = false;
       this.#syncEmbed(); // the palette must not open under the Tasks page
       this.el.palText.value = '';
@@ -1832,7 +1834,13 @@
       this.el.palText.focus();
     }
 
-    #closePal() { this.el.pal.hidden = true; this.#syncEmbed(); }
+    #closePal() {
+      if (this.el.pal.hidden) { return; }
+      this.el.pal.hidden = true;
+      this.#syncEmbed();
+      if (this.#palReturn?.isConnected) { this.#palReturn.focus(); }
+      this.#palReturn = null;
+    }
 
     #palCommands() {
       const cur = this.current?.kind === 'agent' ? this.current.data : null;
@@ -1902,6 +1910,7 @@
           this.#renderPal();
         } else if (e.key === 'Enter') { e.preventDefault(); this.#runPal(this.#palAt); }
         else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.#closePal(); }
+        else if (e.key === 'Tab') { e.preventDefault(); } // a modal: focus stays in the palette (arrows pick)
       });
       this.el.palList.addEventListener('click', e => {
         const b = e.target.closest('[data-pal]');
