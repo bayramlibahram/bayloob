@@ -159,7 +159,7 @@
       <!-- write: what to do (and, for a new session, where) -->
       <section class="step" id="stepPrompt">
         <div class="composer">
-          <textarea id="prompt" rows="3" placeholder="What should be done?" spellcheck="false"></textarea>
+          <textarea id="prompt" rows="3" aria-label="Prompt" placeholder="What should be done?" spellcheck="false"></textarea>
           <ul class="atts" id="atts" hidden></ul>
           <div class="tools">
             <button type="button" class="ghost attach-btn" id="attach" title="Attach files — or drop them here, or paste a screenshot (Ctrl+V)" hidden>
@@ -174,7 +174,7 @@
           <div class="label">Project folder</div>
           <div class="pathrow">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
-            <input id="cwd" placeholder="~/projects/my-app" spellcheck="false">
+            <input id="cwd" aria-label="Project folder" placeholder="~/projects/my-app" spellcheck="false">
             <button class="ghost" type="button" id="browse">Browse…</button>
           </div>
           <div class="chips" id="recent"></div>

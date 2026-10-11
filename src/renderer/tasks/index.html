@@ -377,6 +377,7 @@
     diff: 'Diff', review: 'Review', status2: 'Status', findings: n => n ? `${n} finding${n === 1 ? '' : 's'}` : 'no findings', files: n => `${n} file${n === 1 ? '' : 's'}`,
     out: 'Out', active: 'In the race', winner: 'Chosen', mergedInto: (b, applied) => `Chosen · ${applied ? 'applied to' : 'merged into'} ${b}`, choose: 'Choose this one', chosen: 'Picked',
     answer: 'Builder’s answer', reviewText: 'Review', noOutput: 'No output yet',
+    useAlt: 'Decisions take Alt+A (or Alt+P / Alt+R), or a click — not Enter',
     loading: 'Loading…', noLog: 'Nothing logged yet', noLogHint: 'Every stage, agent and decision is written here as it happens.',
     noSteps: 'The plan has no steps', noStepsHint: 'Nothing will run on the host. Stop the plan, or retry the task with a note.', retry: 'Retry', noInstances: 'No agent has started yet',
     loadFailed: name => `Couldn’t load ${name === '#log' ? 'the log' : name}`,
@@ -604,7 +605,7 @@
         </section>`).join('');
       return `<div class="phead"><h1>${T.tasks}</h1>
           <div class="seg" role="group" aria-label="Density">${['comfortable', 'compact'].map(d => `<button type="button" data-density="${d}" aria-pressed="${this.density === d}">${T[d]}</button>`).join('')}</div></div>
-        <div class="filters"><label class="field">${ICON.search}<input id="q" placeholder="${T.filter}" value="${esc(this.query)}" spellcheck="false"></label>
+        <div class="filters"><label class="field">${ICON.search}<input id="q" placeholder="${T.filter}" aria-label="${T.filter}" value="${esc(this.query)}" spellcheck="false"></label>
           <select class="sel" id="proj" aria-label="Project"><option value="">${T.allProjects}</option>${projects.map(p => `<option${p === this.project ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
         <div class="board${this.density === 'compact' ? ' compact' : ''}" data-k="board">${cols}</div>`;
     }
@@ -708,7 +709,7 @@
           <div><span class="label">${T.the.tests}</span><b class="mono">${esc(t.testCommand || T.the.noTests)}</b></div>
         </div>
         <div><div class="label" style="margin-bottom:6px">${T.instances}</div>
-          ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : stateBlock({ line: T.noInstances })}</div>
+          ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows}</tbody></table>` : stateBlock({ line: T.noInstances })}</div>
       </div>`;
     }
 
@@ -1162,7 +1163,16 @@
           return this.render();
         }
       });
+      // A decision is never taken by a bare Enter / Space on a focused button (Tab lands there easily):
+      // only by a click or its Alt shortcut. The buttons that just open a note or a confirmation stay free.
+      const bareDecision = e => !e.altKey && (e.key === 'Enter' || e.key === ' ')
+        && !['changes', 'retry', 'abort'].includes(e.target.closest?.('[data-decide]')?.dataset.decide ?? 'changes');
+      document.addEventListener('keyup', e => { if (bareDecision(e)) { e.preventDefault(); } });
       document.addEventListener('keydown', async e => {
+        if (bareDecision(e)) {
+          e.preventDefault();
+          return this.toast(T.useAlt);
+        }
         if (this.view === 'builder') {
           let r = this.builder.onKey(e, this.el.main);
           if (r === 'save') { r = await this.builder.save(); if (r === 'templates') { this.view = 'templates'; } }

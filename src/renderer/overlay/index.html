@@ -1497,9 +1497,9 @@
       return `<div class="music">
         <div class="art">♪</div>
         <div class="t"><b>${esc(m.title)}</b> <span>${esc(m.artist)}${m.app ? ` · ${esc(m.app)}` : ''}</span></div>
-        <button class="icon" data-act="music" data-m="prev" title="${T.prev}">⏮</button>
-        <button class="icon" data-act="music" data-m="toggle" title="${T.playPause}">${m.playing ? '⏸' : '▶'}</button>
-        <button class="icon" data-act="music" data-m="next" title="${T.next}">⏭</button></div>`;
+        <button class="icon" data-act="music" data-m="prev" title="${T.prev}" aria-label="${T.prev}">⏮</button>
+        <button class="icon" data-act="music" data-m="toggle" title="${T.playPause}" aria-label="${T.playPause}">${m.playing ? '⏸' : '▶'}</button>
+        <button class="icon" data-act="music" data-m="next" title="${T.next}" aria-label="${T.next}">⏭</button></div>`;
     }
 
     async #onClick(e) {

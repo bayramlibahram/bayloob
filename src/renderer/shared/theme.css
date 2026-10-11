@@ -148,6 +148,13 @@
   }
 }
 
+/* Keyboard focus, in every window: pages reset outlines on buttons and inputs, this brings the ring back
+   for the keyboard only. Fields inside a framed box (the prompt boxes) show focus on the box instead. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* Numbers keep their width, so counts and clocks don't jiggle as they change */
 html {
   font-variant-numeric: tabular-nums;

@@ -32,6 +32,7 @@
   input[type=text]:focus { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
   input:disabled { opacity: .5; }
 
+  fieldset.seg { margin: 0; min-width: 0; }
   .seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); width: max-content; }
   .seg button { padding: 5px 12px; border-radius: 7px; color: var(--muted); }
   .seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--brand) 22%, transparent); color: var(--text); }
@@ -139,20 +140,20 @@
     <section class="pane" data-pane="general" role="tabpanel">
     <div class="field">
       <span class="label">Mascot</span>
-      <div class="seg" id="mascot"><button type="button" data-v="novi">Novi (3D)</button><button type="button" data-v="svg">Classic</button></div>
+      <fieldset class="seg" id="mascot" aria-label="Mascot"><button type="button" data-v="novi">Novi (3D)</button><button type="button" data-v="svg">Classic</button></fieldset>
     </div>
     <div class="field">
       <span class="label">Pill size</span>
-      <div class="seg" id="pillSize" title="The mascot's tile in the pill — the pill's height follows"><button type="button" data-v="s">S</button><button type="button" data-v="m">M</button><button type="button" data-v="l">L</button></div>
+      <fieldset class="seg" id="pillSize" aria-label="Pill size" title="The mascot's tile in the pill — the pill's height follows"><button type="button" data-v="s">S</button><button type="button" data-v="m">M</button><button type="button" data-v="l">L</button></fieldset>
     </div>
     <div class="field">
       <span class="label">UI scale</span>
-      <div class="seg" id="uiScale" title="The workspace, its dialogs and Settings"><button type="button" data-v="0.9">90</button><button type="button" data-v="1.0">100</button><button type="button" data-v="1.1">110</button><button type="button" data-v="1.2">120</button><button type="button" data-v="1.3">130</button><button type="button" data-v="1.4">140</button></div>
+      <fieldset class="seg" id="uiScale" aria-label="UI scale (%)" title="The workspace, its dialogs and Settings"><button type="button" data-v="0.9" aria-label="90%">90</button><button type="button" data-v="1.0" aria-label="100%">100</button><button type="button" data-v="1.1" aria-label="110%">110</button><button type="button" data-v="1.2" aria-label="120%">120</button><button type="button" data-v="1.3" aria-label="130%">130</button><button type="button" data-v="1.4" aria-label="140%">140</button></fieldset>
       <small>Also <kbd>Ctrl</kbd> <kbd>+</kbd> / <kbd>Ctrl</kbd> <kbd>−</kbd> / <kbd>Ctrl</kbd> <kbd>0</kbd> in any of those windows. The pill has its own size.</small>
     </div>
     <div class="field">
       <span class="label">Theme</span>
-      <div class="seg" id="theme"><button type="button" data-v="system">System</button><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button></div>
+      <fieldset class="seg" id="theme" aria-label="Theme"><button type="button" data-v="system">System</button><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button></fieldset>
     </div>
     <div class="field">
       <label for="shortcut">Launcher shortcut</label>
@@ -212,7 +213,7 @@
     </div>
     <div class="field">
       <span class="label">Arbiter</span>
-      <div class="seg" id="arbiterConfidence" title="Below this confidence, the Arbiter's pick waits for you"><button type="button" data-v="0.5">0.5</button><button type="button" data-v="0.6">0.6</button><button type="button" data-v="0.7">0.7</button><button type="button" data-v="0.8">0.8</button><button type="button" data-v="0.9">0.9</button></div>
+      <fieldset class="seg" id="arbiterConfidence" aria-label="Arbiter confidence" title="Below this confidence, the Arbiter's pick waits for you"><button type="button" data-v="0.5">0.5</button><button type="button" data-v="0.6">0.6</button><button type="button" data-v="0.7">0.7</button><button type="button" data-v="0.8">0.8</button><button type="button" data-v="0.9">0.9</button></fieldset>
       <small>Its pick goes on to your merge only at this confidence or above, with no high risk. You always click merge.</small>
     </div>
     </section>

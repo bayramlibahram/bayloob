@@ -443,7 +443,7 @@
         <form class="say" id="say" hidden autocomplete="off">
           <div class="slash" id="slash" hidden role="listbox"></div>
           <div class="sugg" id="saySugg" hidden></div>
-          <div class="box"><textarea id="sayText" rows="1" spellcheck="false"></textarea>
+          <div class="box"><textarea id="sayText" rows="1" spellcheck="false" aria-label="Prompt to the agent"></textarea>
             <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
             <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
           <ul class="atts" id="sayAtts" hidden></ul>
@@ -455,7 +455,7 @@
     </div>
 
     <form class="ask" id="ask" autocomplete="off">
-      <div class="box"><span class="spark">✦</span><input id="askText" spellcheck="false" placeholder="Ask Bayloob — what should be done?">
+      <div class="box"><span class="spark">✦</span><input id="askText" spellcheck="false" aria-label="Ask Bayloob" placeholder="Ask Bayloob — what should be done?">
         <button type="button" class="attach" id="askAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
         <button type="submit" class="send" id="askSend" title="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
       <ul class="atts" id="askAtts" hidden></ul>
@@ -476,7 +476,7 @@
 
     <div class="pal" id="pal" hidden role="dialog" aria-label="Go to">
       <label class="pin"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="palText" spellcheck="false" autocomplete="off" placeholder="Go to a section or an agent, or run an action…"><kbd>Esc</kbd></label>
+        <input id="palText" spellcheck="false" aria-label="Command palette" autocomplete="off" placeholder="Go to a section or an agent, or run an action…"><kbd>Esc</kbd></label>
       <div class="plist" id="palList" role="listbox"></div>
     </div>
   </div>
