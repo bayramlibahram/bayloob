@@ -3,6 +3,25 @@
 ## Unreleased
 
 ### Added
+- **Split work** (orchestration 05):
+  - The planner splits the task into subtasks, each owning its files, in a JSON block.
+  - Bayloob checks that no file or folder is owned twice. An overlap, or subtasks it can't read, stop at a gate
+    before any builder starts; the Plan tab shows who owns what, with the clashes marked.
+  - One builder works on each subtask in parallel, the agents taking turns.
+  - A new built-in **Integrate** step merges the parts into one branch in its own worktree. That branch is the
+    one candidate that is tested, reviewed and merged.
+  - Failing tests send a builder back to the integrated branch; the parts aren't redone. A conflict between parts
+    stops for you.
+- **Review board** (orchestration 05):
+  - N read-only reviewers check your uncommitted changes, or your branch since it left main.
+  - Each review is kept on its own, with its findings count, in a new Reviews tab. They are merged when the
+    Arbiter arrives (06).
+- Both patterns:
+  - start from the New task dialog;
+  - can be customised;
+  - are available in the workflow builder: a "Split into subtasks" option on planners and builders, and an
+    Integrate stage.
+
 - **Suggested next steps**: when an agent's turn ends with next steps it offers — a "👉 Next" list or table, a
   list after a closing question, or a yes-no question ("Commit it?") — they appear as chips above the prompt box
   (Workspace) and in the pill's done card. A click puts the step in the box and asks for confirmation (sent now,
@@ -34,6 +53,7 @@
   still shows the red sound icon on the bar.
 
 ### Fixed
+- Retry on a "couldn't run" task gate asked for a note the Tasks page never sent, so it failed.
 - Stopping Bayloob left Electron processes behind (~725 MB) when the dev wrapper was killed on its own — an
   IDE's Stop sends SIGKILL to `bun` alone, and Electron kept running without its starter. Bayloob now quits
   on SIGINT / SIGTERM / SIGHUP (app.exit after 3 s if quitting hangs), destroys every window on quit, and

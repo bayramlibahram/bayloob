@@ -249,6 +249,8 @@
     question: 'Question', questionPh: 'What should the analysts find out?',
     free: (f, m) => `${f} free of ${m}`, queue: n => `${n} will queue`, word: { builder: 'builder', reviewer: 'reviewer', analyst: 'analyst' },
     arbiterOk: 'A different agent — less likely to prefer its own work', arbiterSame: 'Same agent as one doing the work — it may prefer its own',
+    reviewWhat: 'Review', reviewFiles: n => `Your uncommitted changes · ${n}`, reviewBranch: b => `The branch ${b}`,
+    reviewHint: 'Reviewers only read: on the branch, what it adds since it left main (or its last commit on main).',
     startFrom: 'Start from', fromFiles: n => `Your files now · ${n} uncommitted`, fromCommit: 'The last commit',
     fromFilesHint: 'Builders get your files as they are now; the winner is applied to your files — nothing is committed.',
     fromCommitHint: (n, b) => `Builders start from the last commit — your ${n} uncommitted change${n === 1 ? ' is' : 's are'} not in it. The winner is merged into ${b}.`,
@@ -281,7 +283,8 @@
   const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   // Configurations the workflow engine can run so far (command 04): Pipeline and Best-of-N
-  const runnable = c => c.category === 'workflow' && (!!c.workflow.template || ['pipeline', 'bestofn'].includes(c.workflow.pattern));
+  const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board'];
+  const runnable = c => c.category === 'workflow' && (!!c.workflow.template || RUNNABLE.includes(c.workflow.pattern));
   // One of the owner's templates as the dialog's stage list (the shape TaskShape.stages gives)
   const templateStages = t => t.stages.map(s => ({
     id: s.id, title: s.title, role: s.role === 'tester' ? 'action' : s.role,
@@ -635,6 +638,14 @@
       const changes = this.info?.git?.changes || 0;
       if (!changes) { return ''; }
       const base = this.#base();
+      // A Review board reads, never builds: the choice is what it reviews
+      if (this.cfg.workflow.pattern === 'board' && !this.#template()) {
+        return `<div class="label">${T.reviewWhat}</div>
+        <div class="presets" role="radiogroup" aria-label="${T.reviewWhat}">
+          <button type="button" class="preset" role="radio" aria-checked="${base === 'worktree'}" aria-pressed="${base === 'worktree'}" data-base="worktree">${T.reviewFiles(changes)}</button>
+          <button type="button" class="preset" role="radio" aria-checked="${base === 'head'}" aria-pressed="${base === 'head'}" data-base="head">${T.reviewBranch(esc(this.info.git.branch || 'main'))}</button></div>
+        <p class="hintline">${T.reviewHint}</p>`;
+      }
       return `<div class="label">${T.startFrom}</div>
         <div class="presets" role="radiogroup" aria-label="${T.startFrom}">
           <button type="button" class="preset" role="radio" aria-checked="${base === 'worktree'}" aria-pressed="${base === 'worktree'}" data-base="worktree">${T.fromFiles(changes)}</button>
@@ -650,7 +661,7 @@
       const tpl = this.#template();
       const presets = `<div class="presets" role="group" aria-label="Pattern">${Object.entries(TaskShape.PATTERNS).map(([k, p]) => `<button type="button" class="preset" aria-pressed="${!tpl && k === w.pattern}" data-pattern="${k}">${p.name}<small>${p.hint}</small></button>`).join('')}</div>
         ${own.length ? `<div class="label">${T.yourTemplates}</div><div class="presets" role="group" aria-label="${T.yourTemplates}">${own.map(t => `<button type="button" class="preset" aria-pressed="${tpl?.id === t.id}" data-template="${esc(t.id)}">${esc(t.name)}<small>${T.nStages(t.stages.length)}</small></button>`).join('')}</div>` : ''}`;
-      const canCustomize = !!tpl || ['pipeline', 'bestofn'].includes(w.pattern);
+      const canCustomize = !!tpl || RUNNABLE.includes(w.pattern);
       const customize = `<span title="${canCustomize ? T.customizeTip : T.customizeLater}"><button type="button" class="expander" data-customize ${canCustomize ? '' : 'disabled'}>${I('edit')}${T.customize}</button></span>`;
       const text = `<div class="label">${T.task}</div>
         <div class="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.taskPh}" aria-label="${T.task}">${esc(this.cfg.text)}</textarea></div>`;
@@ -742,7 +753,11 @@
       const w = c.workflow;
       const n = TaskShape.total(w.agents);
       if (w.pattern === 'board') {
-        return `<b>${n} reviewer${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) read the current branch of <b>${esc(c.project.name)}</b>. Nothing is changed. Arbiter: <b>${name(w.arbiter)}</b> merges and ranks the findings.`;
+        const what = this.#base(c) === 'worktree' ? 'your uncommitted changes in' : 'the current branch of';
+        return `<b>${n} reviewer${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) read ${what} <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is changed.</b> Each review is kept on its own, with its findings.`;
+      }
+      if (w.pattern === 'split') {
+        return `The planner splits the task into subtasks that own <b>separate files</b> — overlaps stop for you. <b>${n} builder${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) take one subtask each, in parallel; then their work is <b>integrated</b> into one branch, tested and reviewed. You’ll be asked: <b>after the plan</b> and <b>before merge</b>.`;
       }
       return `<b>${n} agent${n > 1 ? 's' : ''}</b> will build${n > 1 ? ' in parallel' : ''} (${lst(w.agents)}), each in its own worktree. Arbiter: <b>${name(w.arbiter)}</b>. You’ll be asked: <b>after the plan</b> and <b>before merge</b>.`;
     }

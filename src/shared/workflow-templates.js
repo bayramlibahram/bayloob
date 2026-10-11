@@ -4,18 +4,22 @@
 // Plain script: `require()` in main and tests, a <script> (global `WorkflowTemplates`) in a page.
 //
 // A stage:
-//   { id, title, role, mode, agents: [{ adapter, count }], parallel, perCandidate, prompt, artifact,
+//   { id, title, role, mode, agents: [{ adapter, count }], parallel, perCandidate, split, prompt, artifact,
 //     action, gate, onFail: { goto, prompt, maxLoops } }
 // role      planner | builder | tester | reviewer | arbiter | you
 // mode      writes | read-only | plan          (agent stages; plan is read-only too, its answer is the plan)
-// action    run-tests | merge                  (stages Bayloob runs itself, no agent)
+// action    run-tests | integrate | merge      (stages Bayloob runs itself, no agent)
 // gate      always | human | tests-pass | arbiter | no-findings
 // Builders create the candidates: each instance gets its own worktree + branch. A perCandidate stage runs
 // once for every candidate still in the race (tests, reviews).
+// Split work: a planner with `split` ends its plan with a JSON block of subtasks, each owning its files; a builder
+// stage with `split` runs one builder per subtask (its agents take turns), and the `integrate` action merges
+// their branches into one candidate that the later stages test, review and merge.
+// A task without builders (Review board) reviews what it started from: {{diff}} is the command that shows it.
 (root => {
   const ROLES = ["planner", "builder", "tester", "reviewer", "arbiter", "you"];
   const MODES = ["writes", "read-only", "plan"];
-  const ACTIONS = ["run-tests", "merge"];
+  const ACTIONS = ["run-tests", "integrate", "merge"];
   const GATES = ["always", "human", "tests-pass", "arbiter", "no-findings"];
   const ID = /^[a-z][a-z0-9-]{0,23}$/;
   const MAX_STAGES = 12;
@@ -30,6 +34,9 @@
     branch: "This candidate's branch",
     candidate: "This candidate's id (build-2)",
     note: "Your note from Request changes / Retry",
+    subtask: "This builder's subtask and the files it owns (Split work)",
+    parts: "How many builders the plan may be split between (Split work)",
+    diff: "The git command that shows the change under review (Review board)",
     "artifact:plan.md": "The approved plan",
     "artifact:test-output": "This candidate's test output",
     "artifact:review.md": "This candidate's review",
@@ -68,6 +75,43 @@
     'Answer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer "No findings".',
     "",
     "Task:",
+    "{{task}}"
+  );
+
+  const SPLIT_PLAN_PROMPT = lines(
+    "Make an implementation plan for this task and split it into at most {{parts}} independent subtasks that",
+    "different builders can do at the same time. Every subtask owns its files: no file or folder may be in two",
+    "subtasks. Read the code you need; do not change any file.",
+    "Answer with the plan as Markdown, then end with exactly one JSON block, like:",
+    "```json",
+    '{"subtasks": [{"id": "api", "title": "Coupon endpoint", "files": ["src/api/coupons.js", "test/coupons.test.js"]}]}',
+    "```",
+    "",
+    "Task:",
+    "{{task}}"
+  );
+
+  const SPLIT_BUILD_PROMPT = lines(
+    "You are one of several builders, each doing one part of the same task at the same time.",
+    "Do only your subtask and change only the files it owns; the other builders change the rest.",
+    "Run the project's tests when you are done (some may fail until the other parts are in).",
+    "",
+    "Task:",
+    "{{task}}",
+    "",
+    "Your subtask:",
+    "{{subtask}}",
+    "",
+    "The whole plan:",
+    "{{artifact:plan.md}}"
+  );
+
+  const BOARD_PROMPT = lines(
+    "Review this change: run `{{diff}}` and read what you need around it.",
+    "Try to break it: bugs, missed cases, risky edits, security, missing tests. Do not change any file.",
+    'Answer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer "No findings".',
+    "",
+    "What the change is for (from the owner):",
     "{{task}}"
   );
 
@@ -164,6 +208,85 @@
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
       ],
     },
+    split: {
+      id: "split",
+      name: "Split work",
+      description:
+        "Plan + split → one builder per subtask → integrate → tests → review → you merge",
+      builtin: true,
+      stages: [
+        {
+          id: "plan",
+          title: "Plan + split",
+          role: "planner",
+          mode: "plan",
+          split: true,
+          agents: [{ adapter: "claude", count: 1 }],
+          prompt: SPLIT_PLAN_PROMPT,
+          artifact: "plan.md",
+          gate: "human",
+        },
+        {
+          id: "build",
+          title: "Build",
+          role: "builder",
+          mode: "writes",
+          split: true,
+          agents: [
+            { adapter: "claude", count: 2 },
+            { adapter: "codex", count: 1 },
+          ],
+          parallel: true,
+          prompt: SPLIT_BUILD_PROMPT,
+          gate: "always",
+        },
+        { id: "integrate", title: "Integrate", role: "you", action: "integrate", gate: "always" },
+        {
+          id: "tests",
+          title: "Tests",
+          role: "tester",
+          action: "run-tests",
+          perCandidate: true,
+          gate: "tests-pass",
+          onFail: { goto: "build", prompt: FIX_TESTS_PROMPT, maxLoops: 2 },
+        },
+        {
+          id: "review",
+          title: "Review",
+          role: "reviewer",
+          mode: "read-only",
+          agents: [{ adapter: "codex", count: 1 }],
+          perCandidate: true,
+          prompt: REVIEW_PROMPT,
+          artifact: "review.md",
+          gate: "always",
+        },
+        { id: "decide", title: "Decide", role: "arbiter", gate: "arbiter" },
+        { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
+      ],
+    },
+    board: {
+      id: "board",
+      name: "Review board",
+      description: "Reviewers × N, read-only, on your branch or your uncommitted changes",
+      builtin: true,
+      stages: [
+        {
+          id: "review",
+          title: "Reviewers",
+          role: "reviewer",
+          mode: "read-only",
+          agents: [
+            { adapter: "claude", count: 1 },
+            { adapter: "codex", count: 1 },
+          ],
+          parallel: true,
+          prompt: BOARD_PROMPT,
+          artifact: "review.md",
+          gate: "always",
+        },
+      ],
+    },
   };
 
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -196,6 +319,8 @@
     }
     const ids = stages.map(s => s?.id);
     let builders = false;
+    let splitPlan = false;
+    let splitBuild = false;
     stages.forEach((s, i) => {
       const add = text => issues.push({ stage: i, text });
       const name = `Stage ${i + 1}${s?.title ? ` "${s.title}"` : ""}`;
@@ -220,6 +345,17 @@
       }
       if (s.action === "run-tests" && !builders) {
         add(`${name}: tests need a build stage before them`);
+      }
+      if (s.action === "integrate" && !splitBuild) {
+        add(
+          `${name}: integrate merges the parts of a split build — add a build stage split into subtasks before it`
+        );
+      }
+      if (s.split && s.role === "builder" && !splitPlan) {
+        add(`${name}: a build split into subtasks needs a planner that splits the plan before it`);
+      }
+      if (s.split && s.role !== "builder" && s.role !== "planner") {
+        add(`${name}: only a planner (that splits) or a builder (one per subtask) can be split`);
       }
       if (s.action === "merge" && !builders) {
         add(`${name}: there is nothing to merge without a build stage before it`);
@@ -281,6 +417,10 @@
       }
       if (s.role === "builder") {
         builders = true;
+        splitBuild = splitBuild || !!s.split;
+      }
+      if (s.role === "planner" && s.split) {
+        splitPlan = true;
       }
     });
     return issues;
@@ -334,7 +474,7 @@
     const preset = BUILTINS[w.pattern];
     if (!preset) {
       throw new Error(
-        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline and Best-of-N can`
+        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline, Best-of-N, Split work and Review board can`
       );
     }
     const t = clone(preset);
@@ -348,7 +488,10 @@
       if (s.role === "builder" && builders.length) {
         s.agents = builders;
       }
-      if (s.role === "reviewer" && w.reviewer) {
+      // A Review board's reviewers are the agents picked in the dialog
+      if (s.role === "reviewer" && w.pattern === "board" && builders.length) {
+        s.agents = builders;
+      } else if (s.role === "reviewer" && w.reviewer) {
         s.agents = [{ adapter: w.reviewer, count: 1 }];
       }
     }

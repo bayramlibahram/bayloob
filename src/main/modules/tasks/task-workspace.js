@@ -239,6 +239,89 @@ class TaskWorkspace {
   }
 
   /**
+   * Split work: the parts' branches merged one by one into a new candidate `<candidate>` (its own worktree and
+   * branch, from the base). A conflict is undone in that worktree and listed; the parts merged before it stay,
+   * so a retry after the owner resolved it there goes on from where it stopped.
+   */
+  async integrate({ root, taskId, sha, candidate, branches }) {
+    const m = /^(.+)-(\d+)$/.exec(candidate);
+    const dir = path.join(path.dirname(root), `${path.basename(root)}-${taskId}-${candidate}`);
+    const branch = `bayloob/${taskId}/${candidate}`;
+    if (!fs.existsSync(dir)) {
+      await this.git.addTaskWorktree(root, { task: taskId, step: m[1], n: m[2], base: sha });
+      await this.#shareDeps(root, dir);
+    }
+    if (await this.dirty(dir)) {
+      return {
+        ok: false,
+        dir,
+        branch,
+        error: `The integration worktree has uncommitted changes — commit or undo them in ${dir}`,
+      };
+    }
+    const named = (await tryRun(dir, ["config", "user.email"]))?.trim();
+    for (const b of branches) {
+      try {
+        await run(
+          dir,
+          [
+            ...(named ? [] : FALLBACK_IDENTITY),
+            "merge",
+            "--no-ff",
+            "--no-verify",
+            "-m",
+            `bayloob: integrate ${b}`,
+            b,
+          ],
+          60_000
+        );
+      } catch (e) {
+        const conflicts = ((await tryRun(dir, ["diff", "--name-only", "--diff-filter=U"])) || "")
+          .split("\n")
+          .filter(Boolean);
+        await tryRun(dir, ["merge", "--abort"]);
+        return {
+          ok: false,
+          dir,
+          branch,
+          error: conflicts.length ? `${b} conflicts with the parts merged before it` : e.message,
+          conflicts,
+        };
+      }
+    }
+    return { ok: true, dir, branch, head: await this.head(dir) };
+  }
+
+  /**
+   * What a Review board looks at: the files as they were when it started against the last commit (uncommitted
+   * changes), else the branch against where it left the default branch (on the default branch: its last commit).
+   */
+  async reviewRange({ root, sha, head, fromWorktree }) {
+    if (fromWorktree && head && head !== sha) {
+      return { from: head, to: sha, label: "your uncommitted changes" };
+    }
+    const branch = (await tryRun(root, ["rev-parse", "--abbrev-ref", "HEAD"]))?.trim();
+    const origin = (
+      await tryRun(root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+    )?.trim();
+    let main = null;
+    for (const c of [origin, "main", "master"].filter(Boolean)) {
+      if (await tryRun(root, ["rev-parse", "--verify", "--quiet", c])) {
+        main = c;
+        break;
+      }
+    }
+    const fork = main ? (await tryRun(root, ["merge-base", main, sha]))?.trim() : null;
+    if (fork && fork !== sha) {
+      return { from: fork, to: sha, label: `${branch || "this branch"} since it left ${main}` };
+    }
+    const parent = (await tryRun(root, ["rev-parse", "--verify", "--quiet", `${sha}^`]))?.trim();
+    return parent
+      ? { from: parent, to: sha, label: "the last commit" }
+      : { from: sha, to: sha, label: "nothing (no earlier commit)" };
+  }
+
+  /**
    * The winner's change (base → branch) applied to the project's files, uncommitted — for a task that started
    * from the files as they were. Checked first: if the files changed since in a way that conflicts, nothing
    * is touched and the files that don't apply are listed.

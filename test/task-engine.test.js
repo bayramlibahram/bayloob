@@ -434,3 +434,176 @@ test("a pane's owner: task, role and label (given back to sessions found again a
   assert.equal(env.engine.ownerOf("%999"), null);
   assert.equal(env.engine.ownsPane(planner.paneId), true);
 });
+
+// ---------- Split work and Review board ----------
+
+const SPLIT_PLAN = `## Plan
+Endpoint, then the field.
+
+\`\`\`json
+{"subtasks": [
+  {"id": "api", "title": "Coupon endpoint", "files": ["src/api/coupons.js"]},
+  {"id": "ui", "title": "Checkout field", "files": ["src/ui/checkout.vue"]},
+  {"id": "docs", "title": "Docs", "files": ["docs/coupons.md"]}
+]}
+\`\`\``;
+
+function splitWorkspace(env) {
+  env.workspace.integrations = [];
+  env.workspace.integrate = opts => {
+    env.workspace.integrations.push(opts);
+    return Promise.resolve(
+      env.workspace.integrateResult || {
+        ok: true,
+        dir: `/w/shop-${opts.candidate}`,
+        branch: `bayloob/${opts.taskId}/${opts.candidate}`,
+        head: "i1",
+      }
+    );
+  };
+}
+
+test("Split work: one builder per subtask → integrate → tests on the whole → you pick → merge", async () => {
+  const env = setup();
+  splitWorkspace(env);
+  const task = await startBest(env, {
+    pattern: "split",
+    planner: "claude",
+    agents: { claude: 1, codex: 1 },
+  });
+  const [planner] = env.runner.sessions;
+  assert.match(planner.prompt, /at most 2 independent subtasks/); // {{parts}} = the builders picked
+  await endTurn(env, task, planner, SPLIT_PLAN);
+  assert.equal(task.gate.kind, "approve");
+  assert.deepEqual(
+    task.gate.split.list.map(s => s.id),
+    ["api", "ui", "docs"]
+  );
+
+  await decide(env, task, "approve");
+  const builders = env.runner.by({ role: "builder" });
+  // Three subtasks, two agents: they take turns
+  assert.deepEqual(
+    builders.map(b => [b.adapter, b.cwd]),
+    [
+      ["claude", "/w/shop-build-1"],
+      ["codex", "/w/shop-build-2"],
+      ["claude", "/w/shop-build-3"],
+    ]
+  );
+  assert.match(
+    builders[1].prompt,
+    /Your subtask:\nui: Checkout field\nFiles you own: src\/ui\/checkout\.vue/
+  );
+  assert.match(builders[1].prompt, /don't change them: src\/api\/coupons\.js, docs\/coupons\.md/);
+
+  for (const b of builders) {
+    await endTurn(env, task, b, "part done");
+  }
+  // The parts were merged into one candidate; only it is tested
+  assert.deepEqual(env.workspace.integrations[0].branches, [
+    `bayloob/${task.id}/build-1`,
+    `bayloob/${task.id}/build-2`,
+    `bayloob/${task.id}/build-3`,
+  ]);
+  assert.deepEqual(
+    task.candidates.map(c => [c.id, c.status]),
+    [
+      ["build-1", "part"],
+      ["build-2", "part"],
+      ["build-3", "part"],
+      ["integrate-1", "active"],
+    ]
+  );
+  assert.equal(task.candidates[3].tests.ok, true);
+
+  // The reviewer looks at the integrated branch
+  const [reviewer] = env.runner.by({ role: "reviewer" });
+  assert.match(reviewer.prompt, new RegExp(`bayloob/${task.id}/integrate-1`));
+  await endTurn(env, task, reviewer, "No findings");
+  assert.equal(task.gate.kind, "pick");
+  await decide(env, task, "pick", { candidate: "integrate-1" });
+  await decide(env, task, "merge");
+  assert.equal(env.workspace.merges[0].branch, `bayloob/${task.id}/integrate-1`);
+  assert.equal(task.status, "done");
+});
+
+test("Split work: subtasks that share files stop at a gate; a plan without subtasks can't be approved", async () => {
+  const env = setup();
+  splitWorkspace(env);
+  const task = await startBest(env, { pattern: "split", planner: "claude", agents: { claude: 2 } });
+  const [planner] = env.runner.sessions;
+  await endTurn(env, task, planner, "Here is the plan, no JSON.");
+  assert.equal(task.gate.title, "The plan's subtasks can't be used");
+  assert.deepEqual(task.gate.actions, ["changes", "abort"]);
+  assert.equal((await decide(env, task, "approve")).ok, false);
+
+  // Asked for changes, the planner (same session) answers with overlapping subtasks
+  await decide(env, task, "changes", { note: "End with the JSON block" });
+  const overlapping = SPLIT_PLAN.replace('"docs/coupons.md"', '"src/api/"');
+  await endTurn(env, task, planner, overlapping);
+  assert.equal(task.gate.title, "Subtasks share files — approve anyway?");
+  assert.deepEqual(task.gate.split.overlaps, [{ a: "api", b: "docs", file: "src/api/coupons.js" }]);
+  assert.ok(task.gate.actions.includes("approve")); // your call
+  assert.equal(env.runner.by({ role: "builder" }).length, 0);
+});
+
+test("Split work: a conflict between parts asks you; failing tests go back to the integrated candidate", async () => {
+  const env = setup();
+  splitWorkspace(env);
+  env.workspace.integrateResult = {
+    ok: false,
+    error: "build-2 conflicts",
+    conflicts: ["src/x.js"],
+  };
+  const task = await startBest(env, { pattern: "split", planner: "claude", agents: { claude: 2 } });
+  await endTurn(env, task, env.runner.sessions[0], SPLIT_PLAN);
+  await decide(env, task, "approve");
+  for (const b of env.runner.by({ role: "builder" })) {
+    await endTurn(env, task, b, "part done");
+  }
+  assert.equal(task.gate.kind, "failed");
+  assert.match(task.gate.detail, /conflict: src\/x\.js/);
+
+  env.workspace.integrateResult = null;
+  env.workspace.tests.set("/w/shop-integrate-1", [false, true]);
+  await decide(env, task, "retry");
+  // Tests failed on the whole: a builder fixes it in the integrated worktree (the parts aren't redone)
+  const fixer = env.runner.sessions.at(-1);
+  assert.equal(fixer.cwd, "/w/shop-integrate-1");
+  assert.match(fixer.prompt, /The tests fail on your change/);
+  await endTurn(env, task, fixer, "fixed");
+  assert.equal(env.workspace.integrations.length, 2); // once failed, once merged — not again after the fix
+  assert.equal(task.candidates.find(c => c.id === "integrate-1").tests.ok, true);
+  assert.equal(task.stages.find(s => s.id === "review").status, "running");
+});
+
+test("Review board: reviewers × N read-only on the change, each review kept on its own", async () => {
+  const env = setup();
+  env.workspace.reviewRange = () =>
+    Promise.resolve({ from: "aaa111", to: "bbb222", label: "feature since it left main" });
+  const task = await startBest(env, { pattern: "board", agents: { claude: 1, codex: 2 } });
+  assert.deepEqual(task.review, {
+    from: "aaa111",
+    to: "bbb222",
+    label: "feature since it left main",
+  });
+  const reviewers = env.runner.by({ role: "reviewer" });
+  assert.deepEqual(
+    reviewers.map(r => [r.adapter, r.mode, r.cwd]),
+    [
+      ["claude", "read-only", "/w/shop-ro"],
+      ["codex", "read-only", "/w/shop-ro"],
+      ["codex", "read-only", "/w/shop-ro"],
+    ]
+  );
+  assert.match(reviewers[0].prompt, /run `git diff aaa111\.\.bbb222`/);
+  await endTurn(env, task, reviewers[0], "src/a.js:3 — off by one");
+  await endTurn(env, task, reviewers[1], "No findings");
+  await endTurn(env, task, reviewers[2], "src/b.js:9 — missing await");
+  assert.equal(env.store.readArtifact(task.id, "review.md"), "src/a.js:3 — off by one");
+  assert.equal(env.store.readArtifact(task.id, "review.3.md"), "src/b.js:9 — missing await");
+  assert.equal(task.status, "done");
+  assert.equal(task.candidates.length, 0);
+  assert.equal(env.workspace.merges.length, 0); // nothing is changed
+});

@@ -15,12 +15,15 @@
 //               snapshot(dir, message) → sha | null, head(dir) → sha, dirty(dir) → bool,
 //               diffstat(root, sha, branch) → { files, added, deleted },
 //               testCommand(root) → string | null, runTests(dir, command) → { ok, code, output },
-//               merge({ root, branch, into, message }) → { ok, error?, conflicts? } }
+//               merge({ root, branch, into, message }) → { ok, error?, conflicts? },
+//               integrate({ root, taskId, sha, candidate, branches }) → { ok, dir, branch, head, error?, conflicts? },
+//               reviewRange({ root, sha, head, fromWorktree }) → { from, to, label } }
 // Nothing destructive or outward-facing happens without decide() from the human: merging is a gate action,
 // worktrees and branches are never deleted here.
 const { EventEmitter } = require("node:events");
 const { renderPrompt, validateTemplate } = require("../../../shared/workflow-templates");
 const { parseFindings } = require("../agents/challenge-report");
+const { parseSubtasks, overlaps, describeSubtask } = require("./subtasks");
 
 const ARTIFACT_IN_PROMPT = 12_000; // an artifact pasted into a prompt keeps its tail beyond this
 const CHANGES_PROMPT = `The owner asked for changes:
@@ -31,6 +34,7 @@ const RETRY_PROMPT = `The owner asks for another attempt:
 {{note}}`;
 const ENDED = new Set(["done", "failed", "stopped", "interrupted"]);
 const OPEN = new Set(["running", "needs-you"]);
+const INTEGRATED = "integrate-1"; // the candidate a split build's parts are merged into
 
 const GATE_ACTIONS = {
   approve: ["approve", "changes", "abort"], // after a stage the owner reviews (the plan)
@@ -133,6 +137,12 @@ class TaskEngine extends EventEmitter {
         fromWorktree: !!ws.fromWorktree,
       },
       roDir: ws.roDir,
+      // No builders (Review board): what the reviewers look at
+      review: template.stages.some(s => s.role === "builder")
+        ? null
+        : ((await this.workspace.reviewRange?.({ root: ws.root, ...ws }).catch(() => null)) ??
+          null),
+      subtasks: null, // Split work: { list, overlaps, error } from the planner's answer
       testCommand: await this.workspace.testCommand(ws.root),
       status: "running",
       stage: 0,
@@ -267,7 +277,9 @@ class TaskEngine extends EventEmitter {
         return { ok: false, error: `"${action}" isn't possible here` };
       }
       note = String(note || "").trim();
-      if ((action === "changes" || action === "retry") && gate.kind !== "interrupted" && !note) {
+      // Retrying what was interrupted or couldn't run needs no note; another attempt by the builders does
+      const plainRetry = gate.kind === "interrupted" || gate.kind === "failed";
+      if ((action === "changes" || action === "retry") && !plainRetry && !note) {
         return { ok: false, error: "Write what should change" };
       }
       if (action === "pick" && !task.candidates.some(c => c.id === candidate)) {
@@ -409,6 +421,8 @@ class TaskEngine extends EventEmitter {
     this.#log(task, "engine", "stage", { stage: st.id, round: state.round, only });
     if (st.action === "run-tests") {
       await this.#runTests(task, only);
+    } else if (st.action === "integrate") {
+      await this.#integrate(task);
     } else if (st.action === "merge") {
       this.#openGate(
         task,
@@ -462,6 +476,24 @@ class TaskEngine extends EventEmitter {
             ?.handle
         : null;
     if (st.role === "builder") {
+      if (!task.candidates.length && st.split) {
+        // One builder per subtask; the stage's agents take turns (claude, claude, codex, claude…)
+        const slots = st.agents.flatMap(a => Array(a.count).fill(a.adapter));
+        (task.subtasks?.list || []).forEach((sub, k) => {
+          task.candidates.push({
+            id: `${st.id}-${k + 1}`,
+            adapter: slots[k % slots.length],
+            subtask: sub.id,
+            status: "active",
+            dir: null,
+            branch: null,
+            handle: null,
+            head: null,
+            tests: null,
+            diff: null,
+          });
+        });
+      }
       if (!task.candidates.length) {
         let k = 0;
         for (const a of st.agents) {
@@ -483,7 +515,7 @@ class TaskEngine extends EventEmitter {
       }
       // A builder's later rounds continue in its own session: it keeps the context of its first attempt
       for (const c of this.#active(task, only)) {
-        make(c.adapter, Number(c.id.split("-").pop()), c.id, round > 1 ? c.handle : null);
+        make(c.adapter, Number(c.id.split("-").pop()) || 1, c.id, round > 1 ? c.handle : null);
       }
       return;
     }
@@ -566,11 +598,16 @@ class TaskEngine extends EventEmitter {
   }
 
   #prompt(task, inst, cand) {
+    const st = task.template.stages.find(s => s.id === inst.stage);
+    const splitBuild = task.template.stages.find(s => s.role === "builder" && s.split);
     const vars = {
       task: task.text,
       base: task.base.sha.slice(0, 12),
       branch: cand?.branch || "",
       candidate: cand?.id || "",
+      subtask: cand?.subtask ? describeSubtask(task.subtasks?.list || [], cand.subtask) : "",
+      parts: st?.split && splitBuild ? splitBuild.agents.reduce((n, a) => n + a.count, 0) : "",
+      diff: task.review ? `git diff ${task.review.from}..${task.review.to}` : "",
       ...inst.vars,
     };
     return renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
@@ -631,6 +668,15 @@ class TaskEngine extends EventEmitter {
       chars: message.length,
       artifact: inst.artifact || null,
     });
+    if (st.split && st.role === "planner") {
+      const { subtasks, error } = parseSubtasks(message);
+      task.subtasks = { list: subtasks, overlaps: overlaps(subtasks), error };
+      this.#log(task, "engine", "subtasks", {
+        count: subtasks.length,
+        overlaps: task.subtasks.overlaps.length,
+        error,
+      });
+    }
     // Read-only must hold, whatever the CLI's own mode did: a changed tree fails the turn
     if (inst.mode !== "writes" && (await this.workspace.dirty(inst.cwd).catch(() => false))) {
       Object.assign(inst, { status: "failed", error: "Changed files although it was read-only" });
@@ -680,6 +726,15 @@ class TaskEngine extends EventEmitter {
       });
       return;
     }
+    if (st.role === "builder" && st.split && round.some(x => x.status === "failed")) {
+      // Every part is needed: a part that couldn't run is retried (or the task stopped), never dropped
+      const failed = round.filter(x => x.status === "failed");
+      this.#openGate(task, "failed", `${failed.length} part(s) of the split build couldn't run`, {
+        candidates: failed.map(i => i.candidate).filter(Boolean),
+        detail: failed.map(i => `${i.candidate}: ${i.error || i.status}`).join("\n"),
+      });
+      return;
+    }
     if (st.role === "builder") {
       for (const i of round.filter(x => x.status === "failed")) {
         const c = task.candidates.find(x => x.id === i.candidate);
@@ -704,10 +759,29 @@ class TaskEngine extends EventEmitter {
   }
 
   async #applyGate(task, st, round) {
+    // Split work: subtasks that can't run or that share files are never started without you
+    const split = st.split && st.role === "planner" ? task.subtasks : null;
+    if (split && (split.error || split.overlaps.length)) {
+      this.#openGate(
+        task,
+        "approve",
+        split.error
+          ? "The plan's subtasks can't be used"
+          : "Subtasks share files — approve anyway?",
+        {
+          artifacts: round.map(i => i.artifact).filter(Boolean),
+          split,
+          // Without usable subtasks there is nothing to approve: ask for changes or stop
+          actions: split.error ? ["changes", "abort"] : GATE_ACTIONS.approve,
+        }
+      );
+      return;
+    }
     switch (st.gate) {
       case "human":
         this.#openGate(task, "approve", `${st.title} is ready — approve it?`, {
           artifacts: round.map(i => i.artifact).filter(Boolean),
+          ...(split ? { split } : {}),
         });
         return;
       case "arbiter":
@@ -777,6 +851,57 @@ class TaskEngine extends EventEmitter {
     await this.#advance(task);
   }
 
+  // Split work: the parts' branches merged into one candidate (in its own worktree), which the later stages
+  // test, review and merge. A loop back to the builders fixes that candidate; the parts aren't merged again.
+  async #integrate(task) {
+    const done = task.candidates.find(c => c.id === INTEGRATED && c.status === "active");
+    if (done) {
+      await this.#advance(task);
+      return;
+    }
+    const parts = task.candidates.filter(c => c.subtask && c.status === "active");
+    const r = await this.workspace
+      .integrate({
+        root: task.project.root,
+        taskId: task.id,
+        sha: task.base.sha,
+        candidate: INTEGRATED,
+        branches: parts.map(c => c.branch),
+      })
+      .catch(e => ({ ok: false, error: e.message }));
+    this.#log(task, "engine", r.ok ? "integrated" : "integrate-failed", {
+      parts: parts.map(c => c.id),
+      branch: r.branch || null,
+      error: r.error || null,
+      conflicts: r.conflicts || null,
+    });
+    if (!r.ok) {
+      this.#openGate(task, "failed", "The parts don't merge cleanly", {
+        detail: [r.error, ...(r.conflicts || []).map(f => `conflict: ${f}`)]
+          .filter(Boolean)
+          .join("\n"),
+        dir: r.dir || null,
+      });
+      return;
+    }
+    for (const c of parts) {
+      c.status = "part"; // in the integrated candidate now
+    }
+    task.candidates.push({
+      id: INTEGRATED,
+      adapter: parts[0]?.adapter || "claude",
+      parts: parts.map(c => c.id),
+      status: "active",
+      dir: r.dir,
+      branch: r.branch,
+      handle: null,
+      head: r.head,
+      tests: null,
+      diff: await this.workspace.diffstat(task.project.root, task.base.sha, r.branch),
+    });
+    await this.#advance(task);
+  }
+
   #canLoop(task, st) {
     return !!st.onFail && task.stages[task.stage].loops < st.onFail.maxLoops;
   }
@@ -820,9 +945,9 @@ class TaskEngine extends EventEmitter {
       kind,
       stage: st?.id || null,
       title,
-      actions: GATE_ACTIONS[kind],
       at: this.now(),
       ...extra,
+      actions: extra.actions || GATE_ACTIONS[kind],
     };
     task.stages[task.stage].status = "waiting";
     task.status = "needs-you";

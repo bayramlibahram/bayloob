@@ -22,6 +22,8 @@ test("built-ins are listed first and read-only; a copy saves under a free id", (
     [
       ["pipeline", true],
       ["bestofn", true],
+      ["split", true],
+      ["board", true],
     ]
   );
   assert.match(s.save(builtin("bestofn")).issues[0].text, /read-only/);
@@ -31,7 +33,7 @@ test("built-ins are listed first and read-only; a copy saves under a free id", (
   assert.equal(s.idFor("Best-of-N (copy)"), "best-of-n-copy-2");
   assert.deepEqual(
     s.list().map(x => x.id),
-    ["pipeline", "bestofn", "best-of-n-copy"]
+    ["pipeline", "bestofn", "split", "board", "best-of-n-copy"]
   );
   assert.equal(s.get("best-of-n-copy").name, "Best-of-N (copy)");
 });
@@ -82,7 +84,7 @@ test("New task with one of the owner's templates runs that template as saved", (
 });
 
 test("built-in prompts carry no indentation from the source file", () => {
-  for (const id of ["pipeline", "bestofn"]) {
+  for (const id of ["pipeline", "bestofn", "split", "board"]) {
     for (const s of builtin(id).stages) {
       for (const text of [s.prompt, s.onFail?.prompt].filter(Boolean)) {
         assert.ok(!/\n /.test(text), `${id}/${s.id}: ${JSON.stringify(text)}`);

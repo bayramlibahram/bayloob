@@ -36,6 +36,13 @@
     parallel: "Parallel",
     sequential: "Sequential",
     perCandidate: "Once per candidate",
+    split: { planner: "Splits the plan into subtasks", builder: "One builder per subtask" },
+    splitTip: {
+      planner:
+        "Its answer ends with a JSON block of subtasks, each owning its files; overlaps stop for you",
+      builder:
+        "Each builder gets one subtask; the agents here take turns. Integrate merges the parts after",
+    },
     saveAs: "Saves its answer as",
     prompt: "Prompt — type {{ for a value",
     onFail: "On fail →",
@@ -52,6 +59,7 @@
       tester: "Built-in: run tests",
       reviewer: "Reviewer",
       arbiter: "Decide",
+      integrate: "Built-in: integrate parts",
       you: "You merge",
     },
     gates: {
@@ -63,6 +71,8 @@
     },
     modes: { plan: "plan", "read-only": "read-only", writes: "writes" },
     testerNote: "Runs the project’s own test command in every candidate’s worktree.",
+    integrateNote:
+      "Merges the split build’s parts into one branch in its own worktree; a conflict between parts stops for you.",
     arbiterNote: "Until the Arbiter arrives (command 06), you pick the winner here.",
     mergeNote:
       "You merge the winner into the branch the task started from — nothing is merged until you click.",
@@ -71,6 +81,7 @@
       build: "Build",
       tests: "Tests",
       review: "Review",
+      integrate: "Integrate",
       decide: "Decide",
       merge: "Merge",
     },
@@ -118,6 +129,13 @@
       artifact: "review.md",
       gate: "always",
       prompt: WorkflowTemplates.builtin("pipeline").stages[3].prompt,
+    }),
+    integrate: () => ({
+      id: "integrate",
+      title: "Integrate",
+      role: "you",
+      action: "integrate",
+      gate: "always",
     }),
     decide: () => ({ id: "decide", title: "Decide", role: "arbiter", gate: "arbiter" }),
     merge: () => ({ id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" }),
@@ -246,7 +264,7 @@
           <select class="sel" data-s="role" data-i="${i}" aria-label="Role">${Object.entries(
             B.roles
           )
-            .map(([r, n]) => opt(r, n, s.role === r))
+            .map(([r, n]) => opt(r, n, (s.action === "integrate" ? "integrate" : s.role) === r))
             .join("")}</select>
           ${
             agentStage && (s.role === "builder" || total > 1)
@@ -271,12 +289,15 @@
         body += (s.agents || []).map((a, k) => this.#slotHtml(s, i, a, k)).join("");
         body += `<div class="row"><button class="btn sm ghost" type="button" data-addagent="${i}">${ICO.plus} ${B.addAgent}</button>
           ${s.role === "reviewer" ? `<label class="check"><input type="checkbox" data-c="perCandidate" data-i="${i}"${s.perCandidate ? " checked" : ""}> ${B.perCandidate}</label>` : ""}
+          ${B.split[s.role] ? `<label class="check" title="${B.splitTip[s.role]}"><input type="checkbox" data-c="split" data-i="${i}"${s.split ? " checked" : ""}> ${B.split[s.role]}</label>` : ""}
           ${s.role !== "builder" ? `<label class="check">${B.saveAs} <input class="small mono" data-f="artifact" data-i="${i}" value="${esc(s.artifact || "")}" placeholder="answer.md" spellcheck="false"></label>` : ""}</div>`;
         body += this.#promptHtml(s.prompt, `prompt`, i, B.prompt);
       } else if (s.role === "tester") {
         body += `<p class="hint">${B.testerNote}</p>`;
       } else if (s.role === "arbiter") {
         body += `<p class="hint">${B.arbiterNote}</p>`;
+      } else if (s.action === "integrate") {
+        body += `<p class="hint">${B.integrateNote}</p>`;
       } else {
         body += `<p class="hint">${B.mergeNote}</p>`;
       }
@@ -375,6 +396,7 @@
         tester: "tests",
         reviewer: "review",
         arbiter: "decide",
+        integrate: "integrate",
         you: "merge",
       }[role];
       const fresh = KINDS[kind]();
@@ -519,6 +541,16 @@
         }
       } else if (d.c === "perCandidate") {
         t.stages[i].perCandidate = el.checked;
+      } else if (d.c === "split") {
+        // The prompt follows when it's still a preset's: the split one asks for (or hands out) subtasks
+        const st = t.stages[i];
+        const presets = ["pipeline", "split"].map(id => WorkflowTemplates.builtin(id).stages);
+        const same = role => presets.map(ss => ss.find(x => x.role === role)?.prompt);
+        const [plain, split] = same(st.role);
+        if (st.prompt === (el.checked ? plain : split)) {
+          st.prompt = el.checked ? split : plain;
+        }
+        st.split = el.checked || undefined;
       } else if (d.c === "onFail") {
         const s = t.stages[i];
         if (el.checked) {

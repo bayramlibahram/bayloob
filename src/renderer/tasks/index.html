@@ -159,6 +159,14 @@
   .cand .ch small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cand .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .strip { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px; font-size: 12px; background: color-mix(in srgb, var(--c) 11%, transparent); color: var(--c); font-weight: 600; }
+  /* Split work: the planner's subtasks and the files each owns */
+  .subs { display: flex; flex-direction: column; gap: 8px; max-width: 980px; }
+  .sub { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 14px; padding: 10px 12px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); }
+  .sub b { font-size: 13px; } .sub small { display: block; color: var(--muted); font-size: 11.5px; }
+  .sub .files { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+  .sub code { font: 11.5px ui-monospace, monospace; padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+  .sub code.clash { background: color-mix(in srgb, var(--waiting) 20%, transparent); color: var(--text); }
+  .subs .banner { margin: 0; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; }
   .kv dt { color: var(--muted); }
   details.more summary { cursor: pointer; color: var(--muted); font-size: 12px; }
@@ -299,7 +307,7 @@
     noTasks: 'No tasks yet', noTasksHint: 'Start one with New task → Agentic workflow (Pipeline or Best-of-N).',
     category: { workflow: 'Agentic workflow', analysis: 'Analysis', single: 'Single agent' },
     status: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', stopped: 'Stopped', failed: 'Failed' },
-    tabs: { overview: 'Overview', plan: 'Plan', candidates: 'Candidates', tests: 'Tests', log: 'Log' },
+    tabs: { overview: 'Overview', plan: 'Plan', candidates: 'Candidates', tests: 'Tests', reviews: 'Reviews', log: 'Log' },
     stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
     stopped: 'Stopped. Worktrees and branches are kept until you delete them.',
     queuedN: n => `${n} queued`, runningN: n => `${n} running`, of: (a, b) => `${a} of ${b}`,
@@ -308,6 +316,10 @@
     terminal: 'Terminal', terminalTip: 'Open a terminal attached to this agent',
     istatus: { queued: 'queued', starting: 'starting', running: 'working', done: 'done', failed: 'failed', stopped: 'stopped', interrupted: 'interrupted' },
     mode: { writes: 'writes', 'read-only': 'read-only', plan: 'plan' },
+    subtasks: 'Subtasks', subsHint: 'Each builder gets one subtask and changes only its files.',
+    clash: (a, b, f) => `${a} and ${b} both own ${f}`, subsBad: 'The plan has no usable subtasks — ask for changes',
+    partOf: id => `Part · ${id}`, testedIn: 'Tested as part of integrate-1', inIntegrated: 'Merged into integrate-1', parts: ids => `Parts: ${ids.join(', ')}`, integrated: 'All parts',
+    reviews: 'Reviews', reviewOf: l => `Reviewing ${l}`, noReviews: 'No reviews yet', noReviewsHint: 'The reviewers are reading — each answer appears here.',
     noPlan: 'No plan yet', noPlanHint: 'The planner is working — its answer appears here.',
     noCands: 'No candidates yet', noCandsHint: 'Builders start after the plan is approved.',
     testsPass: 'Tests pass', testsFail: 'Tests fail', testsSkip: 'No test command — skipped', testsNot: 'Not tested yet',
@@ -348,6 +360,9 @@
       'launch-failed': e => `${instName(e.instance)} couldn't start: ${e.error}`,
       'read-only-violation': e => `${instName(e.instance)} changed files in read-only mode`,
       'trusted-folder': () => 'Answered the folder-trust question (task worktree)',
+      subtasks: e => e.error ? `The plan's subtasks can't be used: ${e.error}` : `The plan has ${e.count} subtasks${e.overlaps ? ` · ${e.overlaps} overlap(s)` : ' · no overlaps'}`,
+      integrated: e => `Integrated ${(e.parts || []).join(', ')} into ${e.branch}`,
+      'integrate-failed': e => `Integration stopped: ${e.error}${e.conflicts?.length ? ` (${e.conflicts.join(', ')})` : ''}`,
       stop: () => 'You stopped the task',
       error: e => `Engine error: ${e.error}`,
     },
@@ -543,8 +558,11 @@
         const inner = cls === 'done' ? ICON.check : cls === 'wait' ? '!' : cls === 'fail' ? '×' : '';
         return `${i ? '<span class="sline"></span>' : ''}<div class="sstep ${cls}"${i === t.stage && live ? ' aria-current="step"' : ''}><span class="si">${inner}</span><span>${esc(s.title)} <small>${esc(this.#stageNote(t, s, st))}</small></span></div>`;
       }).join('');
-      const tabs = [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['tests'], ['log']];
-      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), log: () => this.#log(t) }[this.tab]();
+      const board = !t.template.stages.some(s => s.role === 'builder');
+      const tabs = board ? [['overview'], ['reviews', t.instances.filter(i => i.status === 'done').length || ''], ['log']]
+        : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['tests'], ['log']];
+      if (!tabs.some(([k]) => k === this.tab)) { this.tab = 'overview'; }
+      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), log: () => this.#log(t) }[this.tab]();
       return `<div class="dhead"><div class="t">
           <button class="crumb" type="button" data-act="board">${ICON.back} ${T.back}</button>
           <h1>${esc(t.title)}</h1>
@@ -564,7 +582,8 @@
 
     #stageNote(t, s, st) {
       const round = t.instances.filter(i => i.stage === s.id && i.round === st.round);
-      if (s.role === 'builder') { return t.candidates.length ? `×${t.candidates.length}` : ''; }
+      if (s.role === 'builder') { const n = t.candidates.filter(c => c.id !== 'integrate-1').length; return n ? `×${n}` : ''; }
+      if (s.action === 'integrate') { const c = t.candidates.find(x => x.id === 'integrate-1'); return c ? `${c.parts.length} parts` : ''; }
       if (s.action === 'run-tests') {
         const tested = t.candidates.filter(c => c.tests && c.tests.ok !== null);
         return tested.length ? `${T.of(tested.filter(c => c.tests.ok).length, tested.length)} pass` : '';
@@ -572,6 +591,7 @@
       if (s.role === 'arbiter') { return t.winner ? t.winner : st.status === 'waiting' ? 'you pick' : ''; }
       if (s.action === 'merge') { return t.merged ? `into ${t.merged.into}` : ''; }
       if (s.gate === 'human' && st.status === 'done') { return 'approved'; }
+      if (round.length > 1) { return `×${round.length}`; }
       return round.length ? Agent.displayName(round[0].adapter) : (s.agents?.[0] ? Agent.displayName(s.agents[0].adapter) : '');
     }
 
@@ -590,6 +610,7 @@
         <div class="facts">
           <div><span class="label">${T.the.project}</span><b title="${esc(t.project.root)}">${esc(tilde(t.project.root, home))}</b></div>
           <div><span class="label">${T.the.base}</span><b class="mono">${t.base.fromWorktree ? esc(T.yourFiles(t.base.branch)) : `${esc(t.base.branch)} @ ${esc(t.base.sha.slice(0, 8))}`}</b></div>
+          ${t.review ? `<div><span class="label">${T.reviews}</span><b class="mono" title="${esc(`${t.review.from}..${t.review.to}`)}">${esc(t.review.label)}</b></div>` : ''}
           <div><span class="label">${T.the.ro}</span><b title="${esc(t.roDir)}">${esc(tilde(t.roDir, home))}</b></div>
           <div><span class="label">${T.the.tests}</span><b class="mono">${esc(t.testCommand || T.the.noTests)}</b></div>
         </div>
@@ -601,7 +622,36 @@
     #plan(t) {
       const plan = this.#artifact(t.id, 'plan.md');
       if (plan === undefined) { return `<div class="empty">${T.loading}</div>`; }
-      return plan ? `<div class="card md" style="max-width:980px">${renderMarkdown(plan)}</div>` : `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noPlan}</b>${T.noPlanHint}</div>`;
+      return plan ? `${this.#subtasks(t)}<div class="card md" style="max-width:980px">${renderMarkdown(plan)}</div>` : `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noPlan}</b>${T.noPlanHint}</div>`;
+    }
+
+    // Split work: who owns which files — overlaps marked, before any builder starts
+    #subtasks(t) {
+      const s = t.subtasks;
+      if (!s) { return ''; }
+      if (s.error) { return `<div class="subs"><div class="banner" style="--c:var(--waiting)">${ICON.warn}<span><b>${T.subsBad}</b><br>${esc(s.error)}</span></div></div><br>`; }
+      const clash = new Set(s.overlaps.map(o => o.file));
+      const owner = id => t.candidates.find(c => c.subtask === id);
+      return `<div class="subs"><div class="label">${T.subtasks} · ${s.list.length} <small style="text-transform:none;letter-spacing:0">— ${T.subsHint}</small></div>
+        ${s.overlaps.length ? `<div class="banner" style="--c:var(--waiting)">${ICON.warn}<span>${s.overlaps.map(o => esc(T.clash(o.a, o.b, o.file))).join('<br>')}</span></div>` : ''}
+        ${s.list.map(x => {
+          const c = owner(x.id);
+          return `<div class="sub"><div><b>${esc(x.title)}</b><small class="mono">${esc(x.id)}${c ? ` · ${esc(c.id)} · ${esc(Agent.displayName(c.adapter))}` : ''}</small></div>
+            <div class="files">${x.files.map(f => `<code class="${[...clash].some(k => k === f || k.startsWith(f)) ? 'clash' : ''}">${esc(f)}</code>`).join('')}</div></div>`;
+        }).join('')}</div><br>`;
+    }
+
+    // Review board: every reviewer's answer on its own, with its findings count (the Arbiter merges them from 06)
+    #reviews(t) {
+      const done = t.instances.filter(i => i.artifact);
+      if (!done.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noReviews}</b>${T.noReviewsHint}</div>`; }
+      return `<div class="cands">${done.map(i => {
+        const text = this.#artifact(t.id, i.artifact);
+        const n = text ? findingsIn(text) : 0;
+        return `<article class="cand"><div class="ch">${novi(i.adapter, 'l')}<div class="nm"><b>${esc(Agent.displayName(i.adapter))}</b><small class="mono">${esc(i.artifact)}</small></div>
+            <span class="chip c" style="--c:${n ? 'var(--working)' : 'var(--done)'}">${T.findings(n)}</span></div>
+          <div class="md">${text === undefined ? T.loading : renderMarkdown(text || '')}</div></article>`;
+      }).join('')}</div>`;
     }
 
     #candidates(t) {
@@ -610,22 +660,24 @@
       const picked = this.picked.get(t.id);
       return `<div class="cands">${t.candidates.map(c => {
         const builder = [...t.instances].reverse().find(i => i.candidate === c.id && i.role === 'builder');
-        const tests = !c.tests ? ['var(--idle)', T.testsNot] : c.tests.skipped ? ['var(--idle)', T.testsSkip] : c.tests.ok ? ['var(--done)', T.testsPass] : ['var(--waiting)', `${T.testsFail} (exit ${c.tests.code})`];
+        const tests = c.status === 'part' ? ['var(--idle)', T.testedIn] : !c.tests ? ['var(--idle)', T.testsNot] : c.tests.skipped ? ['var(--idle)', T.testsSkip] : c.tests.ok ? ['var(--done)', T.testsPass] : ['var(--waiting)', `${T.testsFail} (exit ${c.tests.code})`];
         const review = this.#artifact(t.id, `review.${c.id}.md`);
         const answer = builder ? this.#artifact(t.id, `msg.${builder.id}.md`) : null;
         const n = review ? findingsIn(review) : 0;
         const win = t.winner === c.id;
-        return `<article class="cand${win ? ' win' : picked === c.id ? ' picked' : ''}${c.status === 'out' ? ' out' : ''}">
+        const role = c.subtask ? `<span class="chip">${esc(T.partOf(c.subtask))}</span>` : c.parts ? `<span class="chip c" style="--c:var(--brand)">${T.integrated}</span>` : '';
+        return `<article class="cand${win ? ' win' : picked === c.id ? ' picked' : ''}${c.status === 'out' || c.status === 'part' ? ' out' : ''}">
           <div class="ch">${novi(c.adapter, 'l')}<div class="nm"><b>${esc(c.id)}</b><small title="${esc(c.branch || '')}">${esc(Agent.displayName(c.adapter))}${c.branch ? ` · ${esc(c.branch)}` : ''}</small></div>
-            ${win ? `<span class="chip c" style="--c:var(--brand)">${T.winner}</span>` : c.status === 'out' ? `<span class="chip c" style="--c:var(--waiting)">${T.out}</span>` : ''}</div>
+            ${role}${win ? `<span class="chip c" style="--c:var(--brand)">${T.winner}</span>` : c.status === 'out' ? `<span class="chip c" style="--c:var(--waiting)">${T.out}</span>` : ''}</div>
           <div class="strip" style="--c:${tests[0]}">${tests[0] === 'var(--done)' ? ICON.check : tests[0] === 'var(--waiting)' ? ICON.x : ''}${esc(tests[1])}</div>
           <dl class="kv"><dt>${T.diff}</dt><dd>${c.diff ? `<span class="diff"><span class="a">+${c.diff.added}</span> <span class="r">−${c.diff.deleted}</span></span> · ${T.files(c.diff.files)}` : '—'}</dd>
             ${review !== null && review !== undefined ? `<dt>${T.review}</dt><dd style="color:${n ? 'var(--working)' : 'var(--done)'}">${T.findings(n)}</dd>` : ''}
-            <dt>${T.status2}</dt><dd>${win ? (t.merged ? T.mergedInto(esc(t.merged.into), t.merged.applied) : T.winner) : c.status === 'out' ? esc(c.out || T.out) : T.active}</dd></dl>
+            ${c.parts ? `<dt>${T.integrated}</dt><dd>${esc(c.parts.join(', '))}</dd>` : ''}
+            <dt>${T.status2}</dt><dd>${win ? (t.merged ? T.mergedInto(esc(t.merged.into), t.merged.applied) : T.winner) : c.status === 'part' ? T.inIntegrated : c.status === 'out' ? esc(c.out || T.out) : T.active}</dd></dl>
           ${review ? `<details class="more"><summary>${T.reviewText}</summary><div class="md">${renderMarkdown(review)}</div></details>` : ''}
           ${answer ? `<details class="more"><summary>${T.answer}</summary><div class="md">${renderMarkdown(answer)}</div></details>` : ''}
           <div class="row">${builder?.handle && t.status !== 'done' && t.status !== 'stopped' ? `<button class="btn sm" type="button" data-term="${esc(builder.id)}" title="${T.terminalTip}">${ICON_TERM} ${T.terminal}</button>` : ''}
-            ${picking ? `<button class="btn sm${picked === c.id ? ' primary' : ''}" type="button" data-pick="${esc(c.id)}">${picked === c.id ? `${ICON.check} ${T.chosen}` : T.choose}</button>` : ''}</div>
+            ${picking && c.status === 'active' ? `<button class="btn sm${picked === c.id ? ' primary' : ''}" type="button" data-pick="${esc(c.id)}">${picked === c.id ? `${ICON.check} ${T.chosen}` : T.choose}</button>` : ''}</div>
         </article>`;
       }).join('')}</div>`;
     }

@@ -6,7 +6,8 @@ section of the Workspace window (04b) with the workflow builder (04c).
 ## Parts
 | File | Role |
 |---|---|
-| `src/shared/workflow-templates.js` | Stage schema, validation (plain-language errors), built-ins Pipeline and Best-of-N, prompt variables |
+| `src/shared/workflow-templates.js` | Stage schema, validation (plain-language errors), built-ins Pipeline, Best-of-N, Split work and Review board, prompt variables |
+| `src/main/modules/tasks/subtasks.js` | Split work: the planner's subtasks (JSON block), file disjointness, what each builder is told |
 | `src/main/modules/tasks/task-engine.js` | State machine: stages, instances, candidates, gates, loops, restart recovery |
 | `src/main/modules/tasks/task-store.js` | `tasks/<id>/config.json`, `state.json` (atomic), `log.jsonl`, `artifacts/` |
 | `src/main/modules/tasks/task-workspace.js` | git side: read-only worktree, candidate worktrees, snapshots, diffstat, tests, merge |
@@ -21,19 +22,34 @@ section of the Workspace window (04b) with the workflow builder (04c).
   The `merge` action is a gate.
 - **Candidate**: one builder's attempt, `bayloob/<task>/build-<n>`. After each builder turn its work is
   committed on its own branch (a snapshot, `--no-verify`), so diffs, reviews and the merge see the same thing.
+- **Split work** (command 05): a planner stage with `split` must end its plan with
+  `{"subtasks":[{"id","title","files":[…]}]}`. The engine checks that no file or folder is owned by two subtasks.
+  An overlap, or a block that is missing or broken, puts a gate before any builder starts; a broken block can only
+  go back to the planner. A builder stage with `split` runs one builder per subtask, and its agents take turns. The
+  `integrate` action merges the parts' branches into a new candidate, `integrate-1`, in its own worktree. Later
+  stages test, review and merge only that candidate. A loop back to the builders fixes `integrate-1`; the parts
+  aren't redone. If a part can't run, or two parts conflict, the owner is asked (retry or abort).
+- **Review board** (command 05): a template without builders reviews what the task started from. `{{diff}}` is the
+  command that shows it:
+  - started from your files: your uncommitted changes against HEAD;
+  - started from a branch: what the branch adds since it left `origin/HEAD`, `main` or `master`;
+  - on the default branch itself: its last commit.
+
+  Each reviewer's answer is kept on its own (`review.md`, `review.2.md` …) with its findings. They are merged once
+  the Arbiter arrives (06).
 - **Loops**: `onFail: { goto, prompt, maxLoops }`. Failing tests send only the failing candidates back,
   into their own sessions. After `maxLoops` such a candidate drops out. If none is left, the owner decides.
 
 ## Gates (where the owner is asked)
 | Gate | When | Actions |
 |---|---|---|
-| `approve` | After a stage with `gate: human` (the plan) | approve · changes (note → same session) · abort |
+| `approve` | After a stage with `gate: human` (the plan); always when split subtasks overlap or can't be read | approve · changes (note → same session) · abort — no approve for unreadable subtasks |
 | `pick` | `gate: arbiter`, until command 06 | pick a candidate · retry (note → builders) · abort |
 | `merge` | Last stage | merge (base branch, clean tree, `--no-ff`; conflict → undone, listed) · keep branches · abort |
 | `tests-failed` | No candidate passes | continue anyway · retry with a note · abort |
 | `interrupted` | A session ended mid-turn, or after a restart | retry · abort |
 | `violation` | A read-only agent changed files | continue · abort |
-| `failed` | A stage couldn't run (launch error) | retry · abort |
+| `failed` | A stage couldn't run (launch error), a split part couldn't run, the parts conflict | retry · abort |
 
 Every transition goes to `log.jsonl` with actor `you`, `engine` or `agent`.
 

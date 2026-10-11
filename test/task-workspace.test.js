@@ -204,3 +204,76 @@ test("the project's env files reach every worktree (symlinked, out of git); exam
     assert.equal(await ws.dirty(dir), false);
   }
 });
+
+test("integrate: the parts' branches merged into one candidate; a conflict is undone and listed", async () => {
+  const { root, ws } = repo();
+  const { sha } = await ws.prepare({ cwd: root, taskId: ID });
+  const parts = [];
+  for (const [n, file] of [
+    [1, "api.js"],
+    [2, "ui.js"],
+  ]) {
+    const c = await ws.addCandidate({ root, taskId: ID, candidate: `build-${n}`, sha });
+    fs.writeFileSync(path.join(c.dir, file), `// ${file}\n`);
+    await ws.snapshot(c.dir, `part ${n}`);
+    parts.push(c.branch);
+  }
+  const r = await ws.integrate({
+    root,
+    taskId: ID,
+    sha,
+    candidate: "integrate-1",
+    branches: parts,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.branch, `bayloob/${ID}/integrate-1`);
+  assert.ok(fs.existsSync(path.join(r.dir, "api.js")) && fs.existsSync(path.join(r.dir, "ui.js")));
+  assert.equal(g(root, "rev-parse", "--abbrev-ref", "HEAD"), "main"); // the project itself is untouched
+
+  // Two parts that both changed cart.js: the second one is listed, the worktree left clean
+  const clash = [];
+  for (const n of [3, 4]) {
+    const c = await ws.addCandidate({ root, taskId: ID, candidate: `build-${n}`, sha });
+    fs.writeFileSync(path.join(c.dir, "cart.js"), `module.exports = ${n};\n`);
+    await ws.snapshot(c.dir, `part ${n}`);
+    clash.push(c.branch);
+  }
+  const bad = await ws.integrate({
+    root,
+    taskId: ID,
+    sha,
+    candidate: "integrate-2",
+    branches: clash,
+  });
+  assert.equal(bad.ok, false);
+  assert.deepEqual(bad.conflicts, ["cart.js"]);
+  assert.match(bad.error, /build-4 conflicts/);
+  assert.equal(await ws.dirty(bad.dir), false);
+});
+
+test("reviewRange: uncommitted changes, a branch since it left main, or the last commit", async () => {
+  const { root, ws } = repo();
+  const head = g(root, "rev-parse", "HEAD");
+  assert.equal(
+    (await ws.reviewRange({ root, sha: "f00", head, fromWorktree: true })).label,
+    "your uncommitted changes"
+  );
+  assert.deepEqual(await ws.reviewRange({ root, sha: head, head }), {
+    from: head,
+    to: head,
+    label: "nothing (no earlier commit)",
+  });
+  g(root, "checkout", "-qb", "feature");
+  fs.writeFileSync(path.join(root, "new.js"), "1\n");
+  g(root, "add", ".");
+  g(root, "commit", "-qm", "feature");
+  const tip = g(root, "rev-parse", "HEAD");
+  assert.deepEqual(await ws.reviewRange({ root, sha: tip, head: tip }), {
+    from: head,
+    to: tip,
+    label: "feature since it left main",
+  });
+  g(root, "checkout", "-q", "main");
+  g(root, "merge", "-q", "feature");
+  assert.equal((await ws.reviewRange({ root, sha: tip, head: tip })).label, "the last commit");
+});
