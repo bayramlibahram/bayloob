@@ -1,6 +1,6 @@
 # Windows and macOS: audit and plan (#30)
 
-Status: **plan, waiting for the owner's decisions** (§5). Nothing is ported yet; Linux stays the reference.
+Status: **plan approved** (decisions in §5, 2026-10-12). Nothing is ported yet; Linux stays the reference.
 
 ## 1. Where Bayloob depends on Linux (audit, 2026-10-12)
 
@@ -81,9 +81,9 @@ Recommendation: **A for the first Windows version** — least new code, and it's
 2. Windows (option A) — ~3–5 days + a Windows machine.
 3. CI: build `.dmg` and `.exe` on GitHub Actions runners (macOS and Windows), tests on all three.
 
-## 5. Decisions for the owner
+## 5. Decisions (the owner, 2026-10-12)
 
-1. Windows agent control: **A (WezTerm)**, B (built-in terminal) or C (WSL)?
-2. Order: macOS first (easier, tmux works), or Windows first?
-3. Test machines: is there a Mac and a Windows machine (or VMs) for real tests? Without them, step 0 and CI builds are all that can be checked here.
-4. Signing: Apple Developer account / Windows code-signing certificate now, or unsigned builds first?
+1. **Windows agent control: A, WezTerm mux.**
+2. **Order:** step 0, the platform layer and the five bugs, first; then macOS; then Windows.
+3. **No Mac or Windows machine yet.** Step 0 is built and tested here. The macOS and Windows builds are checked on GitHub Actions; the owner runs the real tests later.
+4. **Unsigned builds first.** Gatekeeper and SmartScreen will warn; certificates come later.
