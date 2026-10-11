@@ -35,7 +35,6 @@ const deniedFor = role =>
   role === "challenger"
     ? DENIED_READ_ONLY
     : `This session is a read-only ${role} in a Bayloob task: read and report, don't change files`;
-const ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", `127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 
 // Hook event name -> mascot state
 function toState(ev) {
@@ -190,7 +189,12 @@ class EventServer {
     }
   }
 
-  constructor({ port = PORT, store = new SessionStore(), token = null } = {}) {
+  // The port is read when the server is made, not when this file loads (BAYLOOB_PORT can change in between)
+  constructor({
+    port = Number(process.env.BAYLOOB_PORT || PORT),
+    store = new SessionStore(),
+    token = null,
+  } = {}) {
     this.port = port;
     this.store = store;
     this.token = token;
@@ -269,8 +273,10 @@ class EventServer {
 
   // Only accept requests addressed to us by a local process: a browser page (Origin header)
   // or a DNS-rebinding attack (foreign Host header) is rejected.
-  static #isLocal(req) {
-    return ALLOWED_HOSTS.has(req.headers.host) && !req.headers.origin;
+  // The Host this server answers to: loopback, on its own port (this.port, not the env at load time)
+  #isLocal(req) {
+    const hosts = ["127.0.0.1", "localhost", `127.0.0.1:${this.port}`, `localhost:${this.port}`];
+    return hosts.includes(req.headers.host) && !req.headers.origin;
   }
 
   // ...and only from someone who could read the token file (the hooks, run as the same user)
@@ -281,7 +287,7 @@ class EventServer {
   }
 
   #route(req, res) {
-    if (!EventServer.#isLocal(req) || !this.#isAuthorized(req)) {
+    if (!this.#isLocal(req) || !this.#isAuthorized(req)) {
       req.resume(); // drain the body, so the client gets the 403 rather than a reset connection
       res.statusCode = 403;
       return res.end();
