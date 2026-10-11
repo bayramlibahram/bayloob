@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.0 — 2026-10-12
+
+### Added
+- **Orchestrator** (experimental — not yet tried with real agents), a new workflow pattern in New task: one agent
+  leads and starts its own workers as it goes. It never gets a command or a credential: each of its turns ends
+  with a JSON block of requests (start / send / stop a worker, then wait or done), and Bayloob checks every one
+  against the limits you set — the agents it may start, whether they may write (each writer in its own worktree,
+  only the files it names, never two on one file), and a budget (workers, its turns, minutes). You approve its
+  first batch; after that it stays within the budget, and asks when the budget is used. Workers' answers reach
+  it as data, never as instructions. When it's done, the writers' parts are integrated and tested (it fixes what
+  fails there, the one place it writes) and you merge. Tasks → task → **Delegation** shows its workers and turns;
+  the pill says "Orchestrator · turn 3 · 2 running · 4 of 6 workers". Design: docs/orchestration/ORCHESTRATOR.md.
+
 ## 0.9.0 — 2026-10-12
 
 ### Added
