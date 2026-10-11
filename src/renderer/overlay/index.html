@@ -62,7 +62,7 @@
   .pill.open #soundBtn.muted ~ #voiceBtn { margin-left: -6px; }
   /* open, mute and full view sit in the ⋯ row; a muted sound stays on the bar as a red reminder */
   .pill.open #soundBtn:not(.muted), .pill.open #fullBtn { display: none; }
-  .moremenu { display: none; justify-content: flex-end; gap: 6px; padding: 0 14px 8px; }
+  .moremenu { display: none; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding: 0 14px 8px; }
   .pill.open.more .moremenu { display: flex; }
   .moremenu button { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
     background: rgb(var(--ink) / .07); color: var(--soft); }
@@ -112,6 +112,10 @@
   .barbtn.muted .off { display: block; }
   .barbtn.muted { color: var(--waiting); }
   .count + .barbtn { margin-left: 2px; }
+  /* The Workspace window is minimized to the pill: its button stays on the bar, with what waits for you */
+  .barbtn.ws { display: grid; position: relative; color: var(--brand-soft); }
+  .barbtn.ws em { position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+    background: var(--primary-bg); color: var(--primary-fg); font: 700 10px/16px inherit; font-style: normal; font-variant-numeric: tabular-nums; text-align: center; }
   .barbtn + .barbtn { margin-left: -6px; } /* the bar's tools sit as one group */
   .barbtn.on { color: var(--brand-soft); background: color-mix(in srgb, var(--brand) 16%, transparent); }
   .barbtn .shrink, .pill.full .barbtn .grow { display: none; }
@@ -552,6 +556,8 @@
     soundMute: 'Sounds on — click to mute', soundUnmute: 'Sounds off — click to turn on',
     soundLocked: 'Sounds are turned off by BAYLOOB_SOUNDS=0',
     menuMute: 'Mute sounds', menuUnmute: 'Turn sounds on', menuFull: 'Full view', menuShrink: 'Exit full view',
+    menuWorkspace: 'Workspace window', menuQuit: 'Quit Bayloob', panelBtn: 'Open the workspace panel', panelTip: 'Workspace panel',
+    wsMinimized: n => `Workspace (minimized)${n ? ` · ${n} waiting for you` : ''} — click to restore`,
     movingToBayloob: 'moving to Bayloob', cancel: 'Cancel',
     closeToContinue: agent => `Close ${agent} in its terminal (<code>/exit</code>). Bayloob then continues it in tmux.`,
     errorCopied: 'Error copied — fix it?', lines: n => `${n} line${n === 1 ? '' : 's'}`,
@@ -862,9 +868,13 @@
         ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="m16 9.5 5 5m0-5-5 5"/></svg>'
         : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="M15.5 9a4.2 4.2 0 0 1 0 6"/></svg>';
       const full = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="w" d="M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5 13.5 10.5M4.5 19.5l6-6"/></svg>';
+      const ws = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="w" x="3.5" y="4.5" width="17" height="15" rx="3"/><path class="w" d="M9.5 4.5v15"/></svg>';
+      const quit = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="w" d="M12 3.5v8M7 6.5a7 7 0 1 0 10 0"/></svg>';
       document.getElementById('moremenu').innerHTML =
         `<button type="button" role="menuitem" data-bar="sound"${this.soundLocked ? ` disabled title="${T.soundLocked}"` : ''}>${sound}${this.soundOn ? T.menuMute : T.menuUnmute}</button>` +
-        `<button type="button" role="menuitem" data-bar="full">${full}${this.full ? T.menuShrink : T.menuFull}</button>`;
+        `<button type="button" role="menuitem" data-bar="full">${full}${this.full ? T.menuShrink : T.menuFull}</button>` +
+        `<button type="button" role="menuitem" data-bar="workspace">${ws}${T.menuWorkspace}</button>` +
+        `<button type="button" role="menuitem" data-bar="quit">${quit}${T.menuQuit}</button>`;
     }
 
     setAppearance(a) {
@@ -987,7 +997,28 @@
 
     open() { this.el.pill.classList.add('open'); }
 
+    // The Workspace window went to the pill (or came back): { minimized }
+    setWorkspace(ws) {
+      this.wsMinimized = !!ws?.minimized;
+      this.render();
+    }
+
+    // While the Workspace is minimized, its button stays on the bar with a count of what waits for you
+    // (permissions, terminal menus, task gates); a click on it (or the bar) brings the window back
+    #renderWs() {
+      const b = document.getElementById('panelBtn');
+      const n = this.wsMinimized ? this.sessions.filter(s => s.perm || s.menu).length + (this.taskGates?.length || 0) : 0;
+      b.classList.toggle('ws', !!this.wsMinimized);
+      b.title = this.wsMinimized ? T.wsMinimized(n) : T.panelTip;
+      b.setAttribute('aria-label', this.wsMinimized ? T.wsMinimized(n) : T.panelBtn);
+      const em = b.querySelector('em');
+      if (n && !em) { b.insertAdjacentHTML('beforeend', `<em>${n}</em>`); }
+      else if (n) { em.textContent = String(n); }
+      else { em?.remove(); }
+    }
+
     render() {
+      this.#renderWs();
       const top = this.#byPriority()[0];
       const state = top ? top.state : 'idle';
       const dancing = this.music?.playing && (state === 'idle' || state === 'done');
@@ -1648,6 +1679,8 @@
         if (bb.dataset.bar === 'panel') { this.api?.togglePanel(); }
         if (bb.dataset.bar === 'voice') { this.#voiceOpen(); }
         if (bb.dataset.bar === 'full') { this.#setFull(!this.full); }
+        if (bb.dataset.bar === 'workspace') { this.api?.openWorkspace(); }
+        if (bb.dataset.bar === 'quit') { this.api?.quit(); }
         if (bb.dataset.bar === 'more') { this.#more = !this.#more; }
         else if (bb.closest('#moremenu')) { this.#more = false; }
         this.#renderMore();
@@ -1875,6 +1908,7 @@
     window.bayloobAPI.onRuleAllowed?.(r => view.setRuleAllowed(r));
     window.bayloobAPI.onErrorCopied?.(e => view.setErrorCopied(e));
     window.bayloobAPI.onTaskGates?.(g => view.setTaskGates(g));
+    window.bayloobAPI.onWorkspace?.(ws => view.setWorkspace(ws));
     window.bayloobAPI.onTaskSummary?.(list => view.setTaskSummary(list));
     window.bayloobAPI.onAppearance?.(a => view.setAppearance(a));
   } else {

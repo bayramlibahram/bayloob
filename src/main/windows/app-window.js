@@ -16,6 +16,9 @@ class AppWindow {
   #ready = null;
   #saveTimer = null;
   #views = new Map(); // page name → { view, ready }: pages embedded over part of this window
+  minimized = false; // hidden to the pill: the page, its section and scroll, size and place are all kept
+  onPill = null; // (minimized) → void, when it goes to the pill or comes back
+  onCloseRequest = null; // () → true when it took care of a close (the button, Alt+F4) instead of closing
 
   /**
    * name   renderer/<name>/ and preload/<name>.js
@@ -39,8 +42,53 @@ class AppWindow {
     if (this.win.isMinimized()) {
       this.win.restore();
     }
+    this.#unhide();
+  }
+
+  /**
+   * Minimize to the pill: the page plays its exit (toward the top, where the pill is; none with reduced
+   * motion), then the window hides. It leaves the taskbar with it and comes back as it was.
+   */
+  async toPill() {
+    if (!this.win?.isVisible() || this.minimized) {
+      return;
+    }
+    this.minimized = true;
+    await this.#page("toPill");
+    this.win?.hide();
+    this.onPill?.(true);
+  }
+
+  /** Back from the pill, exactly as it was (no new state for the page). false: it isn't at the pill. */
+  restore() {
+    if (!this.win || !this.minimized) {
+      return false;
+    }
+    this.#unhide();
+    return true;
+  }
+
+  #unhide() {
+    const was = this.minimized;
+    this.minimized = false;
     this.win.show();
     this.win.focus();
+    if (was) {
+      this.#page("fromPill");
+      this.onPill?.(false);
+    }
+  }
+
+  // The pages' own animation hook (window.__toPill / __fromPill, in ui-common.js) — the window's page and the
+  // pages embedded in it, together; resolves when they're done (a page that's gone or stuck doesn't hold it)
+  #page(fn) {
+    const pages = [this.win.webContents, ...[...this.#views.values()].map(v => v.view.webContents)];
+    const run = wc =>
+      wc.isDestroyed()
+        ? null
+        : wc.executeJavaScript(`window.__${fn} ? window.__${fn}() : null`, true).catch(() => null);
+    const timeout = new Promise(resolve => setTimeout(resolve, 400));
+    return Promise.race([Promise.all(pages.map(run)), timeout]);
   }
 
   /** A live update for the page (only while the window exists). */
@@ -117,7 +165,7 @@ class AppWindow {
       return;
     }
     if (action === "minimize") {
-      this.win.minimize();
+      this.toPill();
     } else if (action === "maximize") {
       this.win.isMaximized() ? this.win.unmaximize() : this.win.maximize();
     } else if (action === "close") {
@@ -142,10 +190,19 @@ class AppWindow {
     if (saved.maximized) {
       this.win.maximize();
     }
+    this.win.on("close", e => {
+      if (this.onCloseRequest?.()) {
+        e.preventDefault();
+      }
+    });
     for (const ev of ["resize", "move", "maximize", "unmaximize"]) {
       this.win.on(ev, () => this.#saveSoon());
     }
     this.win.on("closed", () => {
+      if (this.minimized) {
+        this.minimized = false;
+        this.onPill?.(false);
+      }
       for (const { view } of this.#views.values()) {
         if (!view.webContents.isDestroyed()) {
           view.webContents.close();

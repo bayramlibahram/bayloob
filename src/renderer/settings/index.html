@@ -192,6 +192,16 @@
         <small>Empty turns it off. On Wayland, bind a system shortcut to <code>bayloob --new-session</code>.</small>
       </div>
       <div class="field">
+        <label for="workspaceShortcut">Workspace shortcut</label>
+        <input type="text" id="workspaceShortcut" placeholder="CommandOrControl+Shift+B" spellcheck="false">
+        <small>Sends the Workspace window to the pill and brings it back. Empty turns it off. On Wayland, bind <code>bayloob --workspace</code>.</small>
+      </div>
+      <div class="field">
+        <span class="label" id="onCloseLabel">Workspace ✕ button</span>
+        <small>Minimize always hides it to the pill.</small>
+        <fieldset class="seg" id="onClose" aria-labelledby="onCloseLabel"><button type="button" data-v="pill">Hide to pill</button><button type="button" data-v="close">Close</button><button type="button" data-v="quit">Quit Bayloob</button></fieldset>
+      </div>
+      <div class="field">
         <span class="label">Dance to music</span>
         <small>Novi dances while music is playing.</small>
         <button type="button" class="switch" id="music" role="switch" aria-checked="true" aria-label="Dance to music"></button>
@@ -342,7 +352,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       $('logo').innerHTML = Agent.thumb(MANAGER);
-      this.el = { form: $('form'), mascot: $('mascot'), pillSize: $('pillSize'), uiScale: $('uiScale'), arbiterConfidence: $('arbiterConfidence'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
+      this.el = { form: $('form'), mascot: $('mascot'), pillSize: $('pillSize'), uiScale: $('uiScale'), arbiterConfidence: $('arbiterConfidence'), theme: $('theme'), shortcut: $('shortcut'), workspaceShortcut: $('workspaceShortcut'), onClose: $('onClose'), terminal: $('terminal'), editor: $('editor'),
         agentSum: $('agentSum'), agentsMore: $('agentsMore'), agentGrid: $('agentGrid'),
         music: $('music'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
@@ -356,6 +366,7 @@
       this.uiScale = Number(values.uiScale) || 1;
       this.arbiterConfidence = Number(values.arbiterConfidence) || 0.6;
       this.theme = values.theme;
+      this.onClose = values.onClose || 'pill';
       this.music = values.music;
       this.watchClipboard = values.watchClipboard;
       this.sounds = values.sounds;
@@ -372,6 +383,7 @@
       this.limits = { ...(values.limits || {}) };
       this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
       this.el.shortcut.value = values.shortcut;
+      this.el.workspaceShortcut.value = values.workspaceShortcut ?? '';
       this.el.terminal.value = values.terminal;
       this.el.terminal.placeholder = T.autoTerminal(detectedTerminal);
       this.el.editor.value = values.editor;
@@ -403,6 +415,7 @@
     #renderTheme() {
       const locked = this.state.locked.includes('theme');
       for (const b of this.el.theme.children) { b.setAttribute('aria-pressed', b.dataset.v === this.theme); b.disabled = locked; }
+      for (const b of this.el.onClose.children) { b.setAttribute('aria-pressed', b.dataset.v === this.onClose); }
     }
 
     #renderMascot() {
@@ -581,7 +594,7 @@
       const res = await this.api?.save({
         agents: this.agents, limits: this.limits, hosts: this.hosts,
         mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
-        shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
+        shortcut: this.el.shortcut.value, workspaceShortcut: this.el.workspaceShortcut.value, onClose: this.onClose, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
       if (res?.ok) { this.api.close(); }
@@ -594,6 +607,10 @@
       this.el.theme.addEventListener('click', e => {
         const b = e.target.closest('[data-v]');
         if (b && !b.disabled) { this.theme = b.dataset.v; this.#renderTheme(); }
+      });
+      this.el.onClose.addEventListener('click', e => {
+        const b = e.target.closest('[data-v]');
+        if (b) { this.onClose = b.dataset.v; this.#renderTheme(); }
       });
       this.el.mascot.addEventListener('click', e => {
         const b = e.target.closest('[data-v]');

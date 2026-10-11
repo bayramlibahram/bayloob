@@ -159,6 +159,7 @@ class BayloobApp {
   tray = null;
   installed = detectAgents();
   #statsTimer = null;
+  #quitting = false; // from before-quit on: a window's close is a close, never a hide to the pill
   output = new SessionOutput();
   git = new Git();
   discovery = new AgentDiscovery();
@@ -210,7 +211,7 @@ class BayloobApp {
   #locked = false;
   #outputTimer = null;
 
-  // open: 'launcher' | 'panel' | null — from `bayloob --new-session` / `bayloob --panel`
+  // open: 'launcher' | 'panel' | 'workspace' | null — from `bayloob --new-session` / `--panel` / `--workspace`
   // demo: run the scripted tour (bayloob --demo) once the windows are up
   start({ open = null, demo = false } = {}) {
     this.demo = demo;
@@ -218,6 +219,9 @@ class BayloobApp {
     app.on("second-instance", (_e, argv) => this.#openFromArgs(argv));
     app.whenReady().then(() => this.#onReady(open));
     app.on("window-all-closed", e => e.preventDefault()); // closing a popup must not quit the app
+    app.on("before-quit", () => {
+      this.#quitting = true;
+    });
     app.on("will-quit", () => {
       globalShortcut.unregisterAll();
       this.blocked?.save();
@@ -235,6 +239,8 @@ class BayloobApp {
       this.openLauncher();
     } else if (argv.includes("--panel")) {
       this.togglePanel();
+    } else if (argv.includes("--workspace")) {
+      this.#toggleWorkspace();
     }
   }
 
@@ -260,6 +266,20 @@ class BayloobApp {
       title: "Bayloob · Workspace",
       query: { mode: "window" },
     });
+    // Minimize (and close, by default) sends it to the pill, which shows that it's there
+    this.workspaceWindow.onPill = minimized => this.overlay.send("workspace", { minimized });
+    this.workspaceWindow.onCloseRequest = () => {
+      const how = this.settings.get("onClose");
+      if (this.#quitting || how === "close") {
+        return false;
+      }
+      if (how === "quit") {
+        setImmediate(() => app.quit());
+      } else {
+        this.workspaceWindow.toPill();
+      }
+      return true;
+    };
     this.projects = new ProjectInfo({ git: this.git });
     // Which task instances may start: Settings → Agents limits, sessions already running, free memory
     this.scheduler = new Scheduler({
@@ -355,6 +375,9 @@ class BayloobApp {
         if (open === "panel") {
           this.togglePanel();
         }
+        if (open === "workspace") {
+          this.showWorkspace();
+        }
       },
       IS_LINUX ? 400 : 0
     );
@@ -433,21 +456,25 @@ class BayloobApp {
 
   #registerShortcut() {
     globalShortcut.unregisterAll();
-    const shortcut = this.settings.get("shortcut");
-    if (!shortcut) {
-      return;
-    }
-    let ok = false;
-    try {
-      ok = globalShortcut.register(shortcut, () => this.openLauncher());
-    } catch {
-      /* invalid accelerator */
-    }
-    if (!ok) {
-      console.warn(
-        `Bayloob: could not register ${shortcut}. On Wayland, bind a system shortcut to \`bayloob --new-session\` instead.`
-      );
-    }
+    const register = (key, run, hint) => {
+      const shortcut = this.settings.get(key);
+      if (!shortcut) {
+        return;
+      }
+      let ok = false;
+      try {
+        ok = globalShortcut.register(shortcut, run);
+      } catch {
+        /* invalid accelerator */
+      }
+      if (!ok) {
+        console.warn(
+          `Bayloob: could not register ${shortcut}. On Wayland, bind a system shortcut to \`${hint}\` instead.`
+        );
+      }
+    };
+    register("shortcut", () => this.openLauncher(), "bayloob --new-session");
+    register("workspaceShortcut", () => this.#toggleWorkspace(), "bayloob --workspace");
   }
 
   // Apply saved settings right away, without a restart
@@ -477,7 +504,7 @@ class BayloobApp {
     if (keys.includes("terminal")) {
       this.launcher.terminal.setOverride(this.settings.get("terminal"));
     }
-    if (keys.includes("shortcut")) {
+    if (keys.includes("shortcut") || keys.includes("workspaceShortcut")) {
       this.#registerShortcut();
       this.tray.actions.shortcut = this.settings.get("shortcut");
       this.tray.update(this.recent.list());
@@ -590,6 +617,9 @@ class BayloobApp {
   }
 
   async togglePanel() {
+    if (this.workspaceWindow?.minimized) {
+      return this.#restoreWorkspace();
+    }
     if (this.panel.visible) {
       return this.panel.hide();
     }
@@ -607,6 +637,41 @@ class BayloobApp {
     await this.workspaceWindow.show(this.#panelState({ section }));
     this.#sendUsage();
     this.#startPanelUpdates();
+  }
+
+  // Back from the pill as it was: same size, place, section and scroll (the page was only hidden)
+  #restoreWorkspace() {
+    if (!this.workspaceWindow.restore()) {
+      return false;
+    }
+    this.panel.hide();
+    this.#sendUsage();
+    this.#startPanelUpdates();
+    return true;
+  }
+
+  /**
+   * The pill's ⋯ → Workspace window, the global shortcut and `--workspace`: back from the pill, or to the front
+   * as it is (no new state, so its section stays), or open.
+   */
+  showWorkspace() {
+    const w = this.workspaceWindow.win;
+    if (this.#restoreWorkspace()) {
+      return;
+    }
+    if (w?.isVisible()) {
+      return w.focus();
+    }
+    return this.openWorkspaceWindow();
+  }
+
+  // The global Workspace shortcut: the window in front goes to the pill, otherwise it comes up
+  #toggleWorkspace() {
+    const w = this.workspaceWindow.win;
+    if (w?.isVisible() && w.isFocused() && !this.workspaceWindow.minimized) {
+      return this.workspaceWindow.toPill();
+    }
+    return this.showWorkspace();
   }
 
   // While the panel is open: agent CPU/memory, the running apps and, now and then, the hook status
@@ -1403,6 +1468,8 @@ class BayloobApp {
     });
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
+    ipcMain.on("open-workspace", () => this.showWorkspace());
+    ipcMain.on("quit-app", () => app.quit());
     // The pill's sound button: flips the setting (saved like Settings does; the change re-sends the config)
     ipcMain.on("toggle-sounds", () => {
       if (!this.settings.lockedByEnv().includes("sounds")) {

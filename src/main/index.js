@@ -19,15 +19,21 @@ function startApp(argv) {
     app.commandLine.appendSwitch("ozone-platform", "x11");
   }
 
-  // Only one instance at a time (avoids a port clash). `bayloob --new-session` / `--panel` while running
-  // opens the launcher / the workspace panel in the running instance.
+  // Only one instance at a time (avoids a port clash). `bayloob --new-session` / `--panel` / `--workspace`
+  // while running opens the launcher / the workspace panel / the Workspace window (or sends it to the pill).
   if (!app.requestSingleInstanceLock()) {
     return app.exit(0);
   }
   // Ctrl+C, kill, a closed terminal, or (from source) the dev wrapper killed: quit, leaving nothing behind
   new Shutdown({ app, watchParent: !app.isPackaged }).install();
   new BayloobApp().start({
-    open: argv.includes("--new-session") ? "launcher" : argv.includes("--panel") ? "panel" : null,
+    open: argv.includes("--new-session")
+      ? "launcher"
+      : argv.includes("--panel")
+        ? "panel"
+        : argv.includes("--workspace")
+          ? "workspace"
+          : null,
     demo: DEMO,
   });
 }

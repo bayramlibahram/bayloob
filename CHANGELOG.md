@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Minimize to the pill** (orchestration 13): the Workspace window's Minimize shrinks it up toward the pill and
+  hides it (no taskbar entry; none of the animation with reduced motion). The pill's panel button stays on the
+  bar with a count of what waits for you (permissions, terminal menus, task gates); a click on it or the bar,
+  ⋯ → Workspace window, or **Ctrl+Shift+B** (Settings → General, empty turns it off; `bayloob --workspace` on
+  Wayland) brings it back with its size, place, section and scroll. Live stats pause while it's hidden.
+- Settings → General → **Workspace ✕ button**: hide to pill (default), close the window (as before), or quit
+  Bayloob. Alt+F4 follows it too.
+- The pill's ⋯ menu: **Workspace window** and **Quit Bayloob**.
+
 ## 0.7.1 — 2026-10-11
 
 ### Fixed

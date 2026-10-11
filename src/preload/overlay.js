@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   // { pillSize: 's' | 'm' | 'l' } from Settings
   onAppearance: cb => ipcRenderer.on("appearance", (_e, a) => cb(a)),
   openTasks: taskId => ipcRenderer.send("open-tasks", taskId || null),
+  // The Workspace window minimized to the pill (or back): { minimized }
+  onWorkspace: cb => ipcRenderer.on("workspace", (_e, ws) => cb(ws)),
+  openWorkspace: () => ipcRenderer.send("open-workspace"),
+  quit: () => ipcRenderer.send("quit-app"),
   fixError: sessionId => ipcRenderer.send("fix-error", sessionId),
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
   challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),

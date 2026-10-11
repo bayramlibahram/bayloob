@@ -426,6 +426,12 @@ as choices in New task.
 | **Permissions** | Your *always allowed* rules and remembered denials. Each one can be removed |
 | **Hosts** | The hosts a runbook may use: SSH alias, environment, allowed commands, Test connection |
 
+**Minimize** sends the Workspace window up into the pill instead of the taskbar. The pill's panel button then
+stays on the bar with a count of what waits for you. A click, ⋯ → *Workspace window* or
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> brings it back as you left it: same size, place, section and
+scroll. The ✕ button does the same by default (General → *Workspace ✕ button*: hide to pill, close, or quit).
+⋯ → *Quit Bayloob* quits.
+
 Changes apply at once, with no restart. Everything is saved in `~/.config/Bayloob/settings.json`.
 
 ---
@@ -434,7 +440,7 @@ Changes apply at once, with no restart. Everything is saved in `~/.config/Bayloo
 
 | Where | Keys |
 |---|---|
-| Anywhere | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> New task / launcher (configurable) |
+| Anywhere | <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> New task / launcher · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> the Workspace window to the pill and back (both configurable) |
 | Workspace | <kbd>Ctrl</kbd>+<kbd>K</kbd> palette · <kbd>↑</kbd> <kbd>↓</kbd> pick · <kbd>Enter</kbd> main action · <kbd>Ctrl</kbd>+<kbd>B</kbd> collapse the sidebar (window) · <kbd>Esc</kbd> close (popup) |
 | Prompt box | <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>/</kbd> shortcuts · <kbd>↑</kbd> history |
 | New task | <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> category · <kbd>Enter</kbd> next / start · <kbd>Alt</kbd>+<kbd>←</kbd> back |

@@ -298,3 +298,37 @@ document.addEventListener("keydown", e => {
   e.preventDefault();
   api.uiScale(step);
 });
+
+// Minimize to the pill: the main process calls these (executeJavaScript) on the Workspace window's page and the
+// pages embedded in it. The page shrinks toward the top edge, where the pill is, and fades; it comes back the
+// same way. With reduced motion it just goes and comes. → a promise that resolves when the exit is done.
+let pillExit = null;
+window.__toPill = () => {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return null;
+  }
+  document.documentElement.style.transformOrigin = "50% 0";
+  pillExit = document.documentElement.animate(
+    [
+      { transform: "none", opacity: 1 },
+      { transform: "translateY(-4%) scale(0.9)", opacity: 0 },
+    ],
+    { duration: 180, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" }
+  );
+  return pillExit.finished.then(() => null).catch(() => null);
+};
+window.__fromPill = () => {
+  pillExit?.cancel();
+  pillExit = null;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return null;
+  }
+  document.documentElement.animate(
+    [
+      { transform: "translateY(-4%) scale(0.9)", opacity: 0 },
+      { transform: "none", opacity: 1 },
+    ],
+    { duration: 200, easing: "cubic-bezier(0, 0, .2, 1)" }
+  );
+  return null;
+};

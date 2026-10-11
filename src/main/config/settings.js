@@ -22,6 +22,8 @@ const DEFAULTS = {
   uiScale: 1, // the workspace, its dialogs and Settings: 0.9 … 1.4 (Ctrl + / Ctrl − / Ctrl 0)
   theme: "system", // 'system' (follows GNOME), 'light' or 'dark'
   shortcut: "CommandOrControl+Alt+Space", // global shortcut for the launcher; '' turns it off
+  workspaceShortcut: "CommandOrControl+Shift+B", // global: the Workspace window to the pill and back; '' = off
+  onClose: "pill", // the Workspace window's close button: 'pill' (hide to the pill), 'close' or 'quit'
   terminal: "", // '' = auto-detect, or e.g. 'kitty' / 'gnome-terminal --'
   editor: "", // '' = open folders in the file manager, or e.g. 'code'
   music: true, // watch MPRIS players and dance to music
@@ -42,6 +44,8 @@ const ENV = {
   arbiterConfidence: () => undefined,
   theme: () => process.env.BAYLOOB_THEME,
   shortcut: () => process.env.BAYLOOB_SHORTCUT,
+  workspaceShortcut: () => undefined,
+  onClose: () => undefined,
   terminal: () => process.env.BAYLOOB_TERMINAL,
   editor: () => process.env.BAYLOOB_EDITOR,
   music: () => (process.env.BAYLOOB_NO_MUSIC === "1" ? false : undefined),
@@ -64,6 +68,8 @@ const VALIDATE = {
   },
   theme: v => (["light", "dark"].includes(v) ? v : "system"),
   shortcut: v => String(v ?? "").trim(),
+  workspaceShortcut: v => String(v ?? "").trim(),
+  onClose: v => (["close", "quit"].includes(v) ? v : "pill"),
   terminal: v => String(v ?? "").trim(),
   editor: v => String(v ?? "").trim(),
   music: v => v !== false,

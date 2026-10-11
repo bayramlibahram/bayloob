@@ -115,6 +115,21 @@ test("pill size: s, m or l (anything else falls back to l, the original size)", 
   assert.equal(s.get("pillSize"), "l");
 });
 
+test("Workspace: Ctrl+Shift+B to the pill and back, the close button hides it there unless told otherwise", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
+  const s = new Settings(path.join(dir, "settings.json"));
+  assert.equal(s.get("workspaceShortcut"), "CommandOrControl+Shift+B");
+  assert.equal(s.get("onClose"), "pill");
+  assert.deepEqual(s.save({ workspaceShortcut: "  ", onClose: "quit" }).sort(), [
+    "onClose",
+    "workspaceShortcut",
+  ]);
+  assert.equal(s.get("workspaceShortcut"), "");
+  assert.equal(s.get("onClose"), "quit");
+  s.save({ onClose: "explode" });
+  assert.equal(s.get("onClose"), "pill");
+});
+
 test("UI scale: 0.9 … 1.5 on a 0.05 grid (100 % when it isn't a number)", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
   const s = new Settings(path.join(dir, "settings.json"));
