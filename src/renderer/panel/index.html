@@ -162,6 +162,8 @@
 
   /* detail */
   .detailcol { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
+  /* a tall prompt box (big zoom, short window) squeezes the details, then the column scrolls; it never spills over the Ask bar */
+  .detailcol { overflow-y: auto; }
   .detail { flex: 1; min-height: 0; padding: 16px 18px; overflow-y: auto; }
   /* prompt boxes: to the selected agent (under its details) and "Ask Bayloob" for a new session (above the footer).
      They sit outside the parts that re-render on every event, so typing is never lost. */
@@ -172,10 +174,13 @@
   .slash { position: absolute; left: 12px; right: 12px; bottom: calc(100% - 4px); display: flex; flex-direction: column; padding: 4px;
     border-radius: 12px; background: var(--glass); border: 1px solid var(--line); box-shadow: 0 8px 24px rgb(var(--shade) / calc(.4 * var(--shade-k))); z-index: 5; }
   .slash[hidden] { display: none; }
-  .slash button { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 8px; text-align: left; font-size: 12.5px; }
+  .slash button { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 8px; text-align: left; font-size: 12.5px; min-width: 0; }
   .slash button.on, .slash button:hover { background: color-mix(in srgb, var(--brand) 16%, transparent); }
-  .slash code { font: 600 12px ui-monospace, monospace; color: var(--brand-soft); }
-  .slash span { color: var(--soft); }
+  .slash code { font: 600 12px ui-monospace, monospace; color: var(--brand-soft); flex: none; }
+  .slash span { color: var(--soft); flex: none; }
+  /* what the shortcut puts in the box, cut to one line */
+  .slash small { flex: 1; min-width: 0; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slash .sfoot { padding: 5px 10px 3px; border-top: 1px solid var(--line); margin-top: 3px; font-size: 11px; color: var(--muted); }
   /* next steps the agent offered: a click puts one in the box, to confirm like any prompt */
   .sugg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .sugg[hidden] { display: none; }
@@ -194,8 +199,37 @@
   .box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px;
     background: rgb(var(--ink) / .05); border: 1px solid var(--line); transition: border-color .15s; }
   .box:focus-within { border-color: color-mix(in srgb, var(--brand) 55%, transparent); }
+  /* keyboard focus inside a prompt box: the whole box gets the ring (the field itself has none) */
+  .box:has(:focus-visible) { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
   .box textarea, .box input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: none; color: var(--text);
     font: inherit; line-height: 1.4; max-height: 120px; }
+  /* the agent's prompt box: the text gets the full width and grows to a third of the window, then scrolls;
+     its tools sit in one row under it */
+  .say .box { flex-direction: column; align-items: stretch; gap: 4px; padding: 9px 8px 6px 12px; }
+  .say .box textarea { flex: none; max-height: min(240px, 33vh); padding-right: 4px; overflow-y: auto; }
+  .box .tools { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: -4px; }
+  .box .tools .fmtpick { min-width: 0; }
+  .box .count { flex: 1; min-width: 0; text-align: right; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ask .box .count { flex: none; }
+  .ask .box .count:empty { display: none; }
+  kbd { padding: 0 4px; border-radius: 4px; border: 1px solid var(--line-strong); font: 600 10.5px/1.5 ui-monospace, monospace; color: var(--soft); }
+  .hint kbd { font-size: 10px; }
+  .confirm .btn kbd { margin-left: 5px; border-color: currentColor; color: inherit; opacity: .8; }
+  /* a large paste: one chip, opened to read, put back in the box, or removed */
+  .pastes { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+  .pastes[hidden] { display: none; }
+  .paste { border-radius: 10px; background: rgb(var(--ink) / .05); border: 1px solid rgb(var(--ink) / .09); font-size: 12px; min-width: 0; }
+  .paste .ph { display: flex; align-items: center; gap: 6px; padding: 3px 3px 3px 9px; }
+  .paste .pn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left; color: var(--soft); overflow: hidden; white-space: nowrap; }
+  .paste .pn:hover { color: var(--text); }
+  .paste .pi { color: var(--brand-soft); font-size: 11px; }
+  .paste small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+  .paste .pa { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: rgb(var(--ink) / .08); }
+  .paste .pa:hover { background: rgb(var(--ink) / .14); }
+  .paste .rm { flex: none; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); }
+  .paste .rm:hover { background: color-mix(in srgb, var(--waiting) 15%, transparent); color: var(--waiting); }
+  .paste pre { margin: 0 6px 6px; padding: 6px 8px; max-height: min(160px, 25vh); overflow: auto; border-radius: 7px; background: var(--code-bg);
+    font: 11.5px/1.45 ui-monospace, monospace; color: var(--softer); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
   .box textarea::placeholder, .box input::placeholder { color: var(--muted); }
   .send { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--brand); color: #fff; }
   .send:disabled { opacity: .35; cursor: default; }
@@ -478,15 +512,18 @@
       <div class="detailcol">
         <section class="detail" id="detail"></section>
         <form class="say" id="say" hidden autocomplete="off">
-          <div class="slash" id="slash" hidden role="listbox"></div>
+          <div class="slash" id="slash" hidden role="listbox" aria-label="Prompt shortcuts"></div>
           <div class="sugg" id="saySugg" hidden></div>
-          <div class="box"><textarea id="sayText" rows="1" spellcheck="false" aria-label="Prompt to the agent"></textarea>
-<select class="fmtpick" id="sayFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
+          <div class="box"><textarea id="sayText" rows="1" spellcheck="false" aria-label="Prompt to the agent" aria-describedby="sayHint" aria-autocomplete="list" aria-controls="slash"></textarea>
+            <div class="tools">
             <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
-            <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+<select class="fmtpick" id="sayFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
+            <span class="count" id="sayCount"></span>
+            <button type="submit" class="send" id="saySend" title="Send (Enter)" aria-label="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>
           <ul class="atts" id="sayAtts" hidden></ul>
+          <ul class="pastes" id="sayPastes" hidden></ul>
           <div class="confirm" id="sayConfirm" hidden></div>
-          <div class="hint" id="sayHint"></div>
+          <div class="hint" id="sayHint" aria-live="polite"></div>
           <ul class="pqueue" id="sayQueue" hidden></ul>
         </form>
       </div>
@@ -496,11 +533,13 @@
       <div class="box"><span class="spark">✦</span><input id="askText" spellcheck="false" aria-label="Ask Bayloob" placeholder="Ask Bayloob — what should be done?">
 <select class="fmtpick" id="askFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
         <button type="button" class="attach" id="askAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
-        <button type="submit" class="send" id="askSend" title="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+        <span class="count" id="askCount"></span>
+        <button type="submit" class="send" id="askSend" title="Next (Enter)" aria-label="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
       <ul class="atts" id="askAtts" hidden></ul>
+      <ul class="pastes" id="askPastes" hidden></ul>
       <div class="askpick" id="askPick" hidden></div>
       <div class="confirm" id="askConfirm" hidden></div>
-      <div class="hint" id="askHint" hidden></div>
+      <div class="hint" id="askHint" hidden aria-live="polite"></div>
     </form>
 
     <footer class="foot">
@@ -522,6 +561,7 @@
 
 <script src="../shared/ui-common.js"></script>
 <script src="../shared/attachments.js"></script>
+<script src="../shared/composer.js"></script>
 <script src="../shared/markdown-lite.js"></script>
 <script>
   // The same page runs as the popup and as the Workspace window (?mode=window: resizable, splitters)
@@ -536,6 +576,12 @@
     sayTo: (agent, project) => `Prompt to ${agent} · ${project}…`,
     suggested: 'Suggested', useSuggestion: 'Put it in the box — you confirm before it goes',
     sayHint: 'Enter sends · Shift+Enter new line', sayBusy: 'Busy — Enter adds it to the queue',
+    sayMore: hist => ` · / shortcuts${hist ? ' · ↑ earlier prompts' : ''}`,
+    sendTip: 'Send (Enter)', askTip: 'Next (Enter)',
+    sendWhy: { empty: 'Type a prompt or attach a file to send', secret: 'A file may hold a secret — answer its warning first' },
+    askWhy: 'Type what should be done first',
+    withPastes: n => ` · ${n} pasted text${n === 1 ? '' : 's'}`,
+    slashFoot: '↑ ↓ choose · Enter or Tab puts it in the box · Esc closes',
     confirmSend: (agent, project) => `Send to <b>${agent}</b> · ${project}`,
     withFiles: n => ` · ${n} file${n === 1 ? '' : 's'}`, attaching: 'Wait — the files are still being attached', now: 'now', toQueue: 'to the queue',
     confirmLaunch: (agent, cwd) => `Launch <b>${agent}</b> in <code>${cwd}</code>`, inWorktree: '⑂ new worktree',
@@ -639,6 +685,8 @@
   // What the empty list of each section offers to do
   const EMPTY_ACTION = { tasks: 'newTask', overview: 'ask', agents: 'ask', browsers: 'launch', ides: 'launch', applications: 'launch' };
   const HISTORY_MAX = 30;
+  const DRAFTS_KEY = 'bayloob.prompt.drafts'; // unsent prompts: say:<session id>, and ask (Ask Bayloob)
+  const ASK_DRAFT = 'ask';
   const COOL_MS = 3000; // like the pill: Allow waits this long on a request that resembles a denied one, or after rapid approvals
   // Prompt shortcuts: "/" in the agent's prompt box; the text goes into the box, to edit or send
   const SLASH = [
@@ -791,6 +839,7 @@
     #consoles = new Map(); // session id -> { turns | unavailable, at }
     #histories = new Map(); // session id -> prompts sent, newest first
     #histPos = -1;
+    #histStash = ''; // what was in the box when ↑ started walking the history (↓ past the newest brings it back)
     #slashAt = 0;
     #queueAt = 0;
     #consoleLoading = new Set();
@@ -808,7 +857,7 @@
     #palCmds = [];
     #prevStates = new Map(); // session id -> state at the previous update
     finished = [];         // ids of agents that just finished, newest first (the banner shows the first)
-    sayFor = null;         // session the prompt box is for (its text is cleared when the selection changes)
+    sayFor = null;         // session the prompt box is for (each session keeps its own unsent draft)
 
     constructor(api) {
       this.api = api;
@@ -819,13 +868,21 @@
         saySend: $('saySend'), sayHint: $('sayHint'), saySugg: $('saySugg'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
         sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
         pal: $('pal'), palText: $('palText'), palList: $('palList'),
-        sayAttach: $('sayAttach'), sayFormat: $('sayFormat'), askFormat: $('askFormat'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts') };
+        sayAttach: $('sayAttach'), sayFormat: $('sayFormat'), askFormat: $('askFormat'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts'),
+        sayCount: $('sayCount'), askCount: $('askCount'), askSend: $('askSend') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       // Files attached to the agent's prompt and to Ask Bayloob; the agent gets their paths
       this.sayAtt = new Attachments({ api: api?.uploads, list: this.el.sayAtts,
-        onChange: () => { this.el.saySend.disabled = this.#sayEmpty; this.#fit(); }, onError: t => this.#sayHint(t, 'err') });
-      this.askAtt = new Attachments({ api: api?.uploads, list: this.el.askAtts, onChange: () => this.#fit(), onError: t => this.#askHint(t, 'err') });
+        onChange: () => { this.#sayChanged(); this.#fit(); }, onError: t => this.#sayHint(t, 'err') });
+      this.askAtt = new Attachments({ api: api?.uploads, list: this.el.askAtts, onChange: () => { this.#askChanged(); this.#fit(); }, onError: t => this.#askHint(t, 'err') });
       this.el.sayAttach.hidden = this.el.askAttach.hidden = !this.sayAtt.available;
+      // A large paste becomes a chip (opened, put back in the box or removed); unsent drafts are kept per session
+      this.sayPaste = new Pastes({ list: $('sayPastes'), onChange: () => { this.#sayChanged(); this.#fit(); },
+        insert: t => this.#insertText(this.el.sayText, t) });
+      this.askPaste = new Pastes({ list: $('askPastes'), onChange: () => { this.#askChanged(); this.#fit(); } });
+      this.drafts = new Drafts(DRAFTS_KEY);
+      this.el.askText.value = this.drafts.get(ASK_DRAFT)?.text || '';
+      this.#askChanged();
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
     }
@@ -1568,13 +1625,19 @@
       const can = !!s && !s.perm;
       this.el.say.hidden = !can;
       if (!can) { return; }
-      if (this.sayFor !== s.id) {   // another session: its own empty box
+      if (this.sayFor !== s.id) {   // another session: its own draft, or an empty box
         if (this.#sayConfirming) { this.#confirmSay(false); }
         this.sayFor = s.id;
         this.sayFormatAgent = s.agent;
         this.#fillFormats(this.el.sayFormat, s.agent, true);
-        this.el.sayText.value = '';
+        // Its unsent draft comes back (text, format, files, pasted text); none: an empty box
+        const d = this.drafts.get(`say:${s.id}`);
+        this.el.sayText.value = d?.text || '';
+        if (d?.format && [...this.el.sayFormat.options].some(o => o.value === d.format)) { this.el.sayFormat.value = d.format; }
         this.sayAtt.clear();
+        if (d?.files?.length) { this.sayAtt.items = [...d.files]; this.sayAtt.render(); }
+        this.sayPaste.restore(d?.pastes);
+        this.#grow(this.el.sayText);
         this.#sayHint('');
         this.#histPos = -1;
         this.#renderQueue([]);
@@ -1582,10 +1645,13 @@
       }
       this.#loadQueue();
       this.el.sayText.placeholder = T.sayTo(Agent.displayName(s.agent), projectName(s));
-      if (!this.el.sayHint.dataset.kind) {
-        this.el.sayHint.textContent = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
+      if (this.#sayConfirming) {
+        if (!this.el.sayHint.dataset.kind) { this.el.sayHint.textContent = T.confirmHint; } // a re-render keeps the confirm step's keys
+      } else if (!this.el.sayHint.dataset.kind) {
+        const base = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
+        this.el.sayHint.textContent = base + T.sayMore(!!this.#histories.get(s.id)?.length);
       }
-      this.el.saySend.disabled = this.#sayEmpty;
+      this.#sayState();
       this.#renderSugg(s);
       if (this.#sayConfirming) { this.#renderSayConfirm(); } // busy may have changed: now vs queue
     }
@@ -1606,7 +1672,7 @@
       if (!x) { return; }
       this.el.sayText.value = x.prompt;
       this.#grow(this.el.sayText);
-      this.el.saySend.disabled = false;
+      this.#sayChanged();
       this.#confirmSay(true); // shows "send now" or "queue" — the second Enter / click sends
       this.el.saySugg.hidden = true;
     }
@@ -1620,13 +1686,50 @@
     }
 
     get #sayConfirming() { return !this.el.sayConfirm.hidden; }
-    get #sayEmpty() { return !this.el.sayText.value.trim() && !this.sayAtt.count; }
+    get #sayEmpty() { return !this.el.sayText.value.trim() && !this.sayAtt.count && !this.sayPaste?.count; }
+
+    // Why Send can't go yet ('' when it can): its tooltip and label say so
+    get #sayWhy() {
+      if (this.#sayEmpty) { return T.sendWhy.empty; }
+      if (this.sayAtt.busy) { return T.attaching; }
+      return this.sayAtt.unconfirmed.length ? T.sendWhy.secret : '';
+    }
+
+    // Send button and length label, from what is in the box
+    #sayState() {
+      const why = this.#sayWhy;
+      const b = this.el.saySend;
+      b.disabled = !!why;
+      b.title = why || T.sendTip;
+      b.setAttribute('aria-label', why || T.sendTip);
+      this.el.sayCount.textContent = lengthLabel([this.el.sayText.value.trim(), this.sayPaste?.text].filter(Boolean).join('\n\n'));
+    }
+
+    // Something in the box changed: buttons, length, and the session's draft
+    #sayChanged() {
+      if (!this.sayPaste) { return; } // still being built
+      this.#sayState();
+      if (this.sayFor) {
+        this.drafts.set(`say:${this.sayFor}`, { text: this.el.sayText.value, format: this.el.sayFormat.value,
+          files: [...this.sayAtt.items], pastes: this.sayPaste.snapshot() });
+      }
+    }
+
+    // Text put at the caret (a pasted chip back in the box)
+    #insertText(ta, text) {
+      const { selectionStart: a, selectionEnd: b, value } = ta;
+      ta.value = value.slice(0, a) + text + value.slice(b);
+      ta.focus();
+      ta.setSelectionRange(a + text.length, a + text.length);
+      this.#grow(ta);
+    }
 
     // First Enter shows what will happen (sent now or queued); the second one sends
     #confirmSay(on) {
       this.el.sayConfirm.hidden = !on;
       this.el.saySend.hidden = on;
       this.el.sayText.readOnly = on;
+      this.el.sayFormat.disabled = this.el.sayAttach.disabled = on; // what is confirmed is what goes
       this.el.saySugg.hidden = on || !this.el.saySugg.innerHTML;
       if (on) {
         this.#renderSayConfirm();
@@ -1646,11 +1749,18 @@
       const paste = !s.term?.tmux;
       const busy = !paste && BUSY.has(s.state);
       const [cls, badge, btn] = paste ? ['paste', T.toPaste, T.pasteBtn] : busy ? ['queue', T.toQueue, T.queueBtn] : ['now', T.now, T.sendBtn];
-      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(projectName(s)))}${this.sayAtt.count ? T.withFiles(this.sayAtt.count) : ''}</span>
+      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(projectName(s)))}${this.sayAtt.count ? T.withFiles(this.sayAtt.count) : ''}${this.sayPaste.count ? T.withPastes(this.sayPaste.count) : ''}${esc(this.#formatNote(this.el.sayFormat))}</span>
         <span class="badge ${cls}">${badge}</span>
-        <button type="button" class="btn" data-edit>${T.edit}</button>
-        <button type="submit" class="btn on">${btn}</button>
+        <button type="button" class="btn" data-edit>${T.edit}<kbd aria-hidden="true">Esc</kbd></button>
+        <button type="submit" class="btn on">${btn}<kbd aria-hidden="true">↵</kbd></button>
         ${paste && RESUMABLE.has(s.agent) ? `<button type="button" class="btn" data-handoff title="${T.handoffTip}">${T.handoff}</button>` : ''}`;
+    }
+
+    // " · Format: Brief" / " · No format" for the confirm line ('' without the picker)
+    #formatNote(sel) {
+      if (sel.hidden || !sel.selectedOptions[0]) { return ''; }
+      const name = sel.selectedOptions[0].textContent;
+      return ` · ${sel.value && sel.value !== 'none' ? `Format: ${name}` : name}`;
     }
 
     async #send() {
@@ -1661,11 +1771,15 @@
       if (!this.#sayConfirming) { return this.#confirmSay(true); }
       this.#confirmSay(false);
       this.el.saySend.disabled = true;
-      const res = await this.api?.sendPrompt(this.sayFor, this.sayAtt.compose(text), this.el.sayFormat.value || undefined);
+      const id = this.sayFor;
+      const res = await this.api?.sendPrompt(id, this.sayAtt.compose(this.sayPaste.compose(text)), this.el.sayFormat.value || undefined);
       if (res?.ok) {
-        if (text) { this.#remember(this.sayFor, text); }
+        if (text) { this.#remember(id, text); }
+        this.drafts.delete(`say:${id}`);
+        if (id !== this.sayFor) { return this.#renderSay(); } // another agent was picked meanwhile: its box stays as it is
         this.el.sayText.value = '';
         this.sayAtt.clear();
+        this.sayPaste.clear();
         this.#grow(this.el.sayText);
         this.#loadQueue(true);
         this.#sayHint(res.via === 'clipboard' ? T.copiedPaste : res.queued ? T.queued : T.sent, 'ok');
@@ -1681,21 +1795,32 @@
     #renderSlash() {
       const v = this.el.sayText.value;
       const open = /^\/\w*$/.test(v) && !this.#sayConfirming;
-      const list = open ? SLASH.filter(c => c.cmd.startsWith(v.toLowerCase())) : [];
+      // "/rev" finds /review; "/fail" finds it by what it does
+      const q = v.slice(1).toLowerCase();
+      const list = open ? SLASH.filter(c => c.cmd.startsWith(v.toLowerCase()) || (q && c.label.toLowerCase().includes(q))) : [];
       this.el.slash.hidden = !list.length;
-      if (!list.length) { return; }
+      if (!list.length) { this.el.sayText.removeAttribute('aria-activedescendant'); return; }
       this.#slashAt = Math.min(this.#slashAt, list.length - 1);
-      this.el.slash.innerHTML = list.map((c, i) => `<button type="button" role="option" aria-selected="${i === this.#slashAt}" data-slash="${c.cmd}"
-        class="${i === this.#slashAt ? 'on' : ''}"><code>${c.cmd}</code><span>${esc(c.label)}</span></button>`).join('');
+      this.el.slash.innerHTML = list.map((c, i) => `<button type="button" role="option" id="slash-${i}" tabindex="-1" aria-selected="${i === this.#slashAt}" data-slash="${c.cmd}"
+        class="${i === this.#slashAt ? 'on' : ''}" title="${esc(c.text)}"><code>${c.cmd}</code><span>${esc(c.label)}</span><small aria-hidden="true">${esc(c.text)}</small></button>`).join('')
+        + `<div class="sfoot" aria-hidden="true">${T.slashFoot}</div>`;
+      this.el.sayText.setAttribute('aria-activedescendant', `slash-${this.#slashAt}`);
+    }
+
+    get #slashOptions() { return this.el.slash.querySelectorAll('[data-slash]'); }
+
+    #closeSlash() {
+      this.el.slash.hidden = true;
+      this.el.sayText.removeAttribute('aria-activedescendant');
     }
 
     #applySlash(cmd) {
       const c = SLASH.find(x => x.cmd === cmd);
       if (!c) { return; }
       this.el.sayText.value = c.text;
-      this.el.slash.hidden = true;
+      this.#closeSlash();
       this.#grow(this.el.sayText);
-      this.el.saySend.disabled = false;
+      this.#sayChanged();
       this.el.sayText.focus();
       this.el.sayText.setSelectionRange(c.text.length, c.text.length);
     }
@@ -1712,10 +1837,11 @@
       if (!h.length) { return false; }
       const pos = Math.max(-1, Math.min(h.length - 1, this.#histPos + step));
       if (pos === this.#histPos) { return true; }
+      if (this.#histPos === -1) { this.#histStash = this.el.sayText.value; } // the draft, kept while walking
       this.#histPos = pos;
-      this.el.sayText.value = pos === -1 ? '' : h[pos];
+      this.el.sayText.value = pos === -1 ? this.#histStash : h[pos];
       this.#grow(this.el.sayText);
-      this.el.saySend.disabled = this.#sayEmpty;
+      this.#sayState();
       return true;
     }
 
@@ -1736,11 +1862,29 @@
         : '';
     }
 
-    #grow(ta) { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`; }
+    // Up to the box's max-height (CSS: a third of the window, at most 240px), then it scrolls
+    #grow(ta) {
+      ta.style.height = 'auto';
+      const max = Number.parseFloat(getComputedStyle(ta).maxHeight) || 120;
+      ta.style.height = `${Math.min(ta.scrollHeight, max)}px`;
+    }
 
     // "Ask Bayloob": type what should be done, Enter, then pick the agent and folder right here
+    get #askEmpty() { return !this.el.askText.value.trim() && !this.askAtt.count && !this.askPaste?.count; }
+
+    // Next / Start button and length label; the text is kept as a draft until it starts
+    #askChanged() {
+      if (!this.askPaste) { return; }
+      const why = this.#askEmpty ? T.askWhy : '';
+      this.el.askSend.disabled = !!why;
+      this.el.askSend.title = why || T.askTip;
+      this.el.askSend.setAttribute('aria-label', why || T.askTip);
+      this.el.askCount.textContent = lengthLabel([this.el.askText.value.trim(), this.askPaste.text].filter(Boolean).join('\n\n'));
+      this.drafts.set(ASK_DRAFT, { text: this.el.askText.value });
+    }
+
     async #askNext() {
-      if (!this.el.askText.value.trim() && !this.askAtt.count) { return; }
+      if (this.#askEmpty) { return; }
       if (this.askAtt.busy) { return this.#askHint(T.attaching, 'err'); }
       if (this.askAtt.unconfirmed.length) { return this.#askHint(T.secretWait(this.askAtt.unconfirmed), 'err'); }
       if (!this.el.askConfirm.hidden) { return this.#askStart(); }
@@ -1783,9 +1927,9 @@
         this.askCwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
         if (!this.askAgent || !this.askCwd) { return this.#askHint(T.pickFolder, 'err'); }
         const a = this.askOpts.agents[this.askAgent];
-        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}${this.askAtt.count ? T.withFiles(this.askAtt.count) : ''}</span>
-          <button type="button" class="btn" data-edit>${T.edit}</button>
-          <button type="submit" class="btn on">${T.launchBtn}</button>`;
+        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}${this.askAtt.count ? T.withFiles(this.askAtt.count) : ''}${this.askPaste.count ? T.withPastes(this.askPaste.count) : ''}${esc(this.#formatNote(this.el.askFormat))}</span>
+          <button type="button" class="btn" data-edit>${T.edit}<kbd aria-hidden="true">Esc</kbd></button>
+          <button type="submit" class="btn on">${T.launchBtn}<kbd aria-hidden="true">↵</kbd></button>`;
         this.#askHint(T.confirmHint);
       } else {
         this.#renderAskPick();
@@ -1794,6 +1938,7 @@
       this.el.askPick.hidden = on;
       this.el.askConfirm.hidden = !on;
       this.el.askText.readOnly = on;
+      this.el.askFormat.disabled = this.el.askAttach.disabled = on; // what is confirmed is what starts
       if (on) { this.el.askConfirm.querySelector('[type=submit]')?.focus(); } else { this.el.askText.focus(); }
       this.#fit();
     }
@@ -1802,10 +1947,12 @@
       const cwd = this.askCwd;
       if (!this.askAgent || !cwd) { return this.#askHint(T.pickFolder, 'err'); }
       this.#askHint(T.starting);
-      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.askAtt.compose(this.el.askText.value), worktree: this.askWorktree, format: this.el.askFormat.value || undefined });
+      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.askAtt.compose(this.askPaste.compose(this.el.askText.value)), worktree: this.askWorktree, format: this.el.askFormat.value || undefined });
       if (res?.ok) {
         this.#askReset();
         this.askAtt.clear();
+        this.askPaste.clear();
+        this.#askChanged();
         this.#askHint(T.started, 'ok');
         setTimeout(() => { this.#askHint(''); this.#fit(); }, 2500);
       } else {
@@ -1816,11 +1963,13 @@
     #askReset() {
       this.el.askText.value = '';
       this.el.askText.readOnly = false;
+      this.el.askFormat.disabled = this.el.askAttach.disabled = false;
       this.el.askPick.hidden = true;
       this.el.askPick.innerHTML = '';
       this.el.askConfirm.hidden = true;
       this.el.askConfirm.innerHTML = '';
       this.#askHint('');
+      this.#askChanged();
       this.#fit();
     }
 
@@ -2181,25 +2330,30 @@
       this.el.sayText.addEventListener('input', () => {
         this.#histPos = -1;
         this.#slashAt = 0;
-        this.#renderSlash(); this.#grow(this.el.sayText); this.el.saySend.disabled = this.#sayEmpty; });
+        this.#renderSlash(); this.#grow(this.el.sayText); this.#sayChanged(); });
+      this.el.sayFormat.addEventListener('change', () => this.#sayChanged());
       this.el.sayText.addEventListener('keydown', e => {
         // The / shortcuts menu takes the arrows, Enter / Tab and Esc while it's open
         if (!this.el.slash.hidden) {
-          const n = this.el.slash.children.length;
+          const n = this.#slashOptions.length;
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             this.#slashAt = (this.#slashAt + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
-            return this.#renderSlash();
+            this.#renderSlash();
+            return this.#slashOptions[this.#slashAt]?.scrollIntoView({ block: 'nearest' });
           }
           if (e.key === 'Enter' || e.key === 'Tab') {
             e.preventDefault();
-            return this.#applySlash(this.el.slash.children[this.#slashAt]?.dataset.slash);
+            return this.#applySlash(this.#slashOptions[this.#slashAt]?.dataset.slash);
           }
-          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.el.slash.hidden = true; return; }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.#closeSlash(); return; }
         }
-        // ↑ / ↓ in an empty box (or while walking the history) bring back earlier prompts
+        // ↑ with the caret at the very start (or while walking the history) brings back earlier prompts; ↓ walks
+        // back to the newest and then to what was typed. Elsewhere the arrows move the caret as usual.
         const ta = this.el.sayText;
-        if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && (!ta.value || this.#histPos !== -1) && !this.#sayConfirming) {
+        const atStart = ta.selectionStart === 0 && ta.selectionEnd === 0;
+        const walking = this.#histPos !== -1;
+        if (!this.#sayConfirming && !e.shiftKey && ((e.key === 'ArrowUp' && (atStart || walking)) || (e.key === 'ArrowDown' && walking))) {
           if (this.#walkHistory(e.key === 'ArrowUp' ? 1 : -1)) { e.preventDefault(); return; }
         }
         // Enter or Ctrl+Enter sends; Shift+Enter is a new line
@@ -2223,8 +2377,14 @@
       this.sayAtt.bindPaste(this.el.sayText);
       this.askAtt.bindDrop(this.el.ask);
       this.askAtt.bindPaste(this.el.askText);
+      // after the files: a pasted file is theirs, a large text becomes a chip
+      this.sayPaste.bindPaste(this.el.sayText);
+      this.askPaste.bindPaste(this.el.askText);
       Attachments.guardWindow();
-      this.el.askText.addEventListener('input', () => { if (!this.el.askText.value.trim() && !this.el.askPick.hidden) { this.#askReset(); } });
+      this.el.askText.addEventListener('input', () => {
+        if (this.#askEmpty && !this.el.askPick.hidden) { this.#askReset(); }
+        this.#askChanged();
+      });
       this.el.askPick.addEventListener('click', e => {
         const a = e.target.closest('[data-agent]');
         if (a && !a.disabled) { this.askAgent = a.dataset.agent; this.#fillFormats(this.el.askFormat, this.askAgent); }
