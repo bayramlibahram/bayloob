@@ -210,3 +210,37 @@ test("a challenger's non-read-only requests are refused without a card; its full
   assert.equal(server.store.get("claude:c1").report, long);
   assert.ok(server.store.get("claude:c1").summary.length <= 160);
 });
+
+test("a workflow planner or reviewer is held to read-only the same way; its session knows its task", async t => {
+  const server = new EventServer({ token: TOKEN }).listen();
+  await new Promise(r => server.http.once("listening", r));
+  t.after(() => stop(server));
+  server.store.trackLaunch({
+    name: "bl-shop-ro",
+    paneId: "%4",
+    agent: "claude",
+    cwd: "/w/shop-ro",
+    role: "reviewer",
+    task: "20261011-1200-abcd",
+    label: "Discount · Review",
+  });
+  const r = await request("/perm?agent=claude&tmux=%254", {
+    hook_event_name: "PermissionRequest",
+    session_id: "v1",
+    cwd: "/w/shop-ro",
+    tool_name: "Edit",
+    tool_input: { file_path: "/w/shop-ro/cart.js" },
+  });
+  assert.match(r.body, /"behavior":"deny"/);
+  assert.match(r.body, /read-only reviewer in a Bayloob task/);
+  await request("/ev?agent=claude&tmux=%254", {
+    hook_event_name: "UserPromptSubmit",
+    session_id: "v1",
+    cwd: "/w/shop-ro",
+  });
+  const s = server.store.get("claude:v1");
+  assert.deepEqual(
+    [s.task, s.label, s.role],
+    ["20261011-1200-abcd", "Discount · Review", "reviewer"]
+  );
+});

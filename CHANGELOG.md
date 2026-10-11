@@ -3,6 +3,25 @@
 ## Unreleased
 
 ### Added
+- **Workflow engine** (`src/main/modules/tasks/task-engine.js`, command 04a): runs a task's template stage by
+  stage as a state machine saved after every change (`tasks/<id>/state.json`, audit trail `log.jsonl`,
+  `artifacts/`); picks up after a restart (a session that's gone → "interrupted", ask the owner). Agents go
+  through the scheduler; builders each get a worktree + branch `bayloob/<task>/build-<n>` and their later rounds
+  continue in their own session; failing tests loop back to that builder (max loops), then it drops out. Gates:
+  approve / request changes (plan), pick the candidate (until the Arbiter, command 06), merge or keep the branch,
+  plus interrupted, read-only violation, no candidate passing. Merge only on the owner's click, only on the base
+  branch with a clean tree; a conflict is undone and listed. Worktrees and branches are never deleted.
+- Workflow templates (`workflow-templates.js`): Pipeline and Best-of-N built in, schema validation with
+  plain-language errors, `{{task}}`, `{{base}}`, `{{branch}}`, `{{note}}`, `{{artifact:…}}` in prompts.
+- Read-only for planners and reviewers in three layers: the CLI (Claude `--permission-mode dontAsk` with only
+  `git diff/log/show/status` allowed; Codex `-s read-only`), Bayloob's hook deny for those roles (as for ⚔
+  challengers), and a `git status` check after each turn — a changed tree stops the task at a gate.
+- Task instances run in tmux in the background (no terminal window; Open terminal attaches). The folder-trust
+  question in a task's new worktree is answered Yes and logged; no other menu is answered.
+- The project's `node_modules` is shared into task worktrees (symlink, excluded through the repo's local
+  `info/exclude`), so tests run there.
+- `scripts/task-demo.js`: Pipeline and Best-of-N end to end on a toy repo with stub agents (output in
+  `docs/orchestration/engine/task-demo.txt`).
 - **Settings → Agents and limits**: per agent on/off, max parallel instances (Claude Code 4, Codex 2, Gemini CLI 2,
   Grok 1), the launch and read-only commands Bayloob runs, notes; limits for all agents (6), per project (4) and
   free memory (hold launches below 2 GB). The New task dialog's counts, "free of max" and "will queue" follow them.

@@ -10,11 +10,11 @@ const escMd = s =>
 function inlineMd(text) {
   // Code spans are set aside first, so their content is never formatted (and **bold `code` text** still works)
   const codes = [];
-  return escMd(String(text).replace(/`([^`\n]+)`/g, (_, c) => `\u0000${codes.push(c) - 1}\u0000`))
+  return escMd(String(text).replace(/`([^`\n]+)`/g, (_, c) => `\uE000${codes.push(c) - 1}\uE000`))
     .replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1")
     .replace(/\*\*(?=\S)([^\n]+?)\*\*/g, "<b>$1</b>")
     .replace(/(^|[^\w*])\*(?=\S)([^*\n]+?)\*(?![\w*])/g, "$1<i>$2</i>")
-    .replace(/\u0000(\d+)\u0000/g, (_, n) => `<code>${escMd(codes[n])}</code>`);
+    .replace(/\uE000(\d+)\uE000/g, (_, n) => `<code>${escMd(codes[n])}</code>`);
 }
 
 const FENCE = /^\s*(```|~~~)/;

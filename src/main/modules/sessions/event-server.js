@@ -18,6 +18,12 @@ const REPORT_MAX = 20_000; // a challenger's full final answer, for its findings
 const DENIED_BY_USER = "User denied this from Bayloob";
 const DENIED_READ_ONLY =
   "This session is a read-only reviewer (Bayloob ⚔ challenge): report problems, don't change files";
+// Workflow roles that never write: whatever isn't read-only is refused for them too (no card)
+const READ_ONLY_ROLES = new Set(["challenger", "planner", "reviewer", "arbiter", "analyst"]);
+const deniedFor = role =>
+  role === "challenger"
+    ? DENIED_READ_ONLY
+    : `This session is a read-only ${role} in a Bayloob task: read and report, don't change files`;
 const ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", `127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 
 // Hook event name -> mascot state
@@ -304,11 +310,11 @@ class EventServer {
     const input = ev.tool_input || {};
     const cwd = ev.cwd || query.get("cwd") || "";
     const detail = permDetail(tool, input);
-    // A ⚔ challenger reviews, it doesn't change anything: whatever isn't read-only is refused, no card
-    // (on top of the agent's own read-only/plan mode — two locks)
+    // A ⚔ challenger or a task's planner / reviewer doesn't change anything: whatever isn't read-only is
+    // refused, no card (on top of the agent's own read-only mode — two locks; the engine checks the tree too)
     const role = this.store.roleOf(id, query.get("tmux"));
-    if (role === "challenger" && !QUESTION_TOOLS.has(tool) && !readOnly(tool, input, cwd)) {
-      return res.end(decisionBody("deny", null, event, DENIED_READ_ONLY));
+    if (READ_ONLY_ROLES.has(role) && !QUESTION_TOOLS.has(tool) && !readOnly(tool, input, cwd)) {
+      return res.end(decisionBody("deny", null, event, deniedFor(role)));
     }
     const known =
       QUESTION_TOOLS.has(tool) || !this.immune ? null : this.immune.assess(tool, input, cwd);

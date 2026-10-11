@@ -1,5 +1,9 @@
 // Coding agents Bayloob can launch, and how to start each one with an optional first prompt.
 // readOnly: flags that keep the agent from changing files (Gemini CLI has none; its prompt has to do).
+// taskReadOnly: the stricter set for workflow planners and reviewers, which run unattended: nothing that
+// would ask is allowed (Claude's dontAsk denies it) except reading the diff with git. Verified on Claude Code
+// 2.1.296: git log / diff / status run, Write and `touch` are denied. Ends with "--" because --allowedTools
+// takes several values and would swallow the prompt.
 // resume: the argv that continues an existing conversation by id (checked with --help; null = unknown).
 // color: accent of the agent's raster mascot pack; svgColor: the same for the SVG mascot.
 // Keep in sync with AGENTS in index.html.
@@ -9,6 +13,16 @@ const AGENTS = {
     bin: "claude",
     withPrompt: p => [p],
     readOnly: ["--permission-mode", "plan"],
+    taskReadOnly: [
+      "--permission-mode",
+      "dontAsk",
+      "--allowedTools",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git status *)",
+      "--",
+    ],
     resume: id => ["--resume", id],
     color: "#ff7a5c",
     svgColor: "#ff7a5c",
@@ -33,7 +47,8 @@ const AGENTS = {
   },
 };
 
-function agentCommand(agent, prompt, { readOnly = false, resume = null } = {}) {
+// strict: a workflow's read-only run (taskReadOnly flags where the agent has them)
+function agentCommand(agent, prompt, { readOnly = false, strict = false, resume = null } = {}) {
   const def = AGENTS[agent];
   if (!def) {
     throw new Error(`Unknown agent: ${agent}`);
@@ -44,8 +59,11 @@ function agentCommand(agent, prompt, { readOnly = false, resume = null } = {}) {
     }
     return [def.bin, ...def.resume(resume)];
   }
-  const flags = readOnly ? def.readOnly : [];
-  return prompt ? [def.bin, ...flags, ...def.withPrompt(prompt)] : [def.bin, ...flags];
+  const flags = readOnly ? (strict && def.taskReadOnly) || def.readOnly : [];
+  if (!prompt) {
+    return [def.bin, ...flags.filter(f => f !== "--")];
+  }
+  return [def.bin, ...flags, ...def.withPrompt(prompt)];
 }
 
 module.exports = { AGENTS, agentCommand };

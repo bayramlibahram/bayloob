@@ -81,6 +81,8 @@ class SessionStore extends EventEmitter {
       managed: launch?.name || old?.managed || null,
       stoppable: !!(launch?.name || term.agentPid || old?.stoppable),
       role: launch?.role || old?.role || null,
+      task: launch?.task || old?.task || null, // the workflow task this session works for
+      label: launch?.label || old?.label || null,
       transcript: ev.transcript_path || old?.transcript || null,
       activity: old?.activity || null,
       history: old?.history || [],
@@ -227,6 +229,8 @@ class SessionStore extends EventEmitter {
       managed: launch.name,
       stoppable: true,
       role: launch.role || null,
+      task: launch.task || null,
+      label: launch.label || null,
       activity: { title: "Starting…", detail: launch.cwd, at: Date.now() },
       history: [],
       files: [],

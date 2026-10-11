@@ -48,7 +48,9 @@ test("pipe tables, with short rows padded", () => {
 
 test("nested lists stay inside their item, so numbering continues", () => {
   assert.equal(
-    renderMarkdown("1. **#33**: next:\n   - commit\n   - merge\n2. **#26**\n3. **#34 Codex `read-only` bug**"),
+    renderMarkdown(
+      "1. **#33**: next:\n   - commit\n   - merge\n2. **#26**\n3. **#34 Codex `read-only` bug**"
+    ),
     "<ol><li><b>#33</b>: next:<ul><li>commit</li><li>merge</li></ul></li><li><b>#26</b></li>" +
       "<li><b>#34 Codex <code>read-only</code> bug</b></li></ol>"
   );

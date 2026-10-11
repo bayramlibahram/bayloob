@@ -1,0 +1,57 @@
+
+=== Pipeline (planner Claude, builder Claude, reviewer Codex) ===
+t+ 0.0s   stage 1/6 plan · running
+t+ 0.0s ▶ claude planner  plan      shop-20261011-1035-f1a6-ro
+t+ 0.5s   stage 1/6 plan · waiting
+t+ 0.5s   ❓ gate "approve" (Plan is ready — approve it?) → you: changes
+t+ 0.5s   stage 1/6 plan · running
+t+ 0.5s ↻ claude planner  same session: The owner asked for changes:
+t+ 1.0s   stage 1/6 plan · waiting
+t+ 1.0s   ❓ gate "approve" (Plan is ready — approve it?) → you: approve
+t+ 1.0s   stage 2/6 build · running
+t+ 1.0s ▶ claude builder  writes    shop-20261011-1035-f1a6-build-1
+t+ 1.5s   stage 3/6 tests · running
+t+ 1.7s   stage 2/6 build · running
+t+ 1.7s ↻ claude builder  same session: The tests fail on your change. Fix it and run the tests again.
+t+ 2.1s   stage 3/6 tests · running
+t+ 2.3s   stage 4/6 review · running
+t+ 2.3s ▶ codex  reviewer read-only shop-20261011-1035-f1a6-ro
+t+ 2.7s   stage 5/6 decide · waiting
+t+ 2.7s   ❓ gate "pick" (Pick the candidate to keep) → you: pick build-1
+t+ 2.8s   stage 6/6 merge · waiting
+t+ 2.8s   ❓ gate "merge" (Merge the winner?) → you: merge
+t+ 2.8s   stage 6/6 merge · done
+
+result: done, merged bayloob/20261011-1035-f1a6/build-1 into main
+  build-1 (claude) active  tests: pass  diff: +2 −0
+  main: fdedf14 Merge bayloob/20261011-1035-f1a6/build-1: Add a 10% discount for orders over 100 | 8683ca5 bayloob: Add a 10% discount for orders over 100 (build-1) | 0cce10b bayloob: Add a 10% discount for orders over 100 (build-1)
+  artifacts: msg.build.1.1.build-1.md, msg.build.2.1.build-1.md, msg.plan.1.1.md, msg.plan.2.1.md, msg.review.1.1.build-1.md, plan.md, review.build-1.md, test-output.build-1.txt
+  audit trail: 36 entries in /tmp/bayloob-demo-9lOFld/tasks/20261011-1035-f1a6/log.jsonl
+
+=== Best-of-N (Claude ×2 + Codex ×1; capacity Claude 1, Codex 1) ===
+t+ 2.9s   stage 1/5 plan · running
+t+ 2.9s ▶ claude planner  plan      shop-20261011-1035-5ca5-ro
+t+ 3.3s   stage 1/5 plan · waiting
+t+ 3.3s   ❓ gate "approve" (Plan is ready — approve it?) → you: approve
+t+ 3.4s   stage 2/5 build · running
+t+ 3.4s   ⏸ build.1.2.build-2 waits: claude 1/1 running
+t+ 3.4s ▶ claude builder  writes    shop-20261011-1035-5ca5-build-1
+t+ 3.4s ▶ codex  builder  writes    shop-20261011-1035-5ca5-build-3
+t+ 3.8s ▶ claude builder  writes    shop-20261011-1035-5ca5-build-2
+t+ 4.3s   stage 3/5 tests · running
+t+ 4.9s   stage 2/5 build · running
+t+ 4.9s ↻ claude builder  same session: The tests fail on your change. Fix it and run the tests again.
+t+ 5.3s   stage 3/5 tests · running
+t+ 5.5s   stage 4/5 decide · waiting
+t+ 5.5s   ❓ gate "pick" (Pick the candidate to keep) → you: pick build-3
+t+ 5.5s   stage 5/5 merge · waiting
+t+ 5.5s   ❓ gate "merge" (Merge the winner?) → you: merge
+t+ 5.6s   stage 5/5 merge · done
+
+result: done, merged bayloob/20261011-1035-5ca5/build-3 into main
+  build-1 (claude) active  tests: pass  diff: +2 −0
+  build-2 (claude) active  tests: pass  diff: +1 −0
+  build-3 (codex) active  tests: pass  diff: +1 −0
+  main: 5503ff9 Merge bayloob/20261011-1035-5ca5/build-3: Add a 10% discount for orders over 100 | ef338cd bayloob: Add a 10% discount for orders over 100 (build-3) | fcb5c87 init
+  artifacts: msg.build.1.1.build-1.md, msg.build.1.2.build-2.md, msg.build.1.3.build-3.md, msg.build.2.1.build-1.md, msg.plan.1.1.md, plan.md, test-output.build-1.txt, test-output.build-2.txt, test-output.build-3.txt
+  audit trail: 38 entries in /tmp/bayloob-demo-HUbjCp/tasks/20261011-1035-5ca5/log.jsonl

@@ -36,3 +36,18 @@ test("resuming a conversation uses each agent's own (checked) command", () => {
   assert.deepEqual(agentCommand("codex", "ignored", { resume: "x-9" }), ["codex", "resume", "x-9"]);
   assert.throws(() => agentCommand("gemini", "", { resume: "g" }), /can't continue/);
 });
+
+test("workflow read-only runs: Claude asks nothing (dontAsk) but may read the diff; the prompt stays separate", () => {
+  const argv = agentCommand("claude", "--review this", { readOnly: true, strict: true });
+  assert.deepEqual(argv.slice(0, 4), ["claude", "--permission-mode", "dontAsk", "--allowedTools"]);
+  assert.ok(argv.includes("Bash(git diff *)"));
+  assert.deepEqual(argv.slice(-2), ["--", "--review this"]); // --allowedTools would swallow it otherwise
+  assert.ok(!agentCommand("claude", "", { readOnly: true, strict: true }).includes("--"));
+  // Agents without a stricter set keep their read-only flags
+  assert.deepEqual(agentCommand("codex", "x", { readOnly: true, strict: true }), [
+    "codex",
+    "--sandbox",
+    "read-only",
+    "x",
+  ]);
+});

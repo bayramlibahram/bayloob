@@ -1,12 +1,24 @@
-// Tasks on disk: <dir>/<id>/config.json. Until the engine exists (commands 03/04) only drafts are stored —
-// the New task dialog's configuration, kept when the dialog closes. Also remembers the last category per
-// project (<dir>/prefs.json).
+// Tasks on disk, one folder each:
+//   <dir>/<id>/config.json   the New task dialog's configuration (a draft until Start)
+//              state.json    the engine's state of a started task (rewritten atomically)
+//              log.jsonl     audit trail, append-only: who did what, when
+//              artifacts/    plan.md, test output, reviews, final messages
+// Also remembers the last category per project (<dir>/prefs.json).
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { normalize } = require("../../../shared/task-shape");
 
 const ID = /^\d{8}-\d{4}-[0-9a-f]{4}$/;
+const ARTIFACT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+const ARTIFACT_MAX = 2_000_000;
+
+// Write then rename, so a crash never leaves half a file
+function writeAtomic(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(`${file}.tmp`, text);
+  fs.renameSync(`${file}.tmp`, file);
+}
 
 class TaskStore {
   constructor(dir) {
@@ -36,12 +48,109 @@ class TaskStore {
       updatedAt: now,
       ...normalize(raw, agents),
     };
-    const file = this.#file(id);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    // Write then rename, so a crash never leaves half a file
-    fs.writeFileSync(`${file}.tmp`, JSON.stringify(config, null, 2));
-    fs.renameSync(`${file}.tmp`, file);
+    writeAtomic(this.#file(id), JSON.stringify(config, null, 2));
     return config;
+  }
+
+  /** A draft becomes a started task: its configuration is frozen (no more draft edits or discards). */
+  markStarted(id) {
+    const config = this.get(id);
+    if (!config) {
+      return null;
+    }
+    const started = { ...config, status: "started", updatedAt: Date.now() };
+    writeAtomic(this.#file(id), JSON.stringify(started, null, 2));
+    return started;
+  }
+
+  dirOf(id) {
+    if (!ID.test(String(id))) {
+      throw new Error(`Not a task id: ${id}`);
+    }
+    return path.join(this.dir, id);
+  }
+
+  // ---------- engine state ----------
+
+  saveState(id, state) {
+    writeAtomic(path.join(this.dirOf(id), "state.json"), JSON.stringify(state, null, 2));
+  }
+
+  state(id) {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(this.dirOf(id), "state.json"), "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Every started task's state, newest first. */
+  states() {
+    let ids = [];
+    try {
+      ids = fs.readdirSync(this.dir).filter(n => ID.test(n));
+    } catch {
+      return [];
+    }
+    return ids
+      .map(id => this.state(id))
+      .filter(Boolean)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** Appends one entry to the audit trail: { at, actor: 'you' | 'engine' | 'agent', event, … }. */
+  appendLog(id, entry) {
+    const file = path.join(this.dirOf(id), "log.jsonl");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify({ at: Date.now(), ...entry })}\n`);
+  }
+
+  log(id) {
+    try {
+      return fs
+        .readFileSync(path.join(this.dirOf(id), "log.jsonl"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map(line => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  // ---------- artifacts ----------
+
+  writeArtifact(id, name, text) {
+    writeAtomic(this.#artifact(id, name), String(text ?? "").slice(0, ARTIFACT_MAX));
+  }
+
+  readArtifact(id, name) {
+    try {
+      return fs.readFileSync(this.#artifact(id, name), "utf8");
+    } catch {
+      return null;
+    }
+  }
+
+  artifacts(id) {
+    try {
+      return fs.readdirSync(path.join(this.dirOf(id), "artifacts")).filter(n => ARTIFACT.test(n));
+    } catch {
+      return [];
+    }
+  }
+
+  #artifact(id, name) {
+    if (!ARTIFACT.test(String(name))) {
+      throw new Error(`Not an artifact name: ${name}`);
+    }
+    return path.join(this.dirOf(id), "artifacts", name);
   }
 
   get(id) {

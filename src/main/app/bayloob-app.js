@@ -44,6 +44,10 @@ const { UploadStore } = require("../modules/uploads/upload-store");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
 const { Scheduler } = require("../modules/tasks/scheduler");
+const { TaskEngine } = require("../modules/tasks/task-engine");
+const { TaskRunner } = require("../modules/tasks/task-runner");
+const { TaskWorkspace } = require("../modules/tasks/task-workspace");
+const { templateFor } = require("../modules/tasks/workflow-templates");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
@@ -55,6 +59,7 @@ const { SettingsWindow } = require("../windows/settings-window");
 const { TrayMenu } = require("../windows/tray");
 
 const IS_LINUX = process.platform === "linux";
+const PUMP_MS = 15_000; // throttled agents and low memory clear by themselves: look again this often
 // Bytes of memory the system can still give out (/proc/meminfo MemAvailable); Infinity when unknown
 const memAvailable = () => {
   try {
@@ -225,8 +230,38 @@ class BayloobApp {
       capacity: () => this.#capacity(),
       limits: () => this.settings.get("limits"),
       freeMemory: () => memAvailable(),
-      external: () => this.server.store.list().map(s => ({ adapter: s.agent, project: s.cwd })),
+      // A task's own sessions are counted by the scheduler itself while they work
+      external: () =>
+        this.server.store
+          .list()
+          .filter(s => !s.task)
+          .map(s => ({ adapter: s.agent, project: s.cwd })),
     });
+    // The workflow engine: tasks run stage by stage; their agents are tmux sessions in the background
+    this.engine = new TaskEngine({
+      store: this.tasks,
+      scheduler: this.scheduler,
+      capacity: () => this.#capacity(),
+      workspace: new TaskWorkspace({ git: this.git }),
+      runner: new TaskRunner({
+        launcher: this.launcher,
+        sessions: this.server.store,
+        capture: capturePane,
+        sendKey: (pane, key) => this.menus.sendKey(pane, key),
+        onTrust: (taskId, pane, question) =>
+          this.tasks.appendLog(taskId, {
+            actor: "engine",
+            event: "trusted-folder",
+            pane,
+            question,
+          }),
+      }),
+    });
+    this.engine.on("change", task => {
+      this.panel.send("panel:task", task);
+      this.#sendUsage();
+    });
+    this.engine.on("error", e => console.error(`Bayloob task engine: ${e.message}`));
     this.installed.then(set => {
       this.#installedSet = set;
       this.#sendUsage();
@@ -274,6 +309,14 @@ class BayloobApp {
     );
 
     this.server.observers.push((id, ev) => this.todos.observe(id, ev));
+    // A task instance's turn ended: the engine takes its final answer (SubagentStop doesn't end a turn)
+    this.server.observers.push((id, ev) => {
+      const name = ev.hook_event_name || ev.type;
+      const pane = this.server.store.get(id)?.term?.tmux;
+      if (pane && (name === "Stop" || name === "agent-turn-complete")) {
+        this.engine.turnEnded(pane, ev.last_assistant_message ?? ev["last-assistant-message"]);
+      }
+    });
     this.server.store.on("change", list => {
       this.notifier.update(list);
       this.overlay.send("sessions", list);
@@ -292,6 +335,11 @@ class BayloobApp {
       app.quit();
     });
     this.server.listen();
+    // Started tasks pick up where they were; queued instances wait for limits that change over time
+    if (!this.demo) {
+      this.engine.restore().catch(e => console.error(`Bayloob task engine: ${e.message}`));
+      setInterval(() => this.engine.pump(), PUMP_MS).unref();
+    }
     this.#watchClipboard();
     // Agents already running (started before Bayloob, or idle since): show them, keep idle ones listed
     if (!this.demo) {
@@ -1039,6 +1087,7 @@ class BayloobApp {
     }
     const store = this.server.store;
     const panes = await this.launcher.managedPanes();
+    this.engine?.panesAlive(new Set(panes.keys()));
     const recovered = store.recoverLaunches(panes);
     const tracked = store.launchedNames();
     const alive = new Set(panes.values());
@@ -1227,6 +1276,37 @@ class BayloobApp {
       }
     });
     ipcMain.handle("newtask:discard-draft", (_e, id) => this.tasks.discard(String(id)));
+    // Workflow: the draft becomes a task the engine runs
+    ipcMain.handle("newtask:start", async (_e, config) => {
+      try {
+        const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
+        if (saved.category !== "workflow") {
+          throw new Error("Only workflows can start as tasks so far");
+        }
+        const task = await this.engine.start(saved, templateFor(saved));
+        return { ok: true, taskId: task.id };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    });
+
+    // Tasks: state, audit trail, artifacts, and the owner's decisions at gates
+    ipcMain.handle("tasks:list", () => this.engine?.list() || []);
+    ipcMain.handle("tasks:log", (_e, id) => this.tasks.log(String(id)));
+    ipcMain.handle("tasks:artifact", (_e, id, name) => {
+      try {
+        return this.tasks.readArtifact(String(id), String(name));
+      } catch {
+        return null;
+      }
+    });
+    ipcMain.handle("tasks:decide", (_e, id, gateId, action, opts) =>
+      this.engine.decide(String(id), String(gateId), String(action), {
+        note: String(opts?.note || ""),
+        candidate: opts?.candidate ? String(opts.candidate) : null,
+      })
+    );
+    ipcMain.handle("tasks:stop", (_e, id) => this.engine.stop(String(id)));
     ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
       const cwd = expandHome(String(opts?.cwd || "").trim());
       const res = await result(() => this.launch({ ...opts, cwd }));

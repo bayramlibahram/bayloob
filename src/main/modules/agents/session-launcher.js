@@ -81,6 +81,8 @@ class SessionLauncher {
   // role: what the session is for ("challenger" reviews another agent's work); readOnly: no file changes
   // terminal: which terminal emulator opens it (an id from TerminalLauncher.list(); default otherwise)
   // resume: an existing conversation's id to continue (instead of a new one)
+  // attach: open a terminal window on it (workflow instances run in the background; Open terminal attaches)
+  // strict: a workflow's read-only run (see taskReadOnly in agents.js)
   async launch({
     agent,
     cwd,
@@ -89,6 +91,8 @@ class SessionLauncher {
     role = null,
     terminal = null,
     resume = null,
+    attach = true,
+    strict = false,
   }) {
     cwd = cwd.replace(/^~(?=$|\/)/, os.homedir());
     if (!fs.statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
@@ -109,9 +113,11 @@ class SessionLauncher {
       "-P",
       "-F",
       "#{pane_id}",
-      ...viaLoginShell(agentCommand(agent, prompt.trim(), { readOnly, resume })),
+      ...viaLoginShell(agentCommand(agent, prompt.trim(), { readOnly, strict, resume })),
     ]);
-    this.attach(name, terminal);
+    if (attach) {
+      this.attach(name, terminal);
+    }
     return { name, paneId, agent, cwd, role };
   }
 
