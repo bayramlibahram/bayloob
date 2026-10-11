@@ -39,6 +39,10 @@
   .dots { display: inline-flex; gap: 2px; }
   .dots i { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--c); }
   .dots i.on { background: var(--c); }
+  .cuse { gap: 10px; }
+  .cu { display: inline-flex; align-items: center; gap: 5px; }
+  .cu b { font-weight: 650; color: var(--soft); }
+  .cu em { font-style: normal; color: var(--working); font-weight: 600; }
   .wctl { display: flex; gap: 2px; }
   .iconbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); }
   .iconbtn:hover { background: var(--hover); color: var(--text); }
@@ -256,6 +260,8 @@
   .actions textarea { flex: 1 1 100%; min-height: 60px; resize: vertical; padding: 8px 10px; border-radius: 10px; background: var(--raised-2); border: 1px solid var(--line); line-height: 1.5; }
   .actions textarea:focus { border-color: var(--focus); }
   .actions .confirm { color: var(--waiting); font-weight: 600; }
+  .rowacts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .rowacts .confirm { color: var(--waiting); font-weight: 600; font-size: 12px; }
   /* Embedded in the Workspace window (?embedded=1): its header already has the logo, usage and window controls */
   .embedded .whead { -webkit-app-region: no-drag; height: 46px; padding-left: 12px; }
   .embedded .whead .logo, .embedded .whead > b, .embedded .whead .sep, .embedded .usage, .embedded .wctl { display: none; }
@@ -360,6 +366,9 @@
     status: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', stopped: 'Stopped', failed: 'Failed' },
     tabs: { runbook: 'Runbook', overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
     stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
+    stopStage: 'Stop stage', stopStageAsk: s => `Stop ${s}? Its agents stop and you decide what's next; worktrees stay.`, yesStopStage: 'Stop the stage',
+    stopAgent: 'Stop', stopAgentTip: 'Stop this agent — its worktree stays', stopAgentAsk: 'Stop this agent? Its worktree stays.',
+    usageTip: (a, live, max, queued) => `${a}: ${live} of ${max} running for this task${queued ? `, ${queued} queued` : ''}`,
     stopped: 'Stopped. Worktrees and branches are kept until you delete them.',
     queuedN: n => `${n} queued`, runningN: n => `${n} running`, of: (a, b) => `${a} of ${b}`,
     the: { task: 'Task', project: 'Project', base: 'Started from', ro: 'Read-only worktree', tests: 'Test command', noTests: 'none found — tests are skipped' },
@@ -474,6 +483,7 @@
   const COLS = ['queued', 'running', 'needs', 'review', 'done', 'failed'];
   const PATTERN = { pipeline: 'Pipeline', bestofn: 'Best-of-N', split: 'Split work', board: 'Review board' };
   const LIVE = new Set(['starting', 'running']);
+  const OPEN_TASK = new Set(['running', 'needs-you']);
   const DENSITY_KEY = 'bayloob.tasks.density';
   const novi = (agent, size = '') => `<span class="novi ${size}">${Agent.thumb(agent)}</span>`;
   const elapsed = t => {
@@ -642,7 +652,7 @@
       const live = t.instances.filter(i => LIVE.has(i.status)).length;
       const color = { needs: 'var(--waiting)', failed: t.status === 'stopped' ? 'var(--idle)' : 'var(--waiting)', done: 'var(--done)', review: 'var(--cat-workflow)', running: 'var(--thinking)', queued: 'var(--idle)' }[col];
       const stageText = t.status === 'done' ? (t.merged ? `${t.merged.applied ? 'Applied to' : 'Merged into'} ${t.merged.into}` : 'Done')
-        : t.status === 'stopped' ? 'Stopped' : `${st?.title || ''}${queued && !live ? ` — ${T.queuedN(queued)}` : ''}`;
+        : t.status === 'stopped' ? 'Stopped' : `${st?.title || ''}${queued ? ` — ${T.queuedN(queued)}` : ''}`;
       const builders = t.template.stages.find(s => s.role === 'builder')?.agents || [];
       const best = this.#bestDiff(t);
       const why = t.gate ? `<div class="why">${ICON.warn}<span>${esc(t.gate.title)}</span></div>` : '';
@@ -655,9 +665,28 @@
         <div class="ln"><span class="chip out">${esc(t.project.name)}</span>${esc(PATTERN[t.template.id] || t.template.name)}</div>
         <div class="ln"><span class="chip c" style="--c:${color}"><span class="d${col === 'running' ? ' live' : ''}"></span>${esc(stageText)}</span></div>
         ${why}${waiting && col === 'queued' ? `<div class="ln" style="color:var(--working)">${esc(waiting.waiting)}</div>` : ''}
-        <div class="agents">${builders.map(a => `<span>${novi(a.adapter)}×${a.count}</span>`).join('')}</div>
+        ${this.#cardUsage(t) || `<div class="agents">${builders.map(a => `<span>${novi(a.adapter)}×${a.count}</span>`).join('')}</div>`}
         <div class="ln">${ICON.clock}<span class="num">${elapsed(t)}</span>${best ? `<span class="diff"><span class="a">+${best.added}</span> <span class="r">−${best.deleted}</span></span>` : ''}</div>
       </button>`;
+    }
+
+    // While a task runs: its agents per adapter against the adapter's limit — Claude ●●○○ 2/4 +1
+    #cardUsage(t) {
+      if (t.status !== 'running' && t.status !== 'needs-you') { return ''; }
+      const by = {};
+      for (const i of t.instances) {
+        if (LIVE.has(i.status) || i.status === 'queued') {
+          by[i.adapter] = by[i.adapter] || { live: 0, queued: 0 };
+          by[i.adapter][i.status === 'queued' ? 'queued' : 'live'] += 1;
+        }
+      }
+      const rows = Object.entries(by).map(([a, u]) => {
+        const max = Math.max(this.usage?.agents?.[a]?.max || 0, u.live);
+        return `<span class="cu" title="${esc(T.usageTip(Agent.displayName(a), u.live, max, u.queued))}">${esc(Agent.displayName(a).split(' ')[0])}
+          <span class="dots" style="--c:${Agent.color(a)}">${Array.from({ length: max }, (_, k) => `<i class="${k < u.live ? 'on' : ''}"></i>`).join('')}</span>
+          <b class="num">${u.live}/${max}</b>${u.queued ? `<em class="num">+${u.queued}</em>` : ''}</span>`;
+      });
+      return rows.length ? `<div class="ln cuse">${rows.join('')}</div>` : '';
     }
 
     #bestDiff(t) {
@@ -688,13 +717,21 @@
             <span>${ICON.clock} <span class="num">${elapsed(t)}</span></span></div></div>
           ${live ? (this.composing?.action === 'stop'
             ? `<span class="confirm" style="color:var(--waiting);font-weight:600;max-width:280px">${T.stopAsk}</span><button class="btn danger" type="button" data-act="stop-yes">${T.yesStop}</button><button class="btn" type="button" data-act="cancel">${T.cancel}</button>`
-            : `<button class="btn danger" type="button" data-act="stop">${ICON.stop} ${T.stop}</button>`) : ''}
+            : this.composing?.action === 'stop-stage'
+              ? `<span class="confirm" style="color:var(--waiting);font-weight:600;max-width:280px">${esc(T.stopStageAsk(t.template.stages[t.stage]?.title || ''))}</span><button class="btn danger" type="button" data-act="stop-stage-yes">${T.yesStopStage}</button><button class="btn" type="button" data-act="cancel">${T.cancel}</button>`
+              : `${this.#stageStoppable(t) ? `<button class="btn" type="button" data-act="stop-stage">${ICON.stop} ${T.stopStage}</button>` : ''}<button class="btn danger" type="button" data-act="stop">${ICON.stop} ${T.stop}</button>`) : ''}
         </div>
         <nav class="stepbar" aria-label="Stages">${steps}</nav>
         ${t.status === 'stopped' ? `<div class="banner" style="--c:var(--idle)">${T.stopped}</div>` : ''}
         <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}" aria-controls="pane" tabindex="${this.tab === k ? 0 : -1}">${k === 'reviews' && t.template.stages.some(x => x.role === 'analyst') ? T.analystsTab : T.tabs[k]}${n ? `<em data-k="tab:${t.id}:${k}" data-v="${n}">${n}</em>` : ''}</button>`).join('')}</div>
         <div class="pane" id="pane" role="tabpanel" aria-label="${esc(T.tabs[this.tab] || this.tab)}" data-k="pane:${esc(t.id)}:${this.tab}">${pane}</div>
         ${t.gate ? this.#actions(t) : ''}`;
+    }
+
+    // The current stage runs agents (not one of Bayloob's own steps) and nothing waits on you
+    #stageStoppable(t) {
+      const st = t.template.stages[t.stage];
+      return t.status === 'running' && t.stages[t.stage]?.status === 'running' && !st?.action && !!st?.agents?.length;
     }
 
     #stageNote(t, s, st) {
@@ -723,7 +760,9 @@
           <td>${esc(i.role)}</td><td><span class="badge ${i.mode === 'writes' ? 'writes' : i.mode === 'plan' ? 'plan' : 'ro'}">${T.mode[i.mode] || i.mode}</span></td>
           <td>${T.istatus[i.status] || i.status}${i.waiting ? `<br><span class="wait">${esc(i.waiting)}</span>` : ''}${i.error ? `<br><span class="wait" style="color:var(--waiting)">${esc(i.error)}</span>` : ''}</td>
           <td class="num">${i.startedAt ? clockTime(i.startedAt) : '—'}</td>
-          <td>${i.handle && LIVE.has(i.status) || (i.handle && t.status !== 'done' && t.status !== 'stopped') ? `<button class="btn sm" type="button" data-term="${esc(i.id)}" title="${T.terminalTip}">${ICON_TERM} ${T.terminal}</button>` : ''}</td></tr>`).join('');
+          <td><span class="rowacts">${this.composing?.action === 'stop-inst' && this.composing.inst === i.id
+            ? `<span class="confirm">${T.stopAgentAsk}</span><button class="btn sm danger" type="button" data-act="stop-inst-yes">${T.yesStop}</button><button class="btn sm" type="button" data-act="cancel">${T.cancel}</button>`
+            : `${i.handle && LIVE.has(i.status) || (i.handle && t.status !== 'done' && t.status !== 'stopped') ? `<button class="btn sm" type="button" data-term="${esc(i.id)}" title="${T.terminalTip}">${ICON_TERM} ${T.terminal}</button>` : ''}${(LIVE.has(i.status) || i.status === 'queued') && OPEN_TASK.has(t.status) ? `<button class="btn sm ghost" type="button" data-stop-inst="${esc(i.id)}" title="${T.stopAgentTip}" aria-label="${T.stopAgentTip}">${ICON.stop} ${T.stopAgent}</button>` : ''}`}</span></td></tr>`).join('');
       return `<div class="cards">
         <div class="card md">${renderMarkdown(t.text)}</div>
         <div class="facts">
@@ -1202,6 +1241,21 @@
           const r = await this.api.exportReport?.(t.id);
           if (r?.ok) { this.toast(T.exported(r.path)); } else if (r && !r.canceled) { this.toast(r.error, true); }
           return;
+        }
+        const stopInst = e.target.closest('[data-stop-inst]');
+        if (stopInst && t) { this.composing = { gate: null, action: 'stop-inst', inst: stopInst.dataset.stopInst }; return this.render(); }
+        if (act === 'stop-inst-yes' && t) {
+          const r = await this.api.stopInstance(t.id, this.composing?.inst);
+          this.composing = null;
+          if (!r?.ok) { this.toast(r?.error || 'Could not stop the agent', true); }
+          return this.render();
+        }
+        if (act === 'stop-stage' && t) { this.composing = { gate: null, action: 'stop-stage' }; return this.render(); }
+        if (act === 'stop-stage-yes' && t) {
+          const r = await this.api.stopStage(t.id);
+          this.composing = null;
+          if (!r?.ok) { this.toast(r?.error || 'Could not stop the stage', true); }
+          return this.render();
         }
         if (act === 'stop-yes' && t) {
           const r = await this.api.stop(t.id);
