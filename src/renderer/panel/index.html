@@ -66,7 +66,13 @@
   .nav.bottom { margin-top: auto; }
   .side hr { border: 0; height: 1px; background: var(--line); margin: 6px 8px; }
   /* Agents: one heading per project */
-  .group { display: flex; gap: 6px; padding: 10px 10px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .group { display: flex; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); min-width: 0; }
+  .group .gn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .group > span:last-child { flex: none; }
+  /* a workflow task's agents: the task's name, in normal case, with its pattern */
+  .group.task { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--soft); }
+  .group.task .i { width: 13px; height: 13px; color: var(--cat-workflow); flex: none; }
+  .group.task em { font-style: normal; color: var(--muted); font-weight: 500; flex: none; }
   .group:first-child { padding-top: 2px; }
   .row .who span.why { color: var(--c); }
   /* Inbox card in the agent's detail: approve / deny / answer, like the pill's card */
@@ -523,7 +529,7 @@
     palTerminal: name => `Open ${name}’s terminal`, palWorkspace: name => `Open ${name}’s folder`,
     launchTitle: 'Launch app', searchApps: 'Search apps…', searchInstalled: 'Search installed apps…',
     searchIn: { inbox: 'Filter the inbox…', agents: 'Search agents…', tasks: 'Search tasks…', overview: 'Search apps and agents…' },
-    groupAgents: 'Agents', groupApps: 'Apps',
+    groupAgents: 'Agents', groupApps: 'Apps', taskIn: repo => `A task in ${repo}`, taskReadOnly: 'Planner / reviewer · read-only', taskBuilder: leaf => `Builder · ${leaf}`,
     status: { active: 'Active', running: 'Running', healthy: 'Healthy', unhealthy: 'Unhealthy', stopped: 'Stopped',
       idle: 'Idle', thinking: 'Thinking', working: 'Working', waiting: 'Needs approval', done: 'Done', 'needs-you': 'Needs you' },
     kind: { browser: 'Browser', ide: 'IDE', terminal: 'Terminal', files: 'Files', app: 'Application', system: 'System tool', agent: 'AI agent', task: 'Workflow task' },
@@ -649,7 +655,14 @@
     check: I('<path d="m5 12 4.5 4.5L19 7"/>'),
   };
 
+  // A task worktree reads "shop · build-2", not "projects / shop-20261011-1045-a29f-build-2"
+  const TASK_DIR_NAME = /^(.+)-\d{8}-\d{4}-[0-9a-f]{4}-([a-z][a-z0-9-]*)$/;
+  const projectName = s => {
+    const m = TASK_DIR_NAME.exec(s.project || '');
+    return m ? `${m[1]} · ${m[2] === 'ro' ? 'read-only' : m[2]}` : s.project || '';
+  };
   const projectPath = s => {
+    if (TASK_DIR_NAME.test(s.project || '')) { return projectName(s); }
     const parts = String(s.cwd || '').split('/').filter(Boolean);
     return parts.length >= 2 ? parts.slice(-2).join(' / ') : (s.project || '');
   };
@@ -660,6 +673,21 @@
   function appItem(a) {
     return { key: `app:${a.id}`, kind: a.id === 'docker' ? 'docker' : 'app', id: a.id, name: a.name, subtitle: a.subtitle,
       status: a.status, category: a.category, data: a };
+  }
+  // A task worktree is <repo>-<task id>-<leaf>: build-2, ro…; a session found again after a restart may only have that
+  const TASK_DIR = /^(.+)-(\d{8}-\d{4}-[0-9a-f]{4})-([a-z][a-z0-9-]*)$/;
+  function taskOfSession(s) {
+    const m = TASK_DIR.exec(s.project || '');
+    if (!s.task && !m) { return null; }
+    const leaf = m?.[3] || '';
+    return { id: s.task || m[2], repo: m?.[1] || s.project, leaf };
+  }
+  // What an agent does in its task: "Builder · build-2", "Planner · read-only"
+  function taskRole(s, t) {
+    if (s.label) { return s.label.split(' · ').slice(1).join(' · ') || s.label; }
+    if (t.leaf === 'ro') { return T.taskReadOnly; }
+    const b = /^([a-z]+)-(\d+)$/.exec(t.leaf);
+    return b ? T.taskBuilder(t.leaf) : t.leaf;
   }
   function agentItem(s) {
     return { key: `agent:${s.id}`, kind: 'agent', id: s.id, name: Agent.displayName(s.agent), subtitle: projectPath(s),
@@ -778,7 +806,7 @@
       if (s) {
         const more = this.finished.length - 1;
         box.innerHTML = `<div class="ic agent">${Agent.thumb(s.agent)}</div>
-          <div class="txt">${T.finishedIn(esc(Agent.displayName(s.agent)), esc(s.project))}<span title="${esc(s.summary || '')}">${esc(s.summary || T.taskDone)}</span></div>
+          <div class="txt">${T.finishedIn(esc(Agent.displayName(s.agent)), esc(projectName(s)))}<span title="${esc(s.summary || '')}">${esc(s.summary || T.taskDone)}</span></div>
           ${more > 0 ? `<span class="more">${T.finishedMore(more)}</span>` : ''}
           <button type="button" class="btn on" data-reply="${esc(s.id)}">${T.reply}</button>
           <button type="button" class="x" data-dismiss="${esc(s.id)}" title="${T.dismissTip}" aria-label="${T.dismissTip}">✕</button>`;
@@ -828,7 +856,15 @@
         return [...this.tasks.values()].sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0) || b.updatedAt - a.updatedAt).map(taskItem);
       }
       // Under a project heading the path would repeat it: the row says what the agent is doing instead
-      if (section === 'agents') { return this.#byProject(agents).map(i => ({ ...i, subtitle: i.data.label || i.data.activity?.title || i.subtitle })); }
+      if (section === 'agents') {
+        // Under a heading the path would repeat it: the row says what the agent is doing (or its part in a task)
+        return this.#byProject(agents).map(i => {
+          const t = taskOfSession(i.data);
+          const doing = i.data.activity?.title;
+          const said = doing && doing !== 'Already running' ? doing : '';
+          return { ...i, subtitle: t ? [taskRole(i.data, t), said].filter(Boolean).join(' · ') : said || projectPath(i.data) };
+        });
+      }
       if (section === 'overview') { return [...apps, ...agents]; }
       return apps.filter(i => SECTION_OF[i.category] === section);
     }
@@ -855,7 +891,8 @@
     #byProject(agents) {
       const groups = new Map();
       for (const a of agents) {
-        const k = a.data.cwd || a.data.project || '';
+        const t = taskOfSession(a.data);
+        const k = t ? `task:${t.id}` : a.data.cwd || a.data.project || '';
         groups.set(k, [...(groups.get(k) || []), a]);
       }
       return [...groups.values()].flat();
@@ -923,14 +960,28 @@
       }
       const sel = this.current?.key;
       // Agents: a heading over each project's sessions; Overview: the apps, then the agents
-      const groupOf = i => this.section === 'agents' ? i.data.cwd || i.data.project || ''
-        : this.section === 'overview' ? (i.kind === 'agent' ? 'agents' : 'apps') : null;
-      const groupName = i => this.section === 'overview' ? (i.kind === 'agent' ? T.groupAgents : T.groupApps) : i.data.project || projectPath(i.data);
+      const groupOf = i => {
+        if (this.section === 'overview') { return i.kind === 'agent' ? 'agents' : 'apps'; }
+        if (this.section !== 'agents') { return null; }
+        const t = taskOfSession(i.data);
+        return t ? `task:${t.id}` : i.data.cwd || i.data.project || '';
+      };
+      // A task's agents sit under the task's name (not under each worktree's long folder name)
+      const groupHead = i => {
+        if (this.section === 'overview') { return `<span class="gn">${i.kind === 'agent' ? T.groupAgents : T.groupApps}</span>`; }
+        const t = taskOfSession(i.data);
+        if (t) {
+          const task = this.tasks.get(t.id);
+          const title = task?.title || T.taskIn(t.repo);
+          return `${ICONS.tasks}<span class="gn" title="${esc(title)}">${esc(title)}</span>${task ? `<em>${esc(task.template.name)}</em>` : ''}`;
+        }
+        return `<span class="gn">${esc(i.data.project || projectPath(i.data))}</span>`;
+      };
       const sizes = new Map();
       for (const i of items) { sizes.set(groupOf(i), (sizes.get(groupOf(i)) || 0) + 1); }
       this.el.rows.innerHTML = items.map((i, n) => `
         ${groupOf(i) !== null && (n === 0 || groupOf(items[n - 1]) !== groupOf(i))
-          ? `<div class="group" title="${esc(this.section === 'agents' ? i.data.cwd || '' : '')}">${esc(groupName(i))}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
+          ? `<div class="group${String(groupOf(i)).startsWith('task:') ? ' task' : ''}" title="${esc(this.section === 'agents' ? i.data.cwd || '' : '')}">${groupHead(i)}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
         <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
           ${iconHtml(i)}
           <div class="who"><b>${esc(i.name)}</b><span title="${esc(i.subtitle || '')}"${i.why ? ` class="why" style="--c:${WHY_COLOR[i.why]}"` : ''}>${esc(i.subtitle || '')}</span></div>
@@ -995,7 +1046,7 @@
     // ---------- inbox cards: approve, deny, answer — the pill's cards, same rules ----------
 
     #inboxCard(s) {
-      const who = [esc(Agent.displayName(s.agent)), esc(s.project)];
+      const who = [esc(Agent.displayName(s.agent)), esc(projectName(s))];
       if (s.perm?.kind === 'question') {
         const picked = this.#answers.get(s.perm.id) || new Map();
         const qs = s.perm.questions || [];
@@ -1352,7 +1403,7 @@
         this.#queueAt = 0;
       }
       this.#loadQueue();
-      this.el.sayText.placeholder = T.sayTo(Agent.displayName(s.agent), s.project);
+      this.el.sayText.placeholder = T.sayTo(Agent.displayName(s.agent), projectName(s));
       if (!this.el.sayHint.dataset.kind) {
         this.el.sayHint.textContent = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
       }
@@ -1394,7 +1445,7 @@
       const paste = !s.term?.tmux;
       const busy = !paste && BUSY.has(s.state);
       const [cls, badge, btn] = paste ? ['paste', T.toPaste, T.pasteBtn] : busy ? ['queue', T.toQueue, T.queueBtn] : ['now', T.now, T.sendBtn];
-      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(s.project))}${this.sayAtt.count ? T.withFiles(this.sayAtt.count) : ''}</span>
+      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(projectName(s)))}${this.sayAtt.count ? T.withFiles(this.sayAtt.count) : ''}</span>
         <span class="badge ${cls}">${badge}</span>
         <button type="button" class="btn" data-edit>${T.edit}</button>
         <button type="submit" class="btn on">${btn}</button>

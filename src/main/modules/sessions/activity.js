@@ -90,7 +90,8 @@ function describeActivity(ev, cwd) {
         detail: short(ev.tool_input?.command ?? ev.tool_input?.file_path ?? ""),
       };
     case "Notification":
-      return ev.message ? { title: "Notification", detail: short(ev.message) } : null;
+      // The message itself says what it is ("Claude is waiting for your input"); "Notification" told nothing
+      return ev.message ? { title: short(ev.message, 80), detail: "" } : null;
     case "Stop":
       return { title: "Finished", detail: short(ev.last_assistant_message) };
     case "SubagentStop":

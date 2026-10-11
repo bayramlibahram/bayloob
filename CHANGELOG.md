@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+- **Agents list**: a workflow task's agents sit under the task's name and pattern ("Add coupon codes to checkout ·
+  Best-of-N · 4") instead of one heading per worktree folder; each row says its part ("Builder · build-2",
+  "Planner / reviewer · read-only") and what it's doing. Sessions found again after a restart are recognised by
+  their worktree folder too. Task worktrees read "shop · build-2" everywhere (finished banner, Inbox, prompt
+  box). A Notification shows its message ("Claude is waiting for your input") instead of "Notification".
+
 ### Added
 - **UI scale** (step F of the UI deep dive): Settings → General → 90 … 140 %, and `Ctrl +` / `Ctrl −` /
   `Ctrl 0` in the workspace (popup and window, Tasks inside it), New task, the launcher and Settings. Popups
