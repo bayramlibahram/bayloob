@@ -1,4 +1,4 @@
-const { BrowserWindow, nativeTheme, screen } = require("electron");
+const { BrowserWindow, WebContentsView, nativeTheme, screen } = require("electron");
 const fs = require("node:fs");
 const paths = require("../app/paths");
 
@@ -6,18 +6,23 @@ const DEFAULT = { width: 1280, height: 800 };
 const MIN = { width: 960, height: 600 };
 
 /**
- * Tasks: the board and each task's detail (stages, plan, candidates, tests, log, the decisions at gates).
- * A normal window — resizable, maximizable, in the taskbar, stays open when it loses focus — that remembers
- * its size and position. Frameless: the page draws its own header with the window controls.
+ * A normal app window — resizable, maximizable, in the taskbar, stays open when it loses focus — that
+ * remembers its size and position. Frameless: the page draws its own header with the window controls.
+ * `show(state)` sends `state` to the page on `<name>:show`, like the popups.
  */
-class TasksWindow {
+class AppWindow {
   win = null;
   #ready = null;
   #saveTimer = null;
+  #views = new Map(); // page name → { view, ready }: pages embedded over part of this window
 
-  /** @param file where the bounds are kept (JSON) */
-  constructor({ file }) {
-    this.file = file;
+  /**
+   * name   renderer/<name>/ and preload/<name>.js
+   * file   where the bounds are kept (JSON)
+   * query  added to the page's URL (e.g. { mode: 'window' })
+   */
+  constructor({ name, file, title, query = null }) {
+    Object.assign(this, { name, file, title, query });
   }
 
   get visible() {
@@ -29,7 +34,7 @@ class TasksWindow {
       this.#create();
     }
     await this.#ready;
-    this.win.webContents.send("tasks:show", state);
+    this.win.webContents.send(`${this.name}:show`, state);
     if (this.win.isMinimized()) {
       this.win.restore();
     }
@@ -42,6 +47,44 @@ class TasksWindow {
     if (this.win && !this.win.isDestroyed()) {
       this.win.webContents.send(channel, payload);
     }
+  }
+
+  /**
+   * Another page (with its own preload) shown over `rect` of this window — e.g. Tasks inside the Workspace.
+   * Its styles and scripts stay its own. A null rect hides it. → its webContents once loaded (null: no window)
+   */
+  async embed(name, rect, query = null) {
+    if (!this.win) {
+      return null;
+    }
+    let v = this.#views.get(name);
+    if (!rect) {
+      v?.view.setVisible(false);
+      return v ? v.view.webContents : null;
+    }
+    if (!v) {
+      const view = new WebContentsView({ webPreferences: { preload: paths.preload(name) } });
+      view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#121118" : "#ffffff");
+      this.win.contentView.addChildView(view);
+      v = { view, ready: view.webContents.loadFile(paths.page(name), query ? { query } : {}) };
+      this.#views.set(name, v);
+    }
+    const r = rect;
+    v.view.setBounds({
+      x: Math.round(r.x),
+      y: Math.round(r.y),
+      width: Math.max(0, Math.round(r.width)),
+      height: Math.max(0, Math.round(r.height)),
+    });
+    v.view.setVisible(true);
+    await v.ready;
+    return v.view.webContents;
+  }
+
+  /** An embedded page's webContents while it exists (for live updates). */
+  embedded(name) {
+    const wc = this.#views.get(name)?.view.webContents;
+    return wc && !wc.isDestroyed() ? wc : null;
   }
 
   control(action) {
@@ -67,9 +110,9 @@ class TasksWindow {
       resizable: true,
       maximizable: true,
       show: false,
-      title: "Bayloob · Tasks",
+      title: this.title,
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#121118" : "#ffffff",
-      webPreferences: { preload: paths.preload("tasks") },
+      webPreferences: { preload: paths.preload(this.name) },
     });
     if (saved.maximized) {
       this.win.maximize();
@@ -78,10 +121,16 @@ class TasksWindow {
       this.win.on(ev, () => this.#saveSoon());
     }
     this.win.on("closed", () => {
+      for (const { view } of this.#views.values()) {
+        if (!view.webContents.isDestroyed()) {
+          view.webContents.close();
+        }
+      }
+      this.#views.clear();
       this.win = null;
       this.#ready = null;
     });
-    this.#ready = this.win.loadFile(paths.page("tasks"));
+    this.#ready = this.win.loadFile(paths.page(this.name), this.query ? { query: this.query } : {});
   }
 
   // The saved bounds when they're still on a screen; otherwise the default size, centred
@@ -143,4 +192,4 @@ class TasksWindow {
   }
 }
 
-module.exports = { TasksWindow };
+module.exports = { AppWindow };

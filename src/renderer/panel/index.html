@@ -353,6 +353,37 @@
   .meter { display: flex; align-items: center; gap: 7px; }
   .flash { color: var(--note-text); }
   [hidden] { display: none !important; }
+
+  /* ---------- The Workspace window (?mode=window): the same page, filling a resizable window ---------- */
+  .wctl { display: none; gap: 2px; }
+  .window-mode .wctl { display: flex; }
+  .window-mode .popup-only { display: none !important; }
+  html:not(.window-mode) .window-only { display: none !important; }
+  .window-mode, .window-mode body { background: var(--backdrop); }
+  .window-mode .panel { margin: 0; border: 0; border-radius: 0; box-shadow: none; animation: none; height: 100vh; display: flex; flex-direction: column; background: var(--backdrop); }
+  .window-mode .head { -webkit-app-region: drag; padding: 10px 10px 10px 16px; }
+  .window-mode .head button, .window-mode .head .usage { -webkit-app-region: no-drag; }
+  .window-mode .main { flex: 1; min-height: 0; height: auto;
+    grid-template-columns: var(--side-w, 196px) 5px minmax(260px, 1fr) 5px var(--detail-w, 440px); }
+  .window-mode .detailcol { border-left: 0; }
+  .window-mode .side { border-right: 0; }
+  /* splitters between the columns: drag to resize, double-click for the default width */
+  .split { cursor: col-resize; position: relative; background: transparent; }
+  .split::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--line); }
+  .split:hover::after, .split.drag::after { left: 1px; width: 3px; background: color-mix(in srgb, var(--brand) 55%, transparent); }
+  /* the sidebar collapsed to icons (Ctrl+B) */
+  .window-mode .main.collapsed .side { padding: 12px 6px; }
+  .window-mode .main.collapsed .nav { justify-content: center; padding: 9px 0; position: relative; }
+  .window-mode .main.collapsed .nav span { display: none; }
+  .window-mode .main.collapsed .nav em { position: absolute; top: 3px; right: 6px; font-size: 9.5px; padding: 0 4px; }
+  .window-mode .main.collapsed .nav em:not(.hot) { display: none; }
+  /* Tasks in the Workspace window: Tasks' own page is laid over this area (list + detail columns) */
+  .embed { display: none; }
+  .window-mode .main.embedding .listcol, .window-mode .main.embedding .detailcol, .window-mode .main.embedding .listcol + .split { display: none; }
+  .window-mode .main.embedding .embed { display: block; grid-column: 3 / 6; grid-row: 1; min-height: 0; }
+  .wbtn { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: var(--muted); }
+  .wbtn:hover { color: var(--text); background: var(--hover); }
+  .wbtn.close:hover { background: var(--waiting); color: #fff; }
 </style>
 </head>
 <body>
@@ -362,9 +393,20 @@
       <span class="brand">bayloob</span><span class="sep"></span><span class="sub">Workspace control</span>
       <div class="usage" id="usage" hidden title="Agents running"></div>
       <div class="status" id="status"></div>
+      <button type="button" class="square window-only" id="collapseSide" title="Collapse the sidebar (Ctrl+B)" aria-label="Collapse the sidebar">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+      <button type="button" class="square popup-only" id="openWindow" title="Open the workspace in a window — resizable, stays open" aria-label="Open in a window">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/></svg>
+      </button>
       <button type="button" class="square" id="settings" title="Settings">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
       </button>
+      <div class="wctl">
+        <button type="button" class="wbtn" data-win="minimize" title="Minimize" aria-label="Minimize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+        <button type="button" class="wbtn" data-win="maximize" title="Maximize" aria-label="Maximize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+        <button type="button" class="wbtn close" data-win="close" title="Close" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
     </header>
 
     <div class="finished" id="finished" hidden></div>
@@ -412,7 +454,7 @@
       </button>
       <div class="meters" id="meters"></div>
       <button type="button" class="btn" id="openWorkspace">
-        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Open workspace
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> Open folder
       </button>
     </footer>
 
@@ -427,6 +469,13 @@
 <script src="../shared/attachments.js"></script>
 <script src="../shared/markdown-lite.js"></script>
 <script>
+  // The same page runs as the popup and as the Workspace window (?mode=window: resizable, splitters)
+  const WINDOW_MODE = new URLSearchParams(location.search).get('mode') === 'window';
+  if (WINDOW_MODE) { document.documentElement.classList.add('window-mode'); }
+  const LAYOUT_KEY = 'bayloob.workspace.layout'; // { side, detail, collapsed } in the Workspace window
+  const SIDE = { min: 180, max: 280, def: 196 };
+  const DETAIL = { min: 320, max: 640, def: 440 };
+
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
     sayTo: (agent, project) => `Prompt to ${agent} · ${project}…`,
@@ -698,14 +747,14 @@
       this.collisions = state.collisions || {};
       this.status = state.status || null;
       // Opens on the Inbox when something waits for you, otherwise on the agents
-      this.section = this.#items('inbox').length ? 'inbox' : 'agents';
+      this.section = state.section && NAV.flat().includes(state.section) ? state.section : this.#items('inbox').length ? 'inbox' : 'agents';
       this.selected = null;
       this.#closePal();
       this.launchMode = false;
       this.query = '';
       this.el.search.value = '';
       this.render();
-      this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20);
+      this.#fit();
     }
     setSessions(list) {
       // Agents that just finished their turn, newest first, until replied to or dismissed
@@ -836,6 +885,7 @@
       const cur = this.current;
       this.el.openWorkspace.disabled = !(cur?.kind === 'agent' && cur.data.cwd);
       this.el.openWorkspace.title = cur?.kind !== 'agent' ? T.wsPickAgent : !cur.data.cwd ? T.wsNoFolder : T.wsOpen;
+      this.#syncEmbed();
     }
 
     #renderStatus() {
@@ -852,10 +902,10 @@
       const nav = key => {
         const n = this.#items(key).length;
         const em = n ? `<em class="${key === 'inbox' ? 'hot' : ''}" title="${esc(T.countTip[key](n))}">${n}</em>` : '';
-        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}">${ICONS[key]}<span>${T.sections[key]}</span>${em}</button>`;
+        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}" title="${T.sections[key]}">${ICONS[key]}<span>${T.sections[key]}</span>${em}</button>`;
       };
       this.el.side.innerHTML = NAV.map(group => group.map(nav).join('')).join('<hr>')
-        + `<button class="nav bottom" data-settings>${ICONS.gear}<span>${T.settingsNav}</span></button>`;
+        + `<button class="nav bottom" data-settings title="${T.settingsNav}">${ICONS.gear}<span>${T.settingsNav}</span></button>`;
     }
 
     #renderList() {
@@ -1519,7 +1569,99 @@
       this.#fit();
     }
 
-    #fit() { this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20); }
+    // ---------- the Workspace window: splitters, collapsible sidebar, window controls ----------
+
+    #layout = { side: SIDE.def, detail: DETAIL.def, collapsed: false };
+
+    #bindWindow() {
+      try { Object.assign(this.#layout, JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}')); } catch { /* storage unavailable */ }
+      const main = this.el.panel.querySelector('.main');
+      const [side, list] = [main.querySelector('.side'), main.querySelector('.listcol')];
+      const split = (after, key, range, sign) => {
+        const el = document.createElement('div');
+        el.className = 'split';
+        el.setAttribute('role', 'separator');
+        el.setAttribute('aria-orientation', 'vertical');
+        el.title = 'Drag to resize · double-click for the default width';
+        after.after(el);
+        el.addEventListener('dblclick', () => { this.#layout[key] = range.def; this.#applyLayout(true); });
+        el.addEventListener('pointerdown', e => {
+          if (key === 'side' && this.#layout.collapsed) { return; }
+          e.preventDefault();
+          el.setPointerCapture(e.pointerId);
+          el.classList.add('drag');
+          const x0 = e.clientX;
+          const w0 = this.#layout[key];
+          const move = ev => {
+            this.#layout[key] = Math.round(Math.min(range.max, Math.max(range.min, w0 + sign * (ev.clientX - x0))));
+            this.#applyLayout();
+          };
+          const up = () => {
+            el.classList.remove('drag');
+            el.removeEventListener('pointermove', move);
+            el.removeEventListener('pointerup', up);
+            this.#applyLayout(true);
+          };
+          el.addEventListener('pointermove', move);
+          el.addEventListener('pointerup', up);
+        });
+      };
+      split(side, 'side', SIDE, 1);
+      split(list, 'detail', DETAIL, -1);
+      document.getElementById('collapseSide').addEventListener('click', () => this.#toggleSide());
+      for (const b of document.querySelectorAll('[data-win]')) {
+        b.addEventListener('click', () => this.api?.windowControl(b.dataset.win));
+      }
+      document.addEventListener('keydown', e => {
+        if (e.ctrlKey && !e.shiftKey && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); this.#toggleSide(); }
+      });
+      this.#applyLayout();
+    }
+
+    // Tasks: the Workspace window shows Tasks' own page over the list and detail columns
+    #embedRect = '';
+    #syncEmbed() {
+      if (!WINDOW_MODE) { return; }
+      const main = this.el.panel.querySelector('.main');
+      const on = this.section === 'tasks' && !this.launchMode && this.el.pal.hidden;
+      main.classList.toggle('embedding', on);
+      let box = main.querySelector('.embed');
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'embed';
+        main.appendChild(box);
+        new ResizeObserver(() => this.#syncEmbed()).observe(box);
+        window.addEventListener('resize', () => this.#syncEmbed());
+      }
+      const r = on ? box.getBoundingClientRect() : null;
+      const rect = r && r.width > 0 ? { x: r.left, y: r.top, width: r.width, height: r.height } : null;
+      const key = JSON.stringify(rect);
+      if (key === this.#embedRect) { return; }
+      this.#embedRect = key;
+      this.api?.embed?.(rect);
+    }
+
+    #toggleSide() {
+      this.#layout.collapsed = !this.#layout.collapsed;
+      this.#applyLayout(true);
+    }
+
+    #applyLayout(save = false) {
+      const main = this.el.panel.querySelector('.main');
+      const l = this.#layout;
+      main.classList.toggle('collapsed', !!l.collapsed);
+      main.style.setProperty('--side-w', `${l.collapsed ? 64 : l.side}px`);
+      main.style.setProperty('--detail-w', `${l.detail}px`);
+      const b = document.getElementById('collapseSide');
+      const label = l.collapsed ? 'Expand the sidebar (Ctrl+B)' : 'Collapse the sidebar (Ctrl+B)';
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      if (save) { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch { /* storage unavailable */ } }
+      requestAnimationFrame(() => this.#syncEmbed());
+    }
+
+    // The popup grows with its content; the Workspace window has its own size
+    #fit() { if (!WINDOW_MODE) { this.api?.resize(Math.ceil(this.el.panel.getBoundingClientRect().height) + 20); } }
 
     async #showLogs(item, id) {
       const c = item.data.details.containers.find(x => x.id === id);
@@ -1554,13 +1696,14 @@
 
     #openPal() {
       this.el.pal.hidden = false;
+      this.#syncEmbed(); // the palette must not open under the Tasks page
       this.el.palText.value = '';
       this.#palAt = 0;
       this.#renderPal();
       this.el.palText.focus();
     }
 
-    #closePal() { this.el.pal.hidden = true; }
+    #closePal() { this.el.pal.hidden = true; this.#syncEmbed(); }
 
     #palCommands() {
       const cur = this.current?.kind === 'agent' ? this.current.data : null;
@@ -1693,6 +1836,8 @@
       this.el.launch.addEventListener('click', () => this.#toggleLaunch());
       this.el.openWorkspace.addEventListener('click', () => this.current?.kind === 'agent' && this.api?.openWorkspace(this.current.id));
       this.el.settings.addEventListener('click', () => this.api?.openSettings());
+      document.getElementById('openWindow').addEventListener('click', () => this.api?.openWindow(this.section));
+      if (WINDOW_MODE) { this.#bindWindow(); }
       // Prompt to the selected agent: Enter sends, Shift+Enter is a new line
       this.el.say.addEventListener('submit', e => { e.preventDefault(); this.#send(); });
       this.el.finished.addEventListener('click', e => {
@@ -1789,7 +1934,7 @@
         }
         if (e.key === 'Escape') {
           if (this.launchMode || this.query) { this.launchMode = false; this.query = ''; this.el.search.value = ''; this.render(); }
-          else { this.api?.close(); }
+          else if (!WINDOW_MODE) { this.api?.close(); } // Esc never closes the Workspace window
         } else if (e.key === 'ArrowDown') { e.preventDefault(); this.#move(1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); this.#move(-1); }
         else if (e.key === 'Enter' && this.current && !this.launchMode) { this.#primary(this.current); }

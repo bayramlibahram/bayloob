@@ -94,7 +94,7 @@
   .phead h1 { font-size: 18px; font-weight: 700; flex: 1; }
   .filters { display: flex; align-items: center; gap: 8px; padding: 0 20px 12px; }
   .filters .field { width: 260px; }
-  .board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(6, minmax(170px, 1fr)); gap: 10px; padding: 0 20px 16px; overflow: auto; }
+  .board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); gap: 10px; padding: 0 20px 16px; overflow: auto; }
   .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; padding: 8px; border-radius: 14px; background: var(--raised); overflow-y: auto; }
   .col h3 { display: flex; align-items: center; gap: 6px; padding: 2px 4px 4px; font-size: 12px; font-weight: 700; color: var(--soft); }
   .col h3 em { font-style: normal; color: var(--muted); font-weight: 600; }
@@ -197,6 +197,10 @@
   .actions textarea { flex: 1 1 100%; min-height: 60px; resize: vertical; padding: 8px 10px; border-radius: 10px; background: var(--raised-2); border: 1px solid var(--line); line-height: 1.5; }
   .actions textarea:focus { border-color: var(--focus); }
   .actions .confirm { color: var(--waiting); font-weight: 600; }
+  /* Embedded in the Workspace window (?embedded=1): its header already has the logo, usage and window controls */
+  .embedded .whead { -webkit-app-region: no-drag; height: 46px; padding-left: 12px; }
+  .embedded .whead .logo, .embedded .whead > b, .embedded .whead .sep, .embedded .usage, .embedded .wctl { display: none; }
+  .embedded .app { grid-template-rows: 46px 1fr; }
   /* header nav */
   .wnav { display: flex; gap: 2px; -webkit-app-region: no-drag; }
   .wnav button { height: 28px; padding: 0 10px; border-radius: 8px; color: var(--muted); font-weight: 600; }
@@ -363,6 +367,7 @@
     engine: I('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'),
     agent: I('<rect x="4" y="7" width="16" height="11" rx="4"/><path d="M9 12h.01M15 12h.01"/>'),
   };
+  if (new URLSearchParams(location.search).get('embedded') === '1') { document.documentElement.classList.add('embedded'); }
   const COLS = ['queued', 'running', 'needs', 'review', 'done', 'failed'];
   const PATTERN = { pipeline: 'Pipeline', bestofn: 'Best-of-N', split: 'Split work', board: 'Review board' };
   const LIVE = new Set(['starting', 'running']);

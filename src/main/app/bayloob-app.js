@@ -57,7 +57,7 @@ const { NewTaskWindow } = require("../windows/new-task-window");
 const { OverlayWindow } = require("../windows/overlay-window");
 const { PanelWindow } = require("../windows/panel-window");
 const { SettingsWindow } = require("../windows/settings-window");
-const { TasksWindow } = require("../windows/tasks-window");
+const { AppWindow } = require("../windows/app-window");
 const { TrayMenu } = require("../windows/tray");
 
 const IS_LINUX = process.platform === "linux";
@@ -227,7 +227,13 @@ class BayloobApp {
     this.uploads.prune();
     this.tasks = new TaskStore(path.join(data, "tasks"));
     this.templates = new TemplateStore(path.join(data, "workflows"));
-    this.tasksWindow = new TasksWindow({ file: path.join(data, "tasks-window.json") });
+    // The workspace as a window of its own: the panel's page, resizable, with splitters (the popup stays)
+    this.workspaceWindow = new AppWindow({
+      name: "panel",
+      file: path.join(data, "workspace-window.json"),
+      title: "Bayloob · Workspace",
+      query: { mode: "window" },
+    });
     this.projects = new ProjectInfo({ git: this.git });
     // Which task instances may start: Settings → Agents limits, sessions already running, free memory
     this.scheduler = new Scheduler({
@@ -263,8 +269,8 @@ class BayloobApp {
     });
     this.engine.on("change", task => {
       this.overlay.send("task-gates", this.#taskGates());
-      this.panel.send("panel:task", task);
-      this.tasksWindow.send("tasks:task", task);
+      this.#panelSend("panel:task", task);
+      this.#tasksSend("tasks:task", task);
       this.#sendUsage();
     });
     this.engine.on("error", e => console.error(`Bayloob task engine: ${e.message}`));
@@ -327,7 +333,7 @@ class BayloobApp {
     this.server.store.on("change", list => {
       this.notifier.update(list);
       this.overlay.send("sessions", list);
-      this.panel.send("panel:sessions", list);
+      this.#panelSend("panel:sessions", list);
       this.#sendQueued(list);
       this.#tickBlocked(list);
       this.#updateReceipts(list);
@@ -507,16 +513,43 @@ class BayloobApp {
     return { hooks: this.hooks.status().installed, lastEventAt: this.server.lastEventAt };
   }
 
-  async togglePanel() {
-    if (this.panel.visible) {
-      return this.panel.hide();
-    }
-    await this.panel.show({
+  // What the panel page needs when it opens (the popup and the Workspace window alike)
+  #panelState(extra = {}) {
+    return {
       sessions: this.server.store.list(),
       status: this.#status(),
       collisions: this.#collisions,
       tasks: this.engine.list(),
-    });
+      ...extra,
+    };
+  }
+
+  // Live updates go to the popup and to the Workspace window, whichever is open
+  #panelSend(channel, payload) {
+    this.panel.send(channel, payload);
+    this.workspaceWindow?.send(channel, payload);
+  }
+
+  get #panelOpen() {
+    return this.panel.visible || !!this.workspaceWindow?.visible;
+  }
+
+  async togglePanel() {
+    if (this.panel.visible) {
+      return this.panel.hide();
+    }
+    await this.panel.show(this.#panelState());
+    this.#sendUsage();
+    this.#startPanelUpdates();
+  }
+
+  /** The workspace in a resizable window of its own; `section` opens it there (e.g. 'tasks'). */
+  async openWorkspaceWindow(section = null) {
+    this.panel.hide();
+    if (!this.workspaceWindow.win) {
+      this.#tasksShown = false; // a new window has no Tasks page yet
+    }
+    await this.workspaceWindow.show(this.#panelState({ section }));
     this.#sendUsage();
     this.#startPanelUpdates();
   }
@@ -527,20 +560,20 @@ class BayloobApp {
     this.stats.reset();
     let tick = 0;
     const run = async () => {
-      if (!this.panel.visible) {
+      if (!this.#panelOpen) {
         return clearInterval(this.#statsTimer);
       }
-      this.panel.send("panel:stats", {
+      this.#panelSend("panel:stats", {
         ...this.stats.sample(this.server.store.list()),
         system: this.system.sample(),
       });
       const snap = await this.workspace.snapshot().catch(() => null);
       if (snap) {
         this.#apps = new Map(snap.apps.map(a => [a.id, a]));
-        this.panel.send("panel:workspace", snap);
+        this.#panelSend("panel:workspace", snap);
       }
       if (++tick % STATUS_EVERY_TICKS === 0) {
-        this.panel.send("panel:status", this.#status());
+        this.#panelSend("panel:status", this.#status());
       }
     };
     run();
@@ -718,8 +751,8 @@ class BayloobApp {
     }
     const usage = this.scheduler.usage();
     this.overlay.send("usage", usage);
-    this.panel.send("panel:usage", usage);
-    this.tasksWindow?.send("tasks:usage", usage);
+    this.#panelSend("panel:usage", usage);
+    this.#tasksSend("tasks:usage", usage);
   }
 
   // Agents to offer when starting a session: name, whether it's installed, mascot colour
@@ -749,20 +782,38 @@ class BayloobApp {
       }));
   }
 
+  #tasksOpen = null; // { focus, builder } for the Tasks page the next time it's shown
+  #tasksShown = false; // the embedded Tasks page is in view
+
   /**
-   * The Tasks window: the board, one task's detail when `focus` is its id, or the workflow builder on
-   * `builder: { template, draftId }` (from the New task dialog's Customize).
+   * Tasks — inside the Workspace window: the board, one task's detail when `focus` is its id, or the workflow
+   * builder on `builder: { template, draftId }` (from the New task dialog's Customize).
    */
   async openTasks(focus = null, builder = null) {
-    await this.tasksWindow.show({
+    this.#tasksOpen = { focus, builder };
+    await this.openWorkspaceWindow("tasks");
+    // Already on Tasks: the panel page won't ask again, so show it here
+    if (this.#tasksShown) {
+      const open = this.#tasksOpen;
+      this.#tasksOpen = null;
+      this.#tasksSend("tasks:show", await this.#tasksState(open));
+    }
+  }
+
+  async #tasksState(extra = {}) {
+    return {
       tasks: this.engine.list(),
       usage: this.scheduler.usage(),
       agents: await this.#agentChoices(),
       templates: this.templates.list({ capacity: this.#capacityMax() }),
-      focus,
-      builder,
       home: os.homedir(),
-    });
+      ...extra,
+    };
+  }
+
+  // Live updates for the Tasks page embedded in the Workspace window
+  #tasksSend(channel, payload) {
+    this.workspaceWindow?.embedded("tasks")?.send(channel, payload);
   }
 
   // Agents that can run here → their max parallel instances (what templates are checked against)
@@ -870,7 +921,7 @@ class BayloobApp {
     this.blocked.tick(list, { paused: this.#locked });
     const info = { waits: this.blocked.waits(), today: this.blocked.today().total };
     this.overlay.send("blocked", info);
-    this.panel.send("panel:blocked", info);
+    this.#panelSend("panel:blocked", info);
   }
 
   // A turn that just finished gets a receipt (did it change code, did its tests pass); a new turn clears it
@@ -949,7 +1000,7 @@ class BayloobApp {
     if (JSON.stringify(found) !== JSON.stringify(this.#collisions)) {
       this.#collisions = found;
       this.overlay.send("collisions", found);
-      this.panel.send("panel:collisions", found);
+      this.#panelSend("panel:collisions", found);
     }
   }
 
@@ -1412,7 +1463,25 @@ class BayloobApp {
     ipcMain.handle("newtask:customize", (_e, config, draftId) =>
       result(() => this.#customize(config, draftId ? String(draftId) : null))
     );
-    ipcMain.on("tasks:window", (_e, action) => this.tasksWindow.control(String(action)));
+    // The Workspace window's Tasks section: its page shows over the rect the panel page keeps for it
+    ipcMain.handle("panel:embed", async (_e, rect) => {
+      const r =
+        rect && ["x", "y", "width", "height"].every(k => Number.isFinite(rect[k])) ? rect : null;
+      const wc = await this.workspaceWindow.embed("tasks", r, { embedded: "1" });
+      // The page's state is sent when it comes into view (or something asked to open a task), not on every
+      // resize — a fresh state would re-render it under the owner's caret
+      const appear = !!r && !this.#tasksShown;
+      this.#tasksShown = !!(wc && r);
+      if (wc && r && (appear || this.#tasksOpen)) {
+        const open = this.#tasksOpen || {};
+        this.#tasksOpen = null;
+        wc.send(
+          "tasks:show",
+          await this.#tasksState({ focus: open.focus || null, builder: open.builder || null })
+        );
+      }
+      return !!wc;
+    });
     ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
       const cwd = expandHome(String(opts?.cwd || "").trim());
       const res = await result(() => this.launch({ ...opts, cwd }));
@@ -1466,8 +1535,19 @@ class BayloobApp {
     });
     ipcMain.handle("panel:launchable", () => this.workspace.launchable());
     ipcMain.on("panel:open-settings", () => this.openSettings());
-    ipcMain.on("panel:close", () => this.panel.hide());
-    ipcMain.on("panel:resize", (_e, height) => this.panel.fitHeight(Number(height)));
+    // The popup hides; the Workspace window closes (its page sends the same request)
+    const fromWindow = e => e.sender === this.workspaceWindow.win?.webContents;
+    ipcMain.on("panel:close", e =>
+      fromWindow(e) ? this.workspaceWindow.control("close") : this.panel.hide()
+    );
+    ipcMain.on(
+      "panel:resize",
+      (e, height) => !fromWindow(e) && this.panel.fitHeight(Number(height))
+    );
+    ipcMain.on("panel:open-window", (_e, section) =>
+      this.openWorkspaceWindow(section ? String(section) : null)
+    );
+    ipcMain.on("panel:window", (_e, action) => this.workspaceWindow.control(String(action)));
 
     // Settings
     ipcMain.handle("settings:save", (_e, values) =>

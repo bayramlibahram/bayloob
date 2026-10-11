@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Changed
+- **Workspace window** (step C of the UI deep dive): the workspace now also opens as a window of its own —
+  the popup's ↗ button, or anything that opens Tasks. Resizable, maximizable, remembers its size and place;
+  splitters between the columns (sidebar 180–280 px, detail 320–640 px, double-click resets), the sidebar
+  collapses to icons (`Ctrl+B`), Esc doesn't close it. The popup stays as it was for a quick look.
+- **Tasks moved into the Workspace window**: its Tasks section shows the board, task detail and templates
+  (the Tasks page itself, laid over the list and detail columns, so nothing was rewritten); "Open in Tasks",
+  the pill's "Open task", New task → Start and Customize stages open it there. The separate Tasks window is
+  gone. The panel's footer button that opens an agent's folder is now called "Open folder".
 - **UI cleanup** (step A of the UI deep dive): the panel's search says what it searches ("Search agents…",
   "Filter the inbox…", "Search tasks…"); a list row's buttons appear on hover / selection / keyboard focus in
   the status's place, so names get the room (no layout shift); under a project heading an agent row says what

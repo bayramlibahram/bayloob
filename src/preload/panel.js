@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld("panelAPI", {
   onTask: cb => ipcRenderer.on("panel:task", (_e, task) => cb(task)),
   // The Tasks window: the board, or one task's detail
   openTasks: taskId => ipcRenderer.send("open-tasks", taskId || null),
+  // The workspace in a resizable window of its own (from the popup), and that window's controls
+  openWindow: section => ipcRenderer.send("panel:open-window", section || null),
+  windowControl: action => ipcRenderer.send("panel:window", action),
+  // The Tasks section of the Workspace window: Tasks' own page over this rect (null hides it)
+  embed: rect => ipcRenderer.invoke("panel:embed", rect),
   appMenu: appId => ipcRenderer.send("panel:app-menu", appId),
   focusApp: (appId, windowId) => ipcRenderer.invoke("panel:focus-app", appId, windowId),
   launchApp: appId => ipcRenderer.invoke("panel:launch-app", appId),
