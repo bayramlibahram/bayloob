@@ -305,6 +305,20 @@
     gate,
   });
 
+  // Design debate: who's who in the discussion, in the order the agents were picked
+  const DEBATE_ROLES = [
+    "Architect",
+    "Skeptic",
+    "Pragmatist",
+    "Security reviewer",
+    "Performance reviewer",
+  ];
+  const DEBATE_TOPIC = lines(
+    "Discuss how to design this before anyone builds it: the approach, the trade-offs, what could go wrong.",
+    "",
+    "{{task}}"
+  );
+
   const BUILTINS = {
     pipeline: {
       id: "pipeline",
@@ -431,6 +445,78 @@
           gate: "always",
         },
         { id: "integrate", title: "Integrate", role: "you", action: "integrate", gate: "always" },
+        {
+          id: "tests",
+          title: "Tests",
+          role: "tester",
+          action: "run-tests",
+          perCandidate: true,
+          gate: "tests-pass",
+          onFail: { goto: "build", prompt: FIX_TESTS_PROMPT, maxLoops: 2 },
+        },
+        {
+          id: "review",
+          title: "Review",
+          role: "reviewer",
+          mode: "read-only",
+          agents: [{ adapter: "codex", count: 1 }],
+          perCandidate: true,
+          prompt: REVIEW_PROMPT,
+          artifact: "review.md",
+          gate: "always",
+        },
+        arbiterStage(),
+        { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
+      ],
+    },
+    debate: {
+      id: "debate",
+      name: "Design debate",
+      description:
+        "Agents discuss the design in turn → the Arbiter writes the decision → plan → build → tests → review → you merge",
+      builtin: true,
+      stages: [
+        {
+          id: "talk",
+          title: "Discuss",
+          role: "discussion",
+          mode: "read-only",
+          format: "consensus",
+          rounds: 3,
+          topic: DEBATE_TOPIC,
+          participants: [
+            { adapter: "claude", count: 1, role: "Architect" },
+            { adapter: "codex", count: 1, role: "Skeptic" },
+          ],
+          decider: { adapter: "codex" },
+          // not decision.md: the Arbiter stage after the build writes that one
+          artifact: "design.md",
+          gate: "human",
+        },
+        {
+          id: "plan",
+          title: "Plan",
+          role: "planner",
+          mode: "plan",
+          agents: [{ adapter: "claude", count: 1 }],
+          prompt: lines(
+            PLAN_PROMPT,
+            "",
+            "The design the discussion settled on (follow it):",
+            "{{artifact:design.md}}"
+          ),
+          artifact: "plan.md",
+          gate: "human",
+        },
+        {
+          id: "build",
+          title: "Build",
+          role: "builder",
+          mode: "writes",
+          agents: [{ adapter: "claude", count: 1 }],
+          prompt: BUILD_PROMPT,
+          gate: "always",
+        },
         {
           id: "tests",
           title: "Tests",
@@ -737,7 +823,7 @@
     const preset = BUILTINS[w.pattern];
     if (!preset) {
       throw new Error(
-        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline, Best-of-N, Split work and Review board can`
+        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline, Best-of-N, Split work, Review board and Design debate can`
       );
     }
     const t = clone(preset);
@@ -753,6 +839,25 @@
       }
       if (s.role === "arbiter" && s.agents?.length && w.arbiter) {
         s.agents = [{ adapter: w.arbiter, count: 1 }];
+      }
+      // A Design debate: the agents picked discuss (roles in turn); the planner also builds; the Arbiter decides
+      if (w.pattern === "debate") {
+        if (s.role === "discussion" && builders.length) {
+          let k = 0;
+          s.participants = builders.flatMap(b =>
+            Array.from({ length: b.count }, () => ({
+              adapter: b.adapter,
+              count: 1,
+              role: DEBATE_ROLES[k++ % DEBATE_ROLES.length],
+            }))
+          );
+          if (w.arbiter) {
+            s.decider = { adapter: w.arbiter };
+          }
+        }
+        if (s.role === "builder") {
+          s.agents = [{ adapter: w.planner || "claude", count: 1 }];
+        }
       }
       // A Review board's reviewers are the agents picked in the dialog
       if (s.role === "reviewer" && w.pattern === "board" && builders.length) {

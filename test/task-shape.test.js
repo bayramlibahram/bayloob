@@ -90,3 +90,41 @@ test("Analyze files: needs at least one attached file; its analysts read the fil
   ); // nothing to collect
   assert.match(t.stages[0].prompt, /from the attached files[\s\S]*cite a PDF's page/);
 });
+
+test("Design debate: the agents picked discuss (roles in turn), the Arbiter decides, the planner builds", () => {
+  const { templateFor, validateTemplate } = require("../src/shared/workflow-templates");
+  const c = cfg({
+    category: "workflow",
+    text: "Pagination for the product list",
+    workflow: {
+      pattern: "debate",
+      planner: "claude",
+      agents: { claude: 1, codex: 2 },
+      reviewer: "codex",
+      arbiter: "gemini",
+    },
+  });
+  assert.equal(c.workflow.pattern, "debate");
+  assert.deepEqual(
+    T.stages(c).map(s => s.id),
+    ["talk", "plan", "build", "tests", "review", "decide", "merge"]
+  );
+  assert.match(T.gates(c)[0], /After the discussion/);
+  const t = templateFor(c);
+  assert.deepEqual(validateTemplate(t), []);
+  const talk = t.stages[0];
+  assert.deepEqual(
+    talk.participants.map(p => [p.adapter, p.role]),
+    [
+      ["claude", "Architect"],
+      ["codex", "Skeptic"],
+      ["codex", "Pragmatist"],
+    ]
+  );
+  assert.deepEqual(talk.decider, { adapter: "gemini" });
+  assert.deepEqual(t.stages.find(s => s.id === "build").agents, [{ adapter: "claude", count: 1 }]);
+  assert.match(
+    t.stages.find(s => s.id === "plan").prompt,
+    /The design the discussion settled on[\s\S]*\{\{artifact:design\.md\}\}/
+  );
+});

@@ -252,6 +252,7 @@ flowchart LR
 | **Best-of-N** | Plan → N builders in parallel, mixing agents (Claude ×2 + Codex ×1) → tests on each → the Arbiter recommends one → you merge |
 | **Split work** | Plan + split into subtasks, each owning its files → one builder per subtask → Bayloob integrates their branches → tests → review → you merge |
 | **Review board** | Reviewers × N, read-only, on your branch or your uncommitted changes → the Arbiter merges their findings into one report. Nothing is built |
+| **Design debate** | The agents you pick **discuss the design** in turn (Architect, Skeptic, Pragmatist…) until they agree → the Arbiter writes the decision → one agent plans and builds it → tests → review → you merge. You follow the discussion live in the task's **Discussion** tab, write to them, pin, pause or end it |
 
 <img src="docs/readme/tasks-candidates.png" alt="Task detail: three candidates side by side with tests, diffs and Pick build-3">
 

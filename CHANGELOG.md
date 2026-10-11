@@ -33,7 +33,13 @@
   in rounds — round-robin, debate, critique → revise, consensus or war-room — with Bayloob moderating: one speaker
   at a time, read-only, a fixed reply form (asked again once), stops on consensus, rounds, token budget or you; a
   decider agent or you write `decision.md` for the next stages. You can message, ask one participant, pin, pause,
-  end, and add or remove participants. `scripts/task-demo.js` runs all five formats. The Discussion view comes next.
+  end, and add or remove participants. `scripts/task-demo.js` runs all five formats and a Design debate.
+- **Discussion view** (part B): Tasks → task detail → Discussion — participants (live state, stance, confidence),
+  the thread by round (or Columns, Stance timeline, Raw), search and filter, the agreement matrix, proposals, open
+  points and the decision, and a composer to write to everyone or ask one participant, pin, pause or end it. The
+  stage shows `Round 2/3 · 2 of 3 agree`. The prototype it follows is in `docs/orchestration/prototype/`.
+- **Design debate**, a new workflow pattern in New task: the agents you pick discuss the design in turn until they
+  agree, the Arbiter writes the decision, then one agent plans and builds it, with tests, review and your merge.
 - **Response formats** (Settings → General → Prompts): templates your prompts go into, your text where `{{prompt}}`
   is — a new session, the prompt box, the queue, "run the tests". Four ship with Bayloob: **ADHD-friendly**,
   **Concise**, **Step-by-step plan** and **Explain like a teacher**; add, rename and remove your own.

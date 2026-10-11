@@ -334,6 +334,76 @@
   .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); padding: 8px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-strong);
     box-shadow: 0 10px 28px rgb(var(--shade) / calc(0.4 * var(--shade-k))); font-size: 12.5px; animation: slidein .15s ease-out; z-index: 5; }
   .toast.err { color: var(--waiting); }
+
+  /* ---------- Discussion (14): participants · thread · summary, as in docs/orchestration/prototype/discussion.html ---------- */
+  .disc { display: grid; grid-template-columns: 220px minmax(0, 1fr) 320px; gap: 16px; min-height: 100%; }
+  .disc .people, .disc .side { display: flex; flex-direction: column; gap: 8px; }
+  .disc .who { display: grid; grid-template-columns: 34px 1fr; gap: 2px 9px; align-items: center; padding: 8px; border-radius: 11px; text-align: left; border: 1px solid transparent; }
+  .disc .who:hover { background: var(--hover); }
+  .disc .who[aria-pressed="true"] { border-color: var(--line-strong); background: var(--raised); }
+  .disc .who b { display: block; font-size: 13px; }
+  .disc .who small { color: var(--muted); font-size: 11.5px; }
+  .disc .who .meta { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; }
+  .disc .live { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .disc .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+  .disc .live.on i { animation: dpulse 1.1s infinite; }
+  @keyframes dpulse { 50% { opacity: .3; } }
+  .disc .conf { grid-column: 2; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .disc .cbar { width: 64px; height: 4px; border-radius: 999px; background: var(--raised-2, var(--hover)); overflow: hidden; }
+  .disc .cbar i { display: block; height: 100%; background: var(--c); }
+  .disc .center { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .disc .dtools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .disc .dtools input { height: 30px; padding: 0 10px; border-radius: 9px; background: var(--raised); border: 1px solid var(--line); min-width: 180px; }
+  .disc .seg { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--raised); }
+  .disc .seg button { height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .disc .seg button[aria-pressed="true"] { background: var(--surface, var(--card)); color: var(--text); }
+  .disc .rhead { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; }
+  .disc .rhead b { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--soft); }
+  .disc .rhead small { color: var(--muted); }
+  .disc .rhead hr { flex: 1; border: 0; height: 1px; background: var(--line); }
+  .disc .msg { position: relative; max-width: 80ch; padding: 13px 16px 13px 18px; border-radius: 14px; background: var(--card, var(--surface)); border: 1px solid var(--line); font-size: 15px; line-height: 1.6; }
+  .disc .msg::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); }
+  .disc .msg.you { background: color-mix(in srgb, var(--brand) 7%, var(--card, var(--surface))); }
+  .disc .msg header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .disc .msg header .sp { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .disc .msg header small { color: var(--muted); }
+  .disc .msg h4 { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 9px 0 2px; }
+  .disc .msg .md p { margin: 0 0 6px; }
+  .disc .msg.thinking { color: var(--muted); font-size: 13.5px; }
+  .disc .dots { display: inline-flex; gap: 4px; margin-left: 4px; }
+  .disc .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: dpulse 1.2s infinite; }
+  .disc .dots i:nth-child(2) { animation-delay: .2s; } .disc .dots i:nth-child(3) { animation-delay: .4s; }
+  .disc .stc { display: inline-flex; align-items: center; gap: 4px; height: 21px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 650; white-space: nowrap;
+    color: color-mix(in srgb, var(--c) 78%, var(--text)); background: color-mix(in srgb, var(--c) 15%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); }
+  .disc .st-propose { --c: var(--brand-soft); } .disc .st-support { --c: var(--done); } .disc .st-oppose { --c: var(--waiting); }
+  .disc .st-revise { --c: var(--thinking); } .disc .st-undecided, .disc .st-unstructured { --c: var(--idle); } .disc .st-changed { --c: var(--working); } .disc .st-pinned { --c: var(--brand-soft); }
+  .disc .composer { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .disc .composer textarea { min-height: 56px; max-height: 160px; padding: 9px 11px; border-radius: 11px; background: var(--raised); border: 1px solid var(--line); resize: vertical; font-size: 14px; color: var(--text); }
+  .disc .composer .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .disc .composer .row .grow { flex: 1; color: var(--muted); font-size: 11.5px; }
+  .disc .card h3 { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .disc .matrix { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 11.5px; }
+  .disc .matrix th { font-weight: 600; color: var(--muted); text-align: center; }
+  .disc .matrix th:first-child { text-align: left; }
+  .disc .matrix td { height: 32px; text-align: center; border-radius: 8px; background: var(--raised); color: var(--soft); }
+  .disc .matrix td.self { background: none; color: var(--muted); }
+  .disc .matrix td.y { background: color-mix(in srgb, var(--done) 18%, transparent); font-weight: 650; }
+  .disc .matrix td.n { background: color-mix(in srgb, var(--waiting) 16%, transparent); font-weight: 650; }
+  .disc .matrix .tx { display: block; font-size: 10px; }
+  .disc .prop { padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .disc .prop:first-of-type { border-top: 0; padding-top: 0; }
+  .disc .prop small { display: block; color: var(--muted); }
+  .disc .open { list-style: none; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--soft); }
+  .disc .open li::before { content: '○ '; color: var(--muted); }
+  .disc .grid { display: grid; gap: 8px; }
+  .disc .grid .cell { padding: 9px 11px; border-radius: 11px; background: var(--card, var(--surface)); border: 1px solid var(--line); font-size: 13px; }
+  .disc .grid .rl { color: var(--muted); font-size: 12px; font-weight: 650; padding-top: 9px; }
+  .disc .grid .chg { border-color: color-mix(in srgb, var(--working) 60%, transparent); }
+  .disc details.raw { border: 1px solid var(--line); border-radius: 10px; background: var(--card, var(--surface)); }
+  .disc details.raw summary { padding: 8px 12px; cursor: pointer; font-size: 12.5px; }
+  .disc details.raw pre { padding: 10px 12px; white-space: pre-wrap; border-top: 1px solid var(--line); font-size: 12px; }
+  @media (max-width: 1180px) { .disc { grid-template-columns: 200px minmax(0, 1fr); } .disc .side { grid-column: 1 / -1; } }
+  @media (prefers-reduced-motion: reduce) { .disc .live.on i, .disc .dots i { animation: none; } }
 </style>
 </head>
 <body>
@@ -367,7 +437,7 @@
     noTasks: 'No tasks yet', noTasksHint: 'Start one with New task → Agentic workflow (Pipeline or Best-of-N).',
     category: { workflow: 'Agentic workflow', analysis: 'Analysis', single: 'Single agent' },
     status: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', stopped: 'Stopped', failed: 'Failed' },
-    tabs: { runbook: 'Runbook', overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
+    tabs: { discussion: 'Discussion', runbook: 'Runbook', overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
     stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
     stopStage: 'Stop stage', stopStageAsk: s => `Stop ${s}? Its agents stop and you decide what's next; worktrees stay.`, yesStopStage: 'Stop the stage',
     stopAgent: 'Stop', stopAgentTip: 'Stop this agent — its worktree stays', stopAgentAsk: 'Stop this agent? Its worktree stays.',
@@ -413,6 +483,25 @@
       violation: { continue: 'Continue anyway', abort: 'Abort' },
       failed: { retry: 'Try again', abort: 'Abort' },
       stopped: { retry: 'Run them again', continue: 'Go on with what finished', abort: 'Stop the task' },
+      discussion: { next: 'Next round', end: 'End & decide', abort: 'Abort' },
+      'discussion-end': { adopt: 'Adopt decision', another: 'Another round', abort: 'Abort' },
+    },
+    disc: {
+      notYet: 'The discussion hasn’t started', notYetHint: 'It starts when the task reaches its discussion stage.',
+      views: { thread: 'Thread', columns: 'Columns', timeline: 'Stance timeline', raw: 'Raw' },
+      round: (r, n) => `Round ${r} of ${n}`, agree: a => a?.reached ? `${a.agree} of ${a.of} agree — consensus` : a?.of ? `${a.agree} of ${a.of} agree` : 'no agreement yet',
+      stance: { propose: 'Proposes', support: 'Supports', oppose: 'Opposes', revise: 'Revised', undecided: 'Undecided' },
+      live: { speaking: 'Speaking', waiting: 'Next', done: 'Done', idle: 'Waiting', removed: 'Removed' },
+      confidence: 'Confidence', you: 'You', toAll: 'Everyone', thinking: name => `${name} is thinking`, unstructured: 'Unstructured', changed: 'Changed stance', pinned: 'Pinned',
+      pin: 'Pin', unpin: 'Unpin', send: 'Send', ask: 'Ask', pause: 'Pause after this round', unpause: 'Don’t pause', end: 'End & decide',
+      composerPh: 'Write to everyone, or pick one above to ask a question — it goes into the next turn', keys: 'Ctrl+Enter send',
+      search: 'Search the thread…', all: 'All participants', showAll: 'Show all', save: 'Save thread.md',
+      agreement: 'Agreement', matrixHead: 'Row supports column', supports: 'supports', opposes: 'opposes', neutral: 'neutral',
+      proposals: 'Proposals', noProposals: 'No proposal yet', support: n => `${n} support`, by: (who, r) => `by ${who}, round ${r}`,
+      open: 'Open points', none: 'None', decision: 'Decision', decidedBy: who => `Written by ${who === 'you' ? 'you' : who}`,
+      ended: { consensus: 'Ended: they agree', rounds: 'Ended: the rounds ran out', budget: 'Ended: the token budget ran out', owner: 'Ended by you' },
+      running: (r, n) => `Round ${r} of ${n} — it stops on consensus, the last round, the token budget, or End & decide`,
+      tokens: n => `${(n / 1000).toFixed(1)}k tokens`, asked: 'Asked — they answer next', sent: 'Sent — it goes into the next turn',
     },
     mergeInto: b => `Merge into ${b}`, applyFiles: 'Apply to my files', yourFiles: b => `your files on ${b} (uncommitted included)`, pickFirst: 'Choose a candidate first (Decision or Candidates tab)',
     noDecision: 'No decision yet', noDecisionHint: 'The Arbiter decides after the tests and reviews — its ranking appears here.',
@@ -436,7 +525,7 @@
     notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
     send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
     stopPlanAsk: 'Stop this plan? Steps not run stay as they are.', yesStopPlan: 'Stop plan',
-    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', runbook: 'Run, skip or edit each step in the Runbook tab — in order', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
+    gateHint: { discussion: 'Paused between rounds — write to the participants, then go on or end it', 'discussion-end': 'Adopt writes decision.md for the next stages: your note, the decider’s answer, or the proposal most agree with', approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', runbook: 'Run, skip or edit each step in the Runbook tab — in order', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
     ago: at => timeAgo(at),
     log: {
       started: e => e.fromWorktree ? `Task started from your files as they were (on ${e.branch || '?'})` : `Task started from ${String(e.base || '').slice(0, 8)} on ${e.branch || '?'}`,
@@ -723,8 +812,9 @@
       const arb = t.template.stages.some(s => s.role === 'arbiter' && s.agents?.length);
       const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ...(t.runbook ? [['runbook', t.runbook.steps.length || '']] : []), ['reviews', t.instances.filter(i => (i.role === 'reviewer' || i.role === 'analyst') && i.status === 'done').length || ''], ['log']]
         : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['decision'], ['tests'], ['log']];
+      if (t.template.stages.some(s => s.role === 'discussion')) { tabs.splice(1, 0, ['discussion', t.discussion?.messages?.length || '']); }
       if (!tabs.some(([k]) => k === this.tab)) { this.tab = 'overview'; }
-      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), runbook: () => this.#runbook(t), log: () => this.#log(t) }[this.tab]();
+      const pane = { discussion: () => this.#discussion(t), overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), runbook: () => this.#runbook(t), log: () => this.#log(t) }[this.tab]();
       return `<div class="dhead"><div class="t">
           <button class="crumb" type="button" data-act="board">${ICON.back} ${T.back}</button>
           <h1 tabindex="-1">${esc(t.title)}</h1>
@@ -751,6 +841,12 @@
     }
 
     #stageNote(t, s, st) {
+      // A discussion: "Round 2/3 · 2 of 3 agree"
+      if (s.role === 'discussion' && t.discussion?.stage === s.id) {
+        const d = t.discussion;
+        const n = Math.min(10, (Number(s.rounds) || 3) + (d.extraRounds || 0));
+        return `Round ${d.round}/${n}${d.agreement?.of ? ` · ${d.agreement.agree} of ${d.agreement.of} agree` : ''}`;
+      }
       const round = t.instances.filter(i => i.stage === s.id && i.round === st.round);
       if (s.role === 'builder') { const n = t.candidates.filter(c => c.id !== 'integrate-1').length; return n ? `×${n}` : ''; }
       if (s.action === 'integrate') { const c = t.candidates.find(x => x.id === 'integrate-1'); return c ? `${c.parts.length} parts` : ''; }
@@ -792,6 +888,128 @@
         <div><div class="label" style="margin-bottom:6px">${T.instances}</div>
           ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows}</tbody></table>` : stateBlock({ line: T.noInstances })}</div>
       </div>`;
+    }
+
+    // ---------- Discussion (14): who's in it, the thread (or columns / stance timeline / raw), and the summary ----------
+
+    disc = { view: 'thread', filter: null, q: '', to: '', text: '' };
+
+    #discussion(t) {
+      const d = t.discussion;
+      if (!d) { return stateBlock({ kind: 'empty', icon: novi(MANAGER, 'l'), title: T.disc.notYet, line: T.disc.notYetHint }); }
+      const D = T.disc;
+      const st = t.template.stages.find(x => x.id === d.stage);
+      const rounds = Math.min(10, (Number(st?.rounds) || 3) + (d.extraRounds || 0));
+      const name = id => id === 'you' ? D.you : d.participants.find(p => p.id === id)?.name || id;
+      const adapter = id => d.participants.find(p => p.id === id)?.adapter;
+      const color = id => id === 'you' ? 'var(--brand)' : Agent.color(adapter(id) || 'other');
+      const latest = {};
+      for (const m of d.messages) { if (m.reply) { latest[m.from] = m; } }
+      const live = new Map(t.instances.filter(i => i.speaker && i.stage === d.stage && (LIVE.has(i.status) || i.status === 'queued')).map(i => [i.speaker, i.status]));
+      const chip = (cls, text) => `<span class="stc st-${cls}">${esc(text)}</span>`;
+      const bar = (c, v) => `<span class="cbar" style="--c:${c}"><i style="width:${Math.round((v || 0) * 100)}%"></i></span>`;
+      const open = t.status === 'running' || t.status === 'needs-you';
+
+      const people = `<aside class="people" aria-label="Participants">
+        ${d.participants.map(p => {
+          const l = latest[p.id]?.reply;
+          const state = !d.active.includes(p.id) ? 'removed' : LIVE.has(live.get(p.id)) ? 'speaking' : live.get(p.id) === 'queued' || d.queue?.[0] === p.id ? 'waiting' : l ? 'done' : 'idle';
+          const c = { speaking: 'var(--working)', waiting: 'var(--thinking)', done: 'var(--done)', idle: 'var(--idle)', removed: 'var(--idle)' }[state];
+          return `<button type="button" class="who" data-disc-filter="${esc(p.id)}" aria-pressed="${this.disc.filter === p.id}" title="${esc(D.all)}: ${esc(p.name)}">
+            ${novi(p.adapter)}<span><b>${esc(p.name.split(' · ')[0])}</b><small>${esc(p.label)} · ${esc(p.id)}</small></span>
+            <span class="meta"><span class="live${state === 'speaking' ? ' on' : ''}" style="--c:${c}"><i></i>${D.live[state]}</span>${l ? chip(l.stance, D.stance[l.stance]) : ''}</span>
+            ${l ? `<span class="conf">${D.confidence} ${bar(color(p.id), l.confidence)}<b class="num">${l.confidence.toFixed(2)}</b></span>` : ''}
+          </button>`; }).join('')}
+        <span class="conf" style="grid-column:auto;padding:4px 8px">${D.tokens(d.tokens || 0)}</span>
+      </aside>`;
+
+      const q = this.disc.q.trim().toLowerCase();
+      const shown = d.messages.filter(m => (!this.disc.filter || m.from === this.disc.filter) && (!q || m.text.toLowerCase().includes(q)));
+      const card = m => {
+        const pin = `<button type="button" class="btn ghost sm" data-disc-pin="${esc(m.id)}" aria-pressed="${!!m.pinned}">${m.pinned ? D.unpin : D.pin}</button>`;
+        const head = `<header>${m.from === 'you' ? novi(MANAGER) : novi(adapter(m.from))}<b>${esc(name(m.from))}</b>${m.to ? `<small>→ ${esc(name(m.to))}</small>` : ''}<small>${clockTime(m.at)}</small>
+          <span class="sp">${m.pinned ? chip('pinned', D.pinned) : ''}${m.changed ? chip('changed', D.changed) : ''}${m.reply ? `${chip(m.reply.stance, D.stance[m.reply.stance])}<small class="num">${m.reply.confidence.toFixed(2)}</small>` : m.unstructured ? chip('unstructured', D.unstructured) : ''}${open ? pin : ''}</span></header>`;
+        const label = `${name(m.from)}, ${D.round(m.round, rounds)}${m.reply ? `, ${D.stance[m.reply.stance]}` : ''}`;
+        const body = m.reply
+          ? `<h4>Position</h4><div class="md">${renderMarkdown(m.reply.position)}</div>${m.reply.responses ? `<h4>Responses</h4><div class="md">${renderMarkdown(m.reply.responses)}</div>` : ''}${m.reply.proposal ? `<h4>Proposal</h4><div class="md">${renderMarkdown(m.reply.proposal)}</div>` : ''}`
+          : `<div class="md">${renderMarkdown(m.text)}</div>`;
+        return `<article class="msg${m.from === 'you' ? ' you' : ''}" id="dm-${esc(m.id)}" style="--c:${color(m.from)}" aria-label="${esc(label)}" data-k="dm:${esc(m.id)}">${head}${body}</article>`;
+      };
+      const thinking = [...live].filter(([, s]) => LIVE.has(s)).map(([id]) => id === 'decider'
+        ? `<article class="msg thinking" style="--c:var(--brand)" aria-label="${esc(D.decision)}">${esc(D.thinking(D.decision))}<span class="dots"><i></i><i></i><i></i></span></article>`
+        : `<article class="msg thinking" style="--c:${color(id)}" aria-label="${esc(D.thinking(name(id)))}">${novi(adapter(id))} ${esc(D.thinking(name(id)))}<span class="dots"><i></i><i></i><i></i></span></article>`).join('');
+      const byRound = [...new Set(shown.map(m => m.round))].sort((a, b) => a - b);
+      const thread = `<div role="feed" aria-busy="${live.size > 0}" aria-label="Discussion thread" style="display:flex;flex-direction:column;gap:10px">
+        ${byRound.map(r => `<div class="rhead"><b>${D.round(r, rounds)}</b>${r === d.round ? `<small>${esc(D.agree(d.agreement))}</small>` : ''}<hr></div>${shown.filter(m => m.round === r).map(card).join('')}`).join('')}
+        ${thinking}</div>`;
+      const ids = d.participants.map(p => p.id);
+      const allRounds = Array.from({ length: d.round }, (_, i) => i + 1);
+      const at = (id, r) => [...d.messages].reverse().find(m => m.from === id && m.round === r && m.reply);
+      const columns = `<div class="grid" role="table" style="grid-template-columns:80px repeat(${ids.length}, minmax(0, 1fr))"><span></span>${d.participants.map(p => `<span class="cell" role="columnheader">${novi(p.adapter, 's')} ${esc(p.name)}</span>`).join('')}
+        ${allRounds.map(r => `<span class="rl" role="rowheader">${D.round(r, rounds)}</span>${ids.map(id => { const m = at(id, r); return `<span class="cell" role="cell">${m ? `${chip(m.reply.stance, D.stance[m.reply.stance])}<div class="md">${renderMarkdown(m.reply.proposal || m.reply.position)}</div>` : '—'}</span>`; }).join('')}`).join('')}</div>`;
+      const timeline = `<div class="grid" role="table" style="grid-template-columns:200px repeat(${Math.max(1, d.round)}, minmax(140px, 1fr))"><span></span>${allRounds.map(r => `<span class="rl" role="columnheader">${D.round(r, rounds)}</span>`).join('')}
+        ${d.participants.map(p => `<span class="rl" role="rowheader">${novi(p.adapter, 's')} ${esc(p.name)}</span>${allRounds.map(r => { const m = at(p.id, r); return `<span class="cell${m?.changed ? ' chg' : ''}" role="cell">${m ? `${chip(m.reply.stance, D.stance[m.reply.stance])}${m.changed ? ` ${chip('changed', D.changed)}` : ''}<span class="conf" style="margin-top:6px">${bar(color(p.id), m.reply.confidence)}<b class="num">${m.reply.confidence.toFixed(2)}</b></span>` : '—'}</span>`; }).join('')}`).join('')}</div>`;
+      const raw = d.messages.map(m => `<details class="raw"><summary class="mono">${D.round(m.round, rounds)} · ${esc(m.from)}${m.to ? ` → ${esc(m.to)}` : ''} · ${m.text.length} chars</summary><pre>${esc(m.text)}</pre></details>`).join('');
+      const view = { thread, columns, timeline, raw }[this.disc.view] || thread;
+
+      const composer = open ? `<form class="composer" onsubmit="return false" aria-label="Write to the participants">
+        <div class="row"><label class="grow" style="flex:none">To <select data-disc-to aria-label="Send to"><option value="">${D.toAll}</option>${d.participants.filter(p => d.active.includes(p.id)).map(p => `<option value="${esc(p.id)}"${this.disc.to === p.id ? ' selected' : ''}>@${esc(p.name)}</option>`).join('')}</select></label></div>
+        <textarea data-disc-text aria-label="Message to the participants" placeholder="${esc(D.composerPh)}">${esc(this.disc.text)}</textarea>
+        <div class="row"><span class="grow">${D.keys}</span>
+          <button type="button" class="btn" data-disc-act="pause" aria-pressed="${!!d.pauseAfterRound}">${d.pauseAfterRound ? D.unpause : D.pause}</button>
+          ${t.gate?.kind === 'discussion' || d.ended ? '' : `<button type="button" class="btn" data-disc-act="end">${D.end}</button>`}
+          ${this.disc.to ? `<button type="button" class="btn" data-disc-act="ask">${D.ask}</button>` : ''}
+          <button type="button" class="btn primary" data-disc-act="message">${D.send}</button></div>
+      </form>` : '';
+
+      const center = `<section class="center">
+        <div class="dtools"><div class="seg" role="group" aria-label="View">${Object.entries(D.views).map(([k, n]) => `<button type="button" data-disc-view="${k}" aria-pressed="${this.disc.view === k}">${n}</button>`).join('')}</div>
+          <input data-disc-q value="${esc(this.disc.q)}" placeholder="${esc(D.search)}" aria-label="${esc(D.search)}">
+          ${this.disc.filter ? `<button type="button" class="btn ghost sm" data-disc-filter="">${D.showAll}</button>` : ''}
+          <button type="button" class="btn ghost sm" data-disc-save style="margin-left:auto">${D.save}</button></div>
+        ${view}${composer}</section>`;
+
+      // the summary: who backs whom now, the live proposals, open points, and the decision
+      const cell = (row, col) => {
+        if (row === col) { return '<td class="self">—</td>'; }
+        const l = latest[row]?.reply;
+        if (l?.agreesWith.includes(col)) { return `<td class="y">✓<span class="tx">${D.supports}</span></td>`; }
+        if (l?.stance === 'oppose' && ['propose', 'revise'].includes(latest[col]?.reply.stance)) { return `<td class="n">✗<span class="tx">${D.opposes}</span></td>`; }
+        return `<td>–<span class="tx">${D.neutral}</span></td>`;
+      };
+      const proposals = d.participants.map(p => latest[p.id]).filter(m => m && ['propose', 'revise'].includes(m.reply.stance))
+        .map(m => ({ m, n: 1 + d.participants.filter(q => latest[q.id]?.reply.agreesWith.includes(m.from)).length }))
+        .sort((a, b) => b.n - a.n);
+      const openPts = [...new Map(Object.values(latest).flatMap(m => m.reply.openPoints).map(o => [o.toLowerCase().replace(/\W+/g, ' ').trim(), o])).values()];
+      const decisionText = d.decision ? this.#artifact(t.id, d.decision.artifact) : null;
+      const side = `<aside class="side" aria-label="Summary">
+        <section class="card"><h3>${D.agreement}</h3><table class="matrix"><thead><tr><th>${D.matrixHead}</th>${d.participants.map(p => `<th title="${esc(p.name)}">${novi(p.adapter, 's')}</th>`).join('')}</tr></thead>
+          <tbody>${d.participants.map(r => `<tr><th>${novi(r.adapter, 's')} ${esc(r.label)}</th>${ids.map(c => cell(r.id, c)).join('')}</tr>`).join('')}</tbody></table>
+          <p class="conf" style="margin-top:8px">${esc(D.agree(d.agreement))}</p></section>
+        <section class="card"><h3>${D.proposals}</h3>${proposals.length ? proposals.map(({ m, n }) => `<div class="prop"><div class="md">${renderMarkdown(m.reply.proposal || m.reply.position)}</div><small>${esc(D.by(name(m.from), m.round))} · ${esc(D.support(n))}</small></div>`).join('') : `<small style="color:var(--muted)">${D.noProposals}</small>`}</section>
+        <section class="card"><h3>${D.open} · ${openPts.length}</h3>${openPts.length ? `<ul class="open">${openPts.map(o => `<li>${esc(o)}</li>`).join('')}</ul>` : `<small style="color:var(--muted)">${D.none}</small>`}</section>
+        <section class="card"><h3>${D.decision}</h3>
+          ${decisionText ? `<div class="md">${renderMarkdown(decisionText)}</div><small style="color:var(--muted)">${esc(D.decidedBy(d.decision.by))}</small>`
+            : `<small style="color:var(--muted)">${esc(d.ended ? D.ended[d.ended] || d.ended : D.running(d.round, rounds))}</small>`}</section>
+      </aside>`;
+      return `<div class="disc">${people}${center}${side}</div>`;
+    }
+
+    async #discussionAct(t, action, opts = {}) {
+      const r = await this.api.discussion?.(t.id, action, opts);
+      if (!r?.ok) { this.toast(r?.error || 'Something went wrong', true); return false; }
+      return true;
+    }
+
+    // Saves the thread as Markdown (thread.md, as the participants read it)
+    async #saveThread(t) {
+      const text = await this.api.artifact(t.id, 'thread.md').catch(() => null);
+      if (!text) { return this.toast('There is no thread yet', true); }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+      a.download = `discussion-${t.id}.md`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
 
     #plan(t) {
@@ -1041,7 +1259,7 @@
           <button class="btn danger" type="button" data-act="abort-yes">${g.kind === 'runbook' ? T.yesStopPlan : T.yesAbort}</button></div>`;
       }
       const picked = this.picked.get(t.id) || (g.kind === 'pick' && t.candidates.filter(x => x.status === 'active').length === 1 ? t.candidates.find(x => x.status === 'active').id : null);
-      const primary = g.actions.find(a => ['accept', 'approve', 'merge'].includes(a)) || g.actions.find(a => a === 'pick') || g.actions.find(a => a === 'retry' && g.kind !== 'pick' && g.kind !== 'tests-failed') || null;
+      const primary = g.actions.find(a => ['accept', 'approve', 'merge', 'adopt', 'next'].includes(a)) || g.actions.find(a => a === 'pick') || g.actions.find(a => a === 'retry' && g.kind !== 'pick' && g.kind !== 'tests-failed') || null;
       const btn = a => {
         if (a === 'pick') {
           const main = primary === 'pick';
@@ -1097,6 +1315,7 @@
 
     #preferredTab(task) {
       if (task?.gate?.kind === 'runbook') { return 'runbook'; }
+      if (['discussion', 'discussion-end'].includes(task?.gate?.kind) || task?.template.stages[task.stage]?.role === 'discussion') { return 'discussion'; }
       if (task?.gate?.kind === 'decision' || (task?.gate?.kind === 'merge' && task.candidates.filter(x => x.status === 'active').length > 1)) { return 'decision'; }
       if (task?.gate?.kind === 'pick') { return 'candidates'; }
       if (task?.gate?.kind === 'approve') { return 'plan'; }
@@ -1189,10 +1408,20 @@
           q.setSelectionRange(pos, pos);
         }
         if (e.target.matches('[data-note]') && this.composing) { this.composing.note = e.target.value; }
+        if (e.target.matches('[data-disc-text]')) { this.disc.text = e.target.value; }
+        if (e.target.matches('[data-disc-q]')) {
+          this.disc.q = e.target.value;
+          const pos = e.target.selectionStart;
+          this.render();
+          const q = this.el.main.querySelector('[data-disc-q]');
+          q?.focus();
+          q?.setSelectionRange(pos, pos);
+        }
       });
       this.el.main.addEventListener('change', e => {
         if (this.view === 'builder' && e.target.matches('select') && this.builder.onChange(e)) { return this.render(); }
         if (e.target.id === 'proj') { this.project = e.target.value; this.render(); }
+        if (e.target.matches('[data-disc-to]')) { this.disc.to = e.target.value; this.render(); }
       });
       this.el.main.addEventListener('click', async e => {
         if (this.editing) {
@@ -1214,6 +1443,28 @@
         }
         const tab = e.target.closest('[data-tab]');
         if (tab) { this.tab = tab.dataset.tab; return this.render(); }
+        // The discussion tab
+        const dv = e.target.closest('[data-disc-view]');
+        if (dv) { this.disc.view = dv.dataset.discView; return this.render(); }
+        const df = e.target.closest('[data-disc-filter]');
+        if (df) { this.disc.filter = df.dataset.discFilter && this.disc.filter !== df.dataset.discFilter ? df.dataset.discFilter : null; return this.render(); }
+        if (t && e.target.closest('[data-disc-save]')) { return this.#saveThread(t); }
+        const dp = e.target.closest('[data-disc-pin]');
+        if (t && dp) { return this.#discussionAct(t, 'pin', { message: dp.dataset.discPin, pinned: dp.getAttribute('aria-pressed') !== 'true' }); }
+        const da = e.target.closest('[data-disc-act]');
+        if (t && da) {
+          const act = da.dataset.discAct;
+          if (act === 'pause') { return this.#discussionAct(t, 'pause', { on: !t.discussion?.pauseAfterRound }); }
+          if (act === 'end') { return this.#discussionAct(t, 'end'); }
+          const text = this.disc.text.trim();
+          if (!text) { return this.toast('Write the message first', true); }
+          if (await this.#discussionAct(t, act === 'ask' ? 'ask' : 'message', { text, to: this.disc.to || null })) {
+            this.disc.text = '';
+            this.toast(act === 'ask' ? T.disc.asked : T.disc.sent);
+            this.render();
+          }
+          return;
+        }
         const term = e.target.closest('[data-term]');
         if (term && t) {
           const r = await this.api.terminal(t.id, term.dataset.term);
@@ -1328,6 +1579,10 @@
           return;
         }
         const t = this.tasks.get(this.open);
+        if (e.key === 'Enter' && e.ctrlKey && e.target.matches?.('[data-disc-text]')) {
+          e.preventDefault();
+          return this.el.main.querySelector(this.disc.to ? '[data-disc-act="ask"]' : '[data-disc-act="message"]')?.click();
+        }
         if (e.key === 'Enter' && e.ctrlKey && e.target.matches?.('[data-note]')) {
           e.preventDefault();
           return this.el.main.querySelector('[data-act="send-note"]')?.click();

@@ -486,6 +486,24 @@ const reported = task =>
       },
     }
   );
+  await run(
+    "Design debate (New task pattern: Claude + Codex discuss, Codex decides, Claude plans and builds, merged)",
+    {
+      category: "workflow",
+      workflow: {
+        pattern: "debate",
+        planner: "claude",
+        agents: { claude: 1, codex: 1 },
+        reviewer: "codex",
+        arbiter: "codex",
+      },
+    },
+    {
+      expect: (task, root, store) =>
+        merged(task, root) ||
+        (/Decision/.test(store.readArtifact(task.id, "design.md") || "") ? null : "no design.md"),
+    }
+  );
   // Discussions: every format; the stub's participants come round to the opener's proposal in round 2
   const spoke = () => runners.at(-1).spoke;
   for (const [format, opts, want, note] of [
@@ -531,7 +549,7 @@ const reported = task =>
   console.log(
     failures.length
       ? `\n✗ ${failures.length} failed:\n  ${failures.join("\n  ")}`
-      : "\n✓ all 11 ran as expected"
+      : "\n✓ all 12 ran as expected"
   );
   process.exitCode = failures.length ? 1 : 0;
 })();

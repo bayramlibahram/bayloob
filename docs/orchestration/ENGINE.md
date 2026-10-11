@@ -140,7 +140,12 @@ A stage with `role: "discussion"` lets agents talk a question through in rounds;
   add or remove a participant from the next round. Stop on one speaker skips its turn; Stop stage pauses.
 - **Artifacts:** `thread.md`, `discussion.jsonl` (one message a line), `discussion-summary.json`, `decision.md`.
 - **Restart:** a turn lost to a restart is asked again of the same speaker, and the discussion goes on.
-- No UI yet (Part B: prototype first, for the owner's approval).
+- **UI:** Tasks → task detail → **Discussion** tab (the approved prototype, `docs/orchestration/prototype/discussion.html`):
+  participants with live state, stance and confidence; Thread / Columns / Stance timeline / Raw; search, filter by
+  participant, save thread.md; agreement matrix, proposals, open points, decision; a composer (to all or @one, ask,
+  pin, pause after the round, end & decide). The stepper shows `Round 2/3 · 2 of 3 agree`.
+- **Design debate** (New task → Agentic workflow): the agents picked discuss (Architect, Skeptic, Pragmatist…),
+  the Arbiter agent writes `design.md`, then the planner plans and builds it → tests → review → Arbiter → merge.
 
 ## Not yet / limitations
 - Read-only Codex runs with `--sandbox read-only --ask-for-approval never` (#34). With the default on-request

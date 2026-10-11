@@ -11,6 +11,7 @@
     bestofn: { name: "Best-of-N", hint: "N builders, the Arbiter picks" },
     split: { name: "Split work", hint: "one subtask each" },
     board: { name: "Review board", hint: "reviewers on the current branch" },
+    debate: { name: "Design debate", hint: "agents discuss, then one builds" },
   };
   const PRESETS = {
     audit: "Code audit",
@@ -186,6 +187,24 @@
     };
     const merge = { id: "merge", title: "You merge", role: "you", mode: "you", agents: [] };
     switch (w.pattern) {
+      case "debate":
+        return [
+          {
+            id: "talk",
+            title: `Discuss ×${n}`,
+            role: "discussion",
+            mode: "read-only",
+            agents: used(w.agents),
+            note: "in turn, until they agree",
+            gate: "human",
+          },
+          plan,
+          { ...build, title: "Build", agents: [[w.planner, 1]], parallel: false },
+          { ...tests, note: "" },
+          review,
+          arbiter,
+          merge,
+        ];
       case "pipeline":
         return [plan, build, tests, review, arbiter, merge];
       case "split":
@@ -232,6 +251,13 @@
     }
     if (c.workflow.pattern === "board") {
       return ["Nothing is changed — you read the consolidated findings"];
+    }
+    if (c.workflow.pattern === "debate") {
+      return [
+        "After the discussion — adopt the decision, or ask for another round",
+        "After the plan — approve or change it before anyone writes code",
+        "Before merge — accept the Arbiter's recommendation",
+      ];
     }
     return [
       "After the plan — approve or change it before anyone writes code",
