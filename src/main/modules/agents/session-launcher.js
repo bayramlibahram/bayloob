@@ -72,6 +72,14 @@ function viaLoginShell(argv) {
   return [shell, "-lic", script, "bayloob", ...argv];
 }
 
+// A Bayloob on another port or with its own token file (a second instance, --demo) must hear its own agents'
+// hooks: tmux starts sessions with its server's environment, not ours, so those two are passed on explicitly.
+function hookEnv(env = process.env) {
+  return ["BAYLOOB_PORT", "BAYLOOB_TOKEN_FILE"]
+    .filter(k => env[k])
+    .flatMap(k => ["-e", `${k}=${env[k]}`]);
+}
+
 class SessionLauncher {
   constructor({ terminal = new TerminalLauncher() } = {}) {
     this.terminal = terminal;
@@ -113,6 +121,7 @@ class SessionLauncher {
       "-P",
       "-F",
       "#{pane_id}",
+      ...hookEnv(),
       ...viaLoginShell(agentCommand(agent, prompt.trim(), { readOnly, strict, resume })),
     ]);
     if (attach) {
@@ -223,4 +232,9 @@ class SessionLauncher {
   }
 }
 
-module.exports = { SessionLauncher, promptSteps, ENTER_DELAY_MS };
+module.exports = {
+  hookEnv,
+  SessionLauncher,
+  promptSteps,
+  ENTER_DELAY_MS,
+};

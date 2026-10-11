@@ -14,7 +14,12 @@
     stops for you.
 - **Review board** (orchestration 05):
   - N read-only reviewers check your uncommitted changes, or your branch since it left main.
-  - Each review is kept on its own, with its findings count, in a new Reviews tab. They are merged when the
+  - Each review is kept on its own, with its findings count, in a new Reviews tab.
+  - Checked with real agents on a toy repo:
+    - Split: Claude planned two disjoint subtasks, two Claude builders worked in parallel, the parts were
+      integrated, 11/11 tests passed, and the review and merge followed.
+    - Board: Claude and Codex each found real rounding and edge-case bugs.
+  - The plan's raw subtasks JSON is folded under the subtask cards. They are merged when the
     Arbiter arrives (06).
 - Both patterns:
   - start from the New task dialog;
@@ -53,6 +58,9 @@
   still shows the red sound icon on the bar.
 
 ### Fixed
+- A Bayloob on another port or with its own token file (a second instance, `--demo`) didn't hear its task agents:
+  tmux starts sessions with its server's environment, so their hooks went to the default port. `BAYLOOB_PORT` and
+  `BAYLOOB_TOKEN_FILE` are now passed into every session Bayloob starts.
 - Retry on a "couldn't run" task gate asked for a note the Tasks page never sent, so it failed.
 - Stopping Bayloob left Electron processes behind (~725 MB) when the dev wrapper was killed on its own — an
   IDE's Stop sends SIGKILL to `bun` alone, and Electron kept running without its starter. Bayloob now quits

@@ -316,7 +316,7 @@
     terminal: 'Terminal', terminalTip: 'Open a terminal attached to this agent',
     istatus: { queued: 'queued', starting: 'starting', running: 'working', done: 'done', failed: 'failed', stopped: 'stopped', interrupted: 'interrupted' },
     mode: { writes: 'writes', 'read-only': 'read-only', plan: 'plan' },
-    subtasks: 'Subtasks', subsHint: 'Each builder gets one subtask and changes only its files.',
+    subtasks: 'Subtasks', rawJson: 'Subtasks as the planner wrote them (JSON)', subsHint: 'Each builder gets one subtask and changes only its files.',
     clash: (a, b, f) => `${a} and ${b} both own ${f}`, subsBad: 'The plan has no usable subtasks — ask for changes',
     partOf: id => `Part · ${id}`, testedIn: 'Tested as part of integrate-1', inIntegrated: 'Merged into integrate-1', parts: ids => `Parts: ${ids.join(', ')}`, integrated: 'All parts',
     reviews: 'Reviews', reviewOf: l => `Reviewing ${l}`, noReviews: 'No reviews yet', noReviewsHint: 'The reviewers are reading — each answer appears here.',
@@ -622,7 +622,19 @@
     #plan(t) {
       const plan = this.#artifact(t.id, 'plan.md');
       if (plan === undefined) { return `<div class="empty">${T.loading}</div>`; }
-      return plan ? `${this.#subtasks(t)}<div class="card md" style="max-width:980px">${renderMarkdown(plan)}</div>` : `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noPlan}</b>${T.noPlanHint}</div>`;
+      if (!plan) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noPlan}</b>${T.noPlanHint}</div>`; }
+      // Split work: the subtasks block is shown as cards above; the raw JSON stays one click away
+      let body = plan;
+      let raw = '';
+      if (t.subtasks) {
+        const blocks = [...plan.matchAll(/```(?:json)?\s*\n[\s\S]*?```/g)].filter(m => m[0].includes('"subtasks"'));
+        const last = blocks.at(-1);
+        if (last) {
+          body = plan.slice(0, last.index) + plan.slice(last.index + last[0].length);
+          raw = `<details class="more"><summary>${T.rawJson}</summary><pre class="output">${esc(last[0].replace(/^```(?:json)?\s*\n|```$/g, ''))}</pre></details>`;
+        }
+      }
+      return `${this.#subtasks(t)}<div class="card md" style="max-width:980px">${renderMarkdown(body)}${raw}</div>`;
     }
 
     // Split work: who owns which files — overlaps marked, before any builder starts
