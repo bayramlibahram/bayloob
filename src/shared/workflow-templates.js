@@ -347,6 +347,38 @@
     gate,
   });
 
+  // Lead + team (28): one agent leads — plans and splits, reviews each part, fixes the integrated branch, sums up
+  const LEAD_REVIEW_PROMPT = lines(
+    "You lead this task: you made the plan and split it between the team. Review this change against your plan —",
+    "one member's part, or (after integration) all parts together.",
+    "Run `git diff {{base}}...{{branch}}` and read what you need. Do not change any file.",
+    "Check that it does its subtask, stays in its own files, and fits the plan and the other parts.",
+    'Answer with findings, one per line as `path:line — problem — what to do`, most important first. If it is right, answer "No findings".',
+    "",
+    "Its subtask (empty after integration):",
+    "{{subtask}}",
+    "",
+    "Your plan:",
+    "{{artifact:plan.md}}"
+  );
+  const LEAD_FIX_PROMPT = lines(
+    "Your lead reviewed your part and asks for these changes:",
+    "{{artifact:review.md}}",
+    "",
+    "Make them in your own files only — the other builders change the rest — then run the project's tests.",
+    "",
+    "Your subtask:",
+    "{{subtask}}"
+  );
+  const LEAD_SUMMARY_PROMPT = lines(
+    "You led this task. Write the summary for the owner, as Markdown: what was built (part by part), how it fits",
+    "your plan, what the tests say, and what is left or risky. Run `git diff {{base}}...{{branch}}` if you need to.",
+    "Do not change any file.",
+    "",
+    "Your plan:",
+    "{{artifact:plan.md}}"
+  );
+
   // Design debate: who's who in the discussion, in the order the agents were picked
   const DEBATE_ROLES = [
     "Architect",
@@ -508,6 +540,85 @@
           gate: "always",
         },
         arbiterStage(),
+        { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
+      ],
+    },
+    lead: {
+      id: "lead",
+      name: "Lead + team",
+      description:
+        "One agent leads: it plans and splits, the team builds the parts, the lead reviews each one (changes go back to its builder), fixes the integrated branch and sums up → you merge",
+      builtin: true,
+      stages: [
+        {
+          id: "plan",
+          title: "Lead plans + splits",
+          role: "planner",
+          mode: "plan",
+          split: true,
+          lead: true,
+          agents: [{ adapter: "claude", count: 1 }],
+          prompt: SPLIT_PLAN_PROMPT,
+          artifact: "plan.md",
+          gate: "human",
+        },
+        {
+          id: "build",
+          title: "Team builds",
+          role: "builder",
+          mode: "writes",
+          split: true,
+          agents: [
+            { adapter: "claude", count: 1 },
+            { adapter: "codex", count: 1 },
+          ],
+          parallel: true,
+          prompt: SPLIT_BUILD_PROMPT,
+          gate: "always",
+        },
+        {
+          id: "review",
+          title: "Lead reviews",
+          role: "reviewer",
+          mode: "read-only",
+          lead: true,
+          agents: [{ adapter: "claude", count: 1 }],
+          perCandidate: true,
+          prompt: LEAD_REVIEW_PROMPT,
+          artifact: "review.md",
+          gate: "no-findings",
+          onFail: { goto: "build", prompt: LEAD_FIX_PROMPT, maxLoops: 2 },
+        },
+        // the integrated branch is the lead's: test failures there are fixed by the lead's agent
+        {
+          id: "integrate",
+          title: "Integrate",
+          role: "you",
+          action: "integrate",
+          by: "lead",
+          gate: "always",
+        },
+        {
+          id: "tests",
+          title: "Tests",
+          role: "tester",
+          action: "run-tests",
+          perCandidate: true,
+          gate: "tests-pass",
+          onFail: { goto: "build", prompt: FIX_TESTS_PROMPT, maxLoops: 2 },
+        },
+        {
+          id: "summary",
+          title: "Lead sums up",
+          role: "reviewer",
+          mode: "read-only",
+          lead: true,
+          agents: [{ adapter: "claude", count: 1 }],
+          perCandidate: true,
+          prompt: LEAD_SUMMARY_PROMPT,
+          artifact: "summary.md",
+          gate: "always",
+        },
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
       ],
     },
@@ -865,7 +976,7 @@
     const preset = BUILTINS[w.pattern];
     if (!preset) {
       throw new Error(
-        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline, Best-of-N, Split work, Review board and Design debate can`
+        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline, Best-of-N, Split work, Review board, Design debate and Lead + team can`
       );
     }
     const t = clone(preset);
@@ -900,6 +1011,11 @@
         if (s.role === "builder") {
           s.agents = [{ adapter: w.planner || "claude", count: 1 }];
         }
+      }
+      // Lead + team: the lead (the planner picked) also reviews and sums up; there is no separate reviewer
+      if (s.lead) {
+        s.agents = [{ adapter: w.planner || "claude", count: 1 }];
+        continue;
       }
       // A Review board's reviewers are the agents picked in the dialog
       if (s.role === "reviewer" && w.pattern === "board" && builders.length) {

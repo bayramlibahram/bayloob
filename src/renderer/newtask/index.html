@@ -249,7 +249,8 @@
     secretWait: names => `${names.join(', ')} looks like it holds a secret — remove it, or press Send anyway`,
     chars: n => `${n} chars`, emptyClipboard: 'The clipboard is empty', attaching: 'Wait — the files are still being attached',
     worktree: 'In a new git worktree', worktreeSub: 'its own copy on a bayloob/… branch', openIn: 'Open in', notInstalled: 'Not installed', turnedOff: 'Turned off in Settings',
-    builders: 'Builders · each in its own worktree', participants: 'Discussion · read-only, they speak in turn', plannerBuilds: 'Planner · also builds', reviewers: 'Reviewers · read-only, on the current branch', analysts: 'Analysts · read-only, in parallel',
+    builders: 'Builders · each in its own worktree', participants: 'Discussion · read-only, they speak in turn', plannerBuilds: 'Planner · also builds',
+    lead: 'Lead', team: 'Team · one part each, in its own worktree', reviewers: 'Reviewers · read-only, on the current branch', analysts: 'Analysts · read-only, in parallel',
     planner: 'Planner', reviewer: 'Reviewer', arbiter: 'Arbiter', task: 'Task', taskPh: 'Describe the change — what, where, and how to know it works.',
     question: 'Question', questionPh: 'What should the analysts find out?',
     free: (f, m) => `${f} free of ${m}`, queue: n => `${n} will queue`, word: { builder: 'builder', reviewer: 'reviewer', analyst: 'analyst', participant: 'participant' },
@@ -290,7 +291,7 @@
   const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   // Workflow patterns the engine can run; analyses use their own preset-to-template path.
-  const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board', 'debate'];
+  const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board', 'debate', 'lead'];
   const runnable = c => c.category === 'analysis' || (c.category === 'workflow' && (!!c.workflow.template || RUNNABLE.includes(c.workflow.pattern)));
   // One of the owner's templates as the dialog's stage list (the shape TaskShape.stages gives)
   const templateStages = t => t.stages.map(s => ({
@@ -718,12 +719,13 @@
           ${this.#baseRow()}${text}${customize}`;
       }
       const debate = w.pattern === 'debate';
+      const lead = w.pattern === 'lead';
       return `${presets}
-        ${board ? '' : this.#select('workflow.planner', w.planner, debate ? T.plannerBuilds : T.planner)}
-        <div class="label">${board ? T.reviewers : debate ? T.participants : T.builders}</div>
+        ${board ? '' : this.#select('workflow.planner', w.planner, debate ? T.plannerBuilds : lead ? T.lead : T.planner)}
+        <div class="label">${board ? T.reviewers : debate ? T.participants : lead ? T.team : T.builders}</div>
         ${this.#agentRows(w.agents, board || debate ? 'read-only' : 'writes', board ? T.word.reviewer : debate ? T.word.participant : T.word.builder)}
         ${['pipeline', 'split', 'debate'].includes(w.pattern) ? this.#select('workflow.reviewer', w.reviewer, T.reviewer) : ''}
-        ${this.#select('workflow.arbiter', w.arbiter, T.arbiter, board ? [] : builders)}
+        ${lead ? '' : this.#select('workflow.arbiter', w.arbiter, T.arbiter, board ? [] : builders)}
         ${this.#baseRow()}${text}${customize}`;
     }
 
@@ -860,6 +862,9 @@
       if (w.pattern === 'board') {
         const what = this.#base(c) === 'worktree' ? 'your uncommitted changes in' : 'the current branch of';
         return `<b>${n} reviewer${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) read ${what} <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is changed.</b> Each review is kept on its own, with its findings.`;
+      }
+      if (w.pattern === 'lead') {
+        return `<b>${name(w.planner)}</b> <b>leads</b>: it plans and splits the work into parts that own separate files. <b>${n} builder${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) build one part each, in parallel. The lead reviews every part — changes go back to that part’s builder — then the parts are <b>integrated</b>, tested (the lead fixes what fails), and the lead writes the summary. You’ll be asked: <b>after the plan</b> and <b>before merge</b>.`;
       }
       if (w.pattern === 'debate') {
         return `<b>${n} agent${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) <b>discuss the design</b> in turn, read-only, until they agree (3 rounds at most); you can write to them, pause or end it. Arbiter: <b>${name(w.arbiter)}</b> writes the decision. Then <b>${name(w.planner)}</b> plans and builds it in its own worktree. You’ll be asked: <b>after the discussion</b>, <b>after the plan</b> and <b>before merge</b>.`;

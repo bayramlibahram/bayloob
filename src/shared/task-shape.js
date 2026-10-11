@@ -12,6 +12,7 @@
     split: { name: "Split work", hint: "one subtask each" },
     board: { name: "Review board", hint: "reviewers on the current branch" },
     debate: { name: "Design debate", hint: "agents discuss, then one builds" },
+    lead: { name: "Lead + team", hint: "one agent leads, the team builds" },
   };
   const PRESETS = {
     audit: "Code audit",
@@ -204,6 +205,29 @@
     };
     const merge = { id: "merge", title: "You merge", role: "you", mode: "you", agents: [] };
     switch (w.pattern) {
+      case "lead":
+        return [
+          { ...plan, title: "Lead plans", note: "and splits the work" },
+          { ...build, title: `Team ×${n}`, note: "one part each" },
+          {
+            id: "review",
+            title: "Lead reviews",
+            role: "reviewer",
+            mode: "read-only",
+            agents: [[w.planner, 1]],
+            note: "changes go back to the part's builder",
+          },
+          { id: "integrate", title: "Integrate", role: "action", mode: "action", agents: [] },
+          { ...tests, note: "the lead fixes failures" },
+          {
+            id: "summary",
+            title: "Lead sums up",
+            role: "reviewer",
+            mode: "read-only",
+            agents: [[w.planner, 1]],
+          },
+          merge,
+        ];
       case "debate":
         return [
           {
@@ -274,6 +298,12 @@
     }
     if (c.workflow.pattern === "board") {
       return ["Nothing is changed — you read the consolidated findings"];
+    }
+    if (c.workflow.pattern === "lead") {
+      return [
+        "After the plan — approve the lead's split, or change it, before anyone writes code",
+        "Before merge — read the lead's summary and merge the integrated change",
+      ];
     }
     if (c.workflow.pattern === "debate") {
       return [

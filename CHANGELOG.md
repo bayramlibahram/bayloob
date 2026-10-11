@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Lead + team** (#28), a new workflow pattern in New task: the agent you pick as the **lead** plans and splits the
+  work; the team builds one part each in its own worktree; the lead reviews every part (read-only) and changes go
+  back to that part's builder; the parts are integrated — that branch is the lead's, so it fixes what fails the
+  tests — and the lead writes the summary you read before you merge.
+
 ## 0.8.0 — 2026-10-11
 
 ### Added

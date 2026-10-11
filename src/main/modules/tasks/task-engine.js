@@ -786,6 +786,11 @@ class TaskEngine extends EventEmitter {
     } else if (st.action === "collect") {
       await this.#collect(task, st);
     } else if (st.action === "merge") {
+      // No Arbiter picked (Lead + team): one candidate left is the one to merge
+      const left = this.#active(task);
+      if (!task.winner && left.length === 1) {
+        task.winner = left[0].id;
+      }
       this.#openGate(task, "merge", this.#mergeTitle(task), this.#mergeExtra(task));
     } else if (st.role === "arbiter" && !st.agents?.length) {
       // No Arbiter agent in this template: the owner picks between the candidates
@@ -2219,6 +2224,10 @@ class TaskEngine extends EventEmitter {
       return;
     }
     const parts = task.candidates.filter(c => c.subtask && c.status === "active");
+    // Lead + team: the integrated branch is the lead's (its agent fixes what fails there)
+    const st = this.#stage(task);
+    const lead =
+      st?.by === "lead" ? task.template.stages.find(s => s.lead)?.agents?.[0]?.adapter : null;
     const r = await this.workspace
       .integrate({
         root: task.project.root,
@@ -2248,7 +2257,7 @@ class TaskEngine extends EventEmitter {
     }
     task.candidates.push({
       id: INTEGRATED,
-      adapter: parts[0]?.adapter || "claude",
+      adapter: lead || parts[0]?.adapter || "claude",
       parts: parts.map(c => c.id),
       status: "active",
       dir: r.dir,

@@ -23,6 +23,7 @@ test("built-ins are listed first and read-only; a copy saves under a free id", (
       ["pipeline", true],
       ["bestofn", true],
       ["split", true],
+      ["lead", true],
       ["debate", true],
       ["board", true],
     ]
@@ -34,7 +35,7 @@ test("built-ins are listed first and read-only; a copy saves under a free id", (
   assert.equal(s.idFor("Best-of-N (copy)"), "best-of-n-copy-2");
   assert.deepEqual(
     s.list().map(x => x.id),
-    ["pipeline", "bestofn", "split", "debate", "board", "best-of-n-copy"]
+    ["pipeline", "bestofn", "split", "lead", "debate", "board", "best-of-n-copy"]
   );
   assert.equal(s.get("best-of-n-copy").name, "Best-of-N (copy)");
 });

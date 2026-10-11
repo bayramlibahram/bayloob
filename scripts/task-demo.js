@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The workflow engine end to end without real agents: every preset (Pipeline, Best-of-N, Split work, Review board)
+// The workflow engine end to end without real agents: every preset (Pipeline, Best-of-N, Split work, Lead + team, Review board)
 // and one analysis (incident) on a toy git repo in a temp dir.
 // Real TaskStore, Scheduler, TaskWorkspace (git worktrees, snapshots, the repo's own tests, integrate, merge, log
 // collection); the agents are scripts/stub-agent.js processes, and what each role "does" is played here when its
@@ -64,6 +64,7 @@ class StubRunner {
   opener = null;
   #n = 0;
   #tries = new Map(); // cwd → turns so far
+  askedDocs = 0;
   constructor(engine) {
     this.engine = engine;
   }
@@ -116,6 +117,15 @@ class StubRunner {
     }
     if (role === "arbiter" && prompt.includes("You decide how this discussion")) {
       return "## Decision\nCursor pagination on created_at.\n## Why\nIt scales.\n## Dissent\nNone left.\n## Open risks\nThe index.";
+    }
+    // Lead + team: the lead asks once for a change to the docs part, then it's right; it sums up at the end
+    if (role === "reviewer" && prompt.includes("You lead this task")) {
+      const docs = /Its subtask[^\n]*\n[\s\S]*Document the rule[\s\S]*Your plan:/.test(prompt);
+      this.leadReviews = (this.leadReviews || 0) + 1;
+      return docs && !this.askedDocs++ ? "DISCOUNTS.md:1 — no example — add one" : "No findings";
+    }
+    if (role === "reviewer" && prompt.includes("You led this task")) {
+      return "## Built\n- discount() in cart.js\n- DISCOUNTS.md\n## Tests\nPass.";
     }
     if (role === "planner" && prompt.includes("independent subtasks")) {
       return `Discount in cart.js, docs next to it.\n\n\`\`\`json\n${JSON.stringify({
@@ -257,12 +267,14 @@ const discussed = (want, spoke) => (task, _root, store) => {
   return plan ? null : "the plan stage didn't run";
 };
 const failures = [];
+let ran = 0;
 
 async function run(
   name,
   draft,
   { expect, confidence = 0.9, answer = () => null, files = null, template = null }
 ) {
+  ran += 1;
   console.log(`\n=== ${name} ===`);
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "bayloob-demo-"));
   const root = toyRepo(base);
@@ -487,6 +499,24 @@ const reported = task =>
     }
   );
   await run(
+    "Lead + team (Codex leads: plans, reviews each part — asks for one change — sums up; Claude + Codex build)",
+    {
+      category: "workflow",
+      workflow: { pattern: "lead", planner: "codex", agents: { claude: 1, codex: 1 } },
+    },
+    {
+      expect: (task, root, store) =>
+        merged(task, root) ||
+        (task.winner !== "integrate-1"
+          ? `winner ${task.winner}`
+          : !/## Built/.test(store.readArtifact(task.id, "summary.integrate-1.md") || "")
+            ? "no summary.md"
+            : runners.at(-1).leadReviews < 3
+              ? `the lead reviewed ${runners.at(-1).leadReviews} times`
+              : null),
+    }
+  );
+  await run(
     "Design debate (New task pattern: Claude + Codex discuss, Codex decides, Claude plans and builds, merged)",
     {
       category: "workflow",
@@ -569,7 +599,7 @@ const reported = task =>
   console.log(
     failures.length
       ? `\n✗ ${failures.length} failed:\n  ${failures.join("\n  ")}`
-      : "\n✓ all 13 ran as expected"
+      : `\n✓ all ${ran} ran as expected`
   );
   process.exitCode = failures.length ? 1 : 0;
 })();

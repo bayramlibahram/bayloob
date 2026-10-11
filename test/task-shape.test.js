@@ -173,3 +173,39 @@ test("Incident war-room: logs collected, the analysts discuss in turn (roles), t
   assert.match(talk.topic, /\{\{task\}\}[\s\S]*\{\{artifact:logs\.md\}\}/);
   assert.match(t.stages.find(s => s.id === "report").prompt, /Arbiter of an incident war-room/);
 });
+
+test("Lead + team: the planner leads (plans, reviews each part, sums up); the team builds the parts", () => {
+  const { templateFor, validateTemplate } = require("../src/shared/workflow-templates");
+  const c = cfg({
+    category: "workflow",
+    text: "Coupons at checkout",
+    workflow: {
+      pattern: "lead",
+      planner: "codex",
+      agents: { claude: 2, gemini: 1 },
+      reviewer: "claude",
+      arbiter: "gemini",
+    },
+  });
+  assert.deepEqual(
+    T.stages(c).map(s => s.id),
+    ["plan", "build", "review", "integrate", "tests", "summary", "merge"]
+  );
+  const t = templateFor(c);
+  assert.deepEqual(validateTemplate(t), []);
+  const by = id => t.stages.find(s => s.id === id);
+  for (const id of ["plan", "review", "summary"]) {
+    assert.deepEqual(by(id).agents, [{ adapter: "codex", count: 1 }], id);
+  }
+  assert.deepEqual(by("build").agents, [
+    { adapter: "claude", count: 2 },
+    { adapter: "gemini", count: 1 },
+  ]);
+  assert.equal(by("review").gate, "no-findings");
+  assert.deepEqual([by("review").onFail.goto, by("review").onFail.maxLoops], ["build", 2]);
+  assert.equal(by("integrate").by, "lead");
+  assert.equal(
+    t.stages.some(s => s.role === "arbiter"),
+    false
+  );
+});

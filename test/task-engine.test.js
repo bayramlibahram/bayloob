@@ -1643,3 +1643,60 @@ test("Discussion: stopping a speaker skips its turn; stopping the stage pauses i
   await decide(env, task, "next");
   assert.equal(task.discussion.round, 2);
 });
+
+// ---------- Lead + team (28) ----------
+
+test("Lead + team: the lead plans, reviews each part (changes go back to that builder), owns the integration, sums up", async () => {
+  const env = setup();
+  splitWorkspace(env);
+  const task = await startBest(
+    env,
+    { pattern: "lead", planner: "codex", agents: { claude: 2 } },
+    { arbiter: true }
+  );
+  const [lead] = env.runner.sessions;
+  assert.equal(lead.adapter, "codex");
+  await endTurn(env, task, lead, SPLIT_PLAN.replace(/,\n {2}\{"id": "docs"[^\n]*/, ""));
+  await decide(env, task, "approve");
+  const [b1, b2] = env.runner.by({ role: "builder" });
+  await endTurn(env, task, b1, "api done");
+  await endTurn(env, task, b2, "ui done");
+  // the lead reviews each part (read-only, its own agent)
+  const reviews = env.runner.by({ role: "reviewer" });
+  assert.deepEqual(
+    reviews.map(r => [r.adapter, r.mode]),
+    [
+      ["codex", "read-only"],
+      ["codex", "read-only"],
+    ]
+  );
+  assert.match(reviews[0].prompt, /You lead this task[\s\S]*Your plan:/);
+  const forPart = id => reviews.find(r => r.prompt.includes(`bayloob/${task.id}/${id}`));
+  await endTurn(
+    env,
+    task,
+    forPart("build-1"),
+    "src/api/coupons.js:3 — no validation — check the code exists"
+  );
+  await endTurn(env, task, forPart("build-2"), "No findings");
+  // only build-1 goes back, to its own builder, with the lead's notes
+  const again = env.runner.prompts.filter(
+    ([name]) => name === env.runner.sessions.find(s => s === b1).name || name === "bl-t-2"
+  );
+  assert.equal(again.length, 1);
+  assert.match(again[0][1], /Your lead reviewed your part[\s\S]*no validation/);
+  await endTurn(env, task, b1, "validation added");
+  for (const r of env.runner.by({ role: "reviewer" }).slice(2)) {
+    await endTurn(env, task, r, "No findings");
+  }
+  // integrated — the lead's — tested, then the lead sums up
+  const integrated = task.candidates.find(c => c.id === "integrate-1");
+  assert.equal(integrated.adapter, "codex");
+  const summary = env.runner.by({ role: "reviewer" }).at(-1);
+  assert.match(summary.prompt, /You led this task[\s\S]*integrate-1/);
+  await endTurn(env, task, summary, "## Built\n- api, ui");
+  assert.equal(task.gate.kind, "merge");
+  assert.equal(task.winner, "integrate-1"); // one candidate, no Arbiter: it's the one
+  await decide(env, task, "merge");
+  assert.equal(task.status, "done");
+});
