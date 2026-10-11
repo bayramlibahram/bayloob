@@ -888,6 +888,19 @@
         if (!this.state) { return; }
         if (e.key === 'Escape') { e.preventDefault(); return this.busy ? undefined : this.api.close(); }
         if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); return this.#back(); }
+        if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); return this.el.next.disabled ? undefined : this.#next(); }
+        // Radio groups (category, agent, base): arrows pick the next enabled choice, like native radios
+        const radio = e.target.closest?.('[role="radio"]');
+        if (radio && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && !e.altKey) {
+          const all = [...radio.closest('[role="radiogroup"]').querySelectorAll('[role="radio"]:not(:disabled)')];
+          const fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown';
+          const next = all[(all.indexOf(radio) + (fwd ? 1 : all.length - 1)) % all.length];
+          const sel = [...next.attributes].filter(x => x.name.startsWith('data-') && x.name !== 'data-focus')
+            .map(x => `[${x.name}="${CSS.escape(x.value)}"]`).join('');
+          e.preventDefault();
+          next.click();
+          return document.querySelector(`[role="radio"]${sel}`)?.focus(); // the page may have re-rendered
+        }
         if (this.step === 2 && ['1', '2', '3'].includes(e.key)) {
           const k = CATS[Number(e.key) - 1];
           if (!(k === 'workflow' && !this.hasGit)) { e.preventDefault(); this.cfg.category = k; return this.#changed(); }

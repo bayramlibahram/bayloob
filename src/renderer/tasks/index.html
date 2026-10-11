@@ -679,7 +679,7 @@
       const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), runbook: () => this.#runbook(t), log: () => this.#log(t) }[this.tab]();
       return `<div class="dhead"><div class="t">
           <button class="crumb" type="button" data-act="board">${ICON.back} ${T.back}</button>
-          <h1>${esc(t.title)}</h1>
+          <h1 tabindex="-1">${esc(t.title)}</h1>
           <div class="meta"><span class="chip out">${esc(t.project.name)}</span><span class="chip c" style="--c:var(--cat-workflow)">${esc(T.category[t.category] || t.category)}</span>
             <span class="chip">${esc(PATTERN[t.template.id] || t.template.name)}</span><span class="chip c" style="--c:${statusColor}"><span class="d"></span>${T.status[t.status]}</span>
             <span>${ICON.clock} <span class="num">${elapsed(t)}</span></span></div></div>
@@ -689,8 +689,8 @@
         </div>
         <nav class="stepbar" aria-label="Stages">${steps}</nav>
         ${t.status === 'stopped' ? `<div class="banner" style="--c:var(--idle)">${T.stopped}</div>` : ''}
-        <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${k === 'reviews' && t.template.stages.some(x => x.role === 'analyst') ? T.analystsTab : T.tabs[k]}${n ? `<em data-k="tab:${t.id}:${k}" data-v="${n}">${n}</em>` : ''}</button>`).join('')}</div>
-        <div class="pane" id="pane" data-k="pane:${esc(t.id)}:${this.tab}">${pane}</div>
+        <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}" aria-controls="pane" tabindex="${this.tab === k ? 0 : -1}">${k === 'reviews' && t.template.stages.some(x => x.role === 'analyst') ? T.analystsTab : T.tabs[k]}${n ? `<em data-k="tab:${t.id}:${k}" data-v="${n}">${n}</em>` : ''}</button>`).join('')}</div>
+        <div class="pane" id="pane" role="tabpanel" aria-label="${esc(T.tabs[this.tab] || this.tab)}" data-k="pane:${esc(t.id)}:${this.tab}">${pane}</div>
         ${t.gate ? this.#actions(t) : ''}`;
     }
 
@@ -1040,6 +1040,28 @@
       this.view = 'detail';
       this.composing = null;
       this.render();
+      this.el.main.querySelector('.dhead h1')?.focus(); // keyboard users land on what just opened
+    }
+
+    // Back to the board, with focus on the card of the task that was open
+    #closeTask() {
+      const id = this.open;
+      this.view = 'board';
+      this.open = null;
+      this.render();
+      [...this.el.main.querySelectorAll('.tcard')].find(c => c.dataset.open === id)?.focus();
+    }
+
+    // Arrow keys on the board: ↑/↓ within a column, ←/→ to the nearest card in the next column that has any
+    #moveOnBoard(card, key) {
+      const cols = [...this.el.main.querySelectorAll('.col')].map(c => [...c.querySelectorAll('.tcard')]);
+      const ci = cols.findIndex(c => c.includes(card));
+      const ri = cols[ci].indexOf(card);
+      if (key === 'ArrowUp' || key === 'ArrowDown') { return cols[ci][ri + (key === 'ArrowDown' ? 1 : -1)]?.focus(); }
+      const step = key === 'ArrowRight' ? 1 : -1;
+      for (let c = ci + step; c >= 0 && c < cols.length; c += step) {
+        if (cols[c].length) { return cols[c][Math.min(ri, cols[c].length - 1)].focus(); }
+      }
     }
 
     toast(text, err = false) {
@@ -1167,7 +1189,7 @@
           return;
         }
         const act = e.target.closest('[data-act]')?.dataset.act;
-        if (act === 'board') { this.view = 'board'; this.open = null; this.composing = null; return this.render(); }
+        if (act === 'board') { this.composing = null; return this.#closeTask(); }
         if (act === 'new') { return this.api?.newTask(); }
         if (act === 'cancel') { this.composing = null; return this.render(); }
         if (act === 'send-note' && t?.gate) { return this.#decide(t, this.composing.action, { note: this.composing.note || '' }); }
@@ -1210,7 +1232,22 @@
         }
         if (e.key === 'Escape') {
           if (this.composing) { this.composing = null; return this.render(); }
-          if (this.view === 'detail') { this.view = 'board'; this.open = null; return this.render(); }
+          if (this.view === 'detail') { return this.#closeTask(); }
+        }
+        const arrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.altKey && !e.ctrlKey;
+        if (arrow && this.view === 'board' && e.target.matches?.('.tcard')) {
+          e.preventDefault();
+          return this.#moveOnBoard(e.target, e.key);
+        }
+        // The detail's tabs: ←/→ move between them (Home / End to the ends)
+        if (e.target.matches?.('[role="tab"]') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+          e.preventDefault();
+          const tabs = [...this.el.main.querySelectorAll('[role="tab"]')].map(b => b.dataset.tab);
+          const i = tabs.indexOf(e.target.dataset.tab);
+          const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+          this.tab = tabs[next];
+          this.render();
+          return this.el.main.querySelector(`[role="tab"][data-tab="${this.tab}"]`)?.focus();
         }
         if (e.altKey && (e.key === 'a' || e.key === 'A') && this.view === 'detail' && t?.gate) {
           e.preventDefault();
@@ -1229,7 +1266,7 @@
           return this.el.main.querySelector(`.actions [data-decide="${alt}"]:not(:disabled)`)?.click();
         }
         if (this.view === 'detail' && !e.target.matches?.('input, textarea') && (e.key === '[' || e.key === ']')) {
-          const keys = Object.keys(T.tabs);
+          const keys = [...this.el.main.querySelectorAll('[role="tab"]')].map(b => b.dataset.tab);
           this.tab = keys[(keys.indexOf(this.tab) + (e.key === ']' ? 1 : keys.length - 1)) % keys.length];
           return this.render();
         }

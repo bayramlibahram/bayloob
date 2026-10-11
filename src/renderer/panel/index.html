@@ -436,7 +436,7 @@
             <input id="search" aria-label="Search" placeholder="Search apps…" spellcheck="false">
           </div>
         </div>
-        <div class="rows" id="rows"></div>
+        <div class="rows" id="rows" role="listbox" tabindex="0" aria-label="Items"></div>
       </section>
       <div class="detailcol">
         <section class="detail" id="detail"></section>
@@ -970,13 +970,15 @@
       const nav = key => {
         const n = this.#items(key).length;
         const em = n ? `<em class="${key === 'inbox' ? 'hot' : ''}" title="${esc(T.countTip[key](n))}" data-k="nav:${key}" data-v="${n}">${n}</em>` : '';
-        return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}" title="${T.sections[key]}">${ICONS[key]}<span>${T.sections[key]}</span>${em}</button>`;
+        const on = key === this.section && !this.launchMode;
+        return `<button class="nav${on ? ' on' : ''}" data-section="${key}" title="${T.sections[key]}"${on ? ' aria-current="page"' : ''}>${ICONS[key]}<span>${T.sections[key]}</span>${em}</button>`;
       };
       swapHtml(this.el.side, NAV.map(group => group.map(nav).join('')).join('<hr>')
         + `<button class="nav bottom" data-settings title="${T.settingsNav}">${ICONS.gear}<span>${T.settingsNav}</span></button>`);
     }
 
     #renderList() {
+      this.el.rows.removeAttribute('aria-activedescendant'); // set again below when a row is selected
       this.el.listTitle.textContent = this.launchMode ? T.launchTitle : T.listTitle[this.section];
       this.el.search.placeholder = this.launchMode ? T.searchInstalled : T.searchIn[this.section] || T.searchApps;
       this.el.launch.classList.toggle('on', this.launchMode);
@@ -1013,8 +1015,8 @@
       for (const i of items) { sizes.set(groupOf(i), (sizes.get(groupOf(i)) || 0) + 1); }
       swapHtml(this.el.rows, items.map((i, n) => `
         ${groupOf(i) !== null && (n === 0 || groupOf(items[n - 1]) !== groupOf(i))
-          ? `<div class="group${String(groupOf(i)).startsWith('task:') ? ' task' : ''}" title="${esc(this.section === 'agents' ? i.data.cwd || '' : '')}">${groupHead(i)}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
-        <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
+          ? `<div role="presentation" class="group${String(groupOf(i)).startsWith('task:') ? ' task' : ''}" title="${esc(this.section === 'agents' ? i.data.cwd || '' : '')}">${groupHead(i)}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
+        <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}" role="option" id="row-${n}" aria-selected="${i.key === sel}">
           ${iconHtml(i)}
           <div class="who"><b title="${esc(i.name)}">${esc(i.name)}</b><span title="${esc(i.subtitle || '')}"${i.why ? ` class="why" style="--c:${WHY_COLOR[i.why]}"` : ''}>${esc(i.subtitle || '')}</span></div>
           ${i.kind === 'agent' ? this.#clashBadge(i.data) : ''}
@@ -1022,6 +1024,9 @@
             <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}" aria-label="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
             ${i.kind === 'docker' || i.kind === 'task' ? '' : `<button class="kebab" data-act="menu" title="${T.more}" aria-label="${T.more}">${ICONS.dots}</button>`}</div></div>
         </div>`).join(''));
+      // The listbox reads the selected row out (the arrows move the selection from anywhere in the panel)
+      const selRow = this.el.rows.querySelector('[role="option"][aria-selected="true"]');
+      if (selRow) { this.el.rows.setAttribute('aria-activedescendant', selRow.id); } else { this.el.rows.removeAttribute('aria-activedescendant'); }
     }
 
     // ⚠ next to an agent that shares its working tree with another busy agent (red: they edited the same file)
