@@ -96,10 +96,10 @@ class Agent {
   }
 }
 
-// The loading / empty / error block of every list and panel (styles: .state in theme.css).
+// The loading / empty / error block of every list and panel (styles: .state-block in theme.css).
 // kind: "loading" | "empty" | "error". icon: HTML (a mascot thumb, an svg). action: { label, data } → a button
 // with data-<key>="<value>" for each data entry, handled by the page. details: the raw error, behind an expander.
-function stateHtml({
+function stateBlock({
   kind = "empty",
   icon = "",
   title = "",
@@ -113,12 +113,73 @@ function stateHtml({
         .join("")
     : "";
   const role = kind === "error" ? ' role="alert"' : kind === "loading" ? ' role="status"' : "";
-  return `<div class="state ${kind}"${role}${kind === "loading" ? ' aria-busy="true"' : ""}>
+  return `<div class="state-block ${kind}"${role}${kind === "loading" ? ' aria-busy="true"' : ""}>
     ${kind === "loading" ? '<span class="spinner" aria-hidden="true"></span>' : icon}
     ${title ? `<b>${esc(title)}</b>` : ""}${line ? `<span>${esc(line)}</span>` : ""}
     ${action ? `<button class="btn sm" type="button"${attrs}>${esc(action.label)}</button>` : ""}
     ${details ? `<details><summary>Details</summary><pre>${esc(details)}</pre></details>` : ""}
   </div>`;
+}
+
+// Swaps a container's HTML without the jumps of a plain innerHTML rebuild: the scroll position of every element
+// with a data-k (or id), the open/closed state of each <details> (keyed by its summary text) and the focused
+// control with its caret all carry over to the new markup. A data-k that changes (e.g. per tab) starts at the top.
+function swapHtml(root, html) {
+  const scrollKey = el => el.dataset.k || el.id;
+  const focusKey = el =>
+    scrollKey(el) ||
+    [...el.attributes]
+      .filter(a => a.name.startsWith("data-"))
+      .map(a => `${a.name}=${a.value}`)
+      .join(" ");
+  const detailsKeys = () => {
+    const seen = new Map();
+    return [...root.querySelectorAll("details")].map(d => {
+      const text = d.querySelector(":scope > summary")?.textContent.trim() || "";
+      const n = (seen.get(text) || 0) + 1;
+      seen.set(text, n);
+      return [`${text}#${n}`, d];
+    });
+  };
+  const scrolls = new Map();
+  for (const el of root.querySelectorAll("[data-k], [id]")) {
+    if (el.scrollTop || el.scrollLeft) {
+      scrolls.set(scrollKey(el), [el.scrollTop, el.scrollLeft]);
+    }
+  }
+  const open = new Map(detailsKeys().map(([k, d]) => [k, d.open]));
+  const active = root.contains(document.activeElement) ? document.activeElement : null;
+  const focus = active && {
+    key: focusKey(active),
+    sel: "selectionStart" in active ? [active.selectionStart, active.selectionEnd] : null,
+  };
+
+  root.innerHTML = html;
+
+  for (const el of root.querySelectorAll("[data-k], [id]")) {
+    const s = scrolls.get(scrollKey(el));
+    if (s) {
+      [el.scrollTop, el.scrollLeft] = s;
+    }
+  }
+  for (const [k, d] of detailsKeys()) {
+    if (open.has(k)) {
+      d.open = open.get(k);
+    }
+  }
+  if (focus?.key) {
+    const el = [...root.querySelectorAll("*")].find(x => focusKey(x) === focus.key);
+    if (el) {
+      el.focus({ preventScroll: true });
+      if (focus.sel && "setSelectionRange" in el) {
+        try {
+          el.setSelectionRange(...focus.sel);
+        } catch {
+          // inputs without a caret (e.g. type=checkbox)
+        }
+      }
+    }
+  }
 }
 
 // The readable text of a rejected IPC call ("Error invoking remote method 'x': Error: …" → "…")

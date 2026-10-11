@@ -998,7 +998,7 @@
       };
       const sizes = new Map();
       for (const i of items) { sizes.set(groupOf(i), (sizes.get(groupOf(i)) || 0) + 1); }
-      this.el.rows.innerHTML = items.map((i, n) => `
+      swapHtml(this.el.rows, items.map((i, n) => `
         ${groupOf(i) !== null && (n === 0 || groupOf(items[n - 1]) !== groupOf(i))
           ? `<div class="group${String(groupOf(i)).startsWith('task:') ? ' task' : ''}" title="${esc(this.section === 'agents' ? i.data.cwd || '' : '')}">${groupHead(i)}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
         <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
@@ -1008,7 +1008,7 @@
           <div class="slot">${stateHtml(i.status)}<div class="acts">
             <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}" aria-label="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
             ${i.kind === 'docker' || i.kind === 'task' ? '' : `<button class="kebab" data-act="menu" title="${T.more}" aria-label="${T.more}">${ICONS.dots}</button>`}</div></div>
-        </div>`).join('');
+        </div>`).join(''));
     }
 
     // ⚠ next to an agent that shares its working tree with another busy agent (red: they edited the same file)
@@ -1029,10 +1029,10 @@
 
     #renderLaunchable() {
       if (this.launchFailed) {
-        this.el.rows.innerHTML = stateHtml({ kind: 'error', title: T.appsFailed, action: { label: T.retry, data: { 'retry-launch': '1' } }, details: this.launchFailed });
+        this.el.rows.innerHTML = stateBlock({ kind: 'error', title: T.appsFailed, action: { label: T.retry, data: { 'retry-launch': '1' } }, details: this.launchFailed });
         return;
       }
-      if (!this.launchable) { this.el.rows.innerHTML = stateHtml({ kind: 'loading', line: T.loading }); return; }
+      if (!this.launchable) { this.el.rows.innerHTML = stateBlock({ kind: 'loading', line: T.loading }); return; }
       const q = this.query.trim().toLowerCase();
       const list = this.launchable.filter(a => !q || a.name.toLowerCase().includes(q)).slice(0, 80);
       if (!list.length) { this.el.rows.innerHTML = emptyHtml(ICONS.search, T.noMatch(esc(this.query)), T.noMatchHint, '', { label: T.clearSearch, act: 'clear' }); return; }
@@ -1254,8 +1254,8 @@
       const lg = this.dockerLogs;
       const logs = lg && cs.some(c => c.id === lg.id)
         ? `<h3>${T.logsOf(esc(lg.name))} <button class="link" data-logs-close>${T.close}</button></h3>
-           ${lg.error ? stateHtml({ kind: 'error', title: T.logsFailed, action: { label: T.retry, data: { logs: lg.id } }, details: lg.error })
-             : lg.text == null ? stateHtml({ kind: 'loading', line: T.loadingLogs }) : `<pre class="logs">${esc(lg.text) || T.noLogs}</pre>`}`
+           ${lg.error ? stateBlock({ kind: 'error', title: T.logsFailed, action: { label: T.retry, data: { logs: lg.id } }, details: lg.error })
+             : lg.text == null ? stateBlock({ kind: 'loading', line: T.loadingLogs }) : `<pre class="logs">${esc(lg.text) || T.noLogs}</pre>`}`
         : '';
       return `
         <div class="tiles">

@@ -100,7 +100,8 @@
   .col h3 em.hot { color: var(--primary-fg); background: var(--waiting); padding: 0 6px; border-radius: 999px; }
   .col .none { padding: 10px 6px; color: var(--muted); font-size: 11.5px; }
   .tcard { display: flex; flex-direction: column; gap: 7px; padding: 10px 11px; border-radius: 12px; background: var(--backdrop); border: 1px solid var(--line);
-    text-align: left; box-shadow: 0 1px 2px rgb(var(--shade) / calc(0.2 * var(--shade-k))); animation: slidein 0.2s ease-out; }
+    text-align: left; box-shadow: 0 1px 2px rgb(var(--shade) / calc(0.2 * var(--shade-k))); }
+  .tcard.fresh { animation: slidein 0.2s ease-out; }
   .tcard:hover { border-color: var(--line-strong); }
   .tcard.needs { border-color: color-mix(in srgb, var(--waiting) 55%, transparent); }
   .tcard .tt { display: flex; gap: 7px; align-items: flex-start; }
@@ -497,6 +498,7 @@
     sevFilter = new Map(); // task id → the Report's severity filter (null: all)
     opsUi = null; // the runbook step being confirmed / typed / edited: { task, step, mode, action, typed, argv }
     composing = null; // { action } while a note / confirmation is being written
+    #seenCards = null; // `${task}:${column}` of the cards on the board's last paint (null before the first)
     #art = new Map(); // `${task}:${name}` → text | null (artifacts and logs, refreshed when the task changes)
     #artFailed = new Map(); // `${task}:${name}` → why loading it failed
     #toastTimer = null;
@@ -571,7 +573,9 @@
         this.el.main.innerHTML = this.builder.listHtml(this.templates);
         return;
       }
-      this.el.main.innerHTML = this.view === 'detail' && this.tasks.has(this.open) ? this.#detail(this.tasks.get(this.open)) : this.#board();
+      const detail = this.view === 'detail' && this.tasks.has(this.open);
+      swapHtml(this.el.main, detail ? this.#detail(this.tasks.get(this.open)) : this.#board());
+      if (!detail) { this.#seenCards = new Set([...this.el.main.querySelectorAll('.tcard')].map(c => c.dataset.seen)); }
       const note = this.el.main.querySelector('[data-note]');
       if (note) { note.focus(); }
     }
@@ -588,7 +592,7 @@
       const shown = all.filter(t => (!this.project || t.project.name === this.project) && (!q || t.title.toLowerCase().includes(q) || t.project.name.toLowerCase().includes(q)));
       const by = Object.fromEntries(COLS.map(c => [c, []]));
       for (const t of shown) { by[columnOf(t)].push(t); }
-      const cols = COLS.map(c => `<section class="col" aria-label="${T.cols[c]}">
+      const cols = COLS.map(c => `<section class="col" data-k="col:${c}" aria-label="${T.cols[c]}">
           <h3>${T.cols[c]} <em class="${c === 'needs' && by[c].length ? 'hot' : ''}">${by[c].length}</em></h3>
           ${by[c].length ? by[c].map(t => this.#card(t, c)).join('') : `<div class="none">${T.colEmpty[c]}</div>`}
         </section>`).join('');
@@ -596,7 +600,7 @@
           <div class="seg" role="group" aria-label="Density">${['comfortable', 'compact'].map(d => `<button type="button" data-density="${d}" aria-pressed="${this.density === d}">${T[d]}</button>`).join('')}</div></div>
         <div class="filters"><label class="field">${ICON.search}<input id="q" placeholder="${T.filter}" value="${esc(this.query)}" spellcheck="false"></label>
           <select class="sel" id="proj" aria-label="Project"><option value="">${T.allProjects}</option>${projects.map(p => `<option${p === this.project ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
-        <div class="board${this.density === 'compact' ? ' compact' : ''}">${cols}</div>`;
+        <div class="board${this.density === 'compact' ? ' compact' : ''}" data-k="board">${cols}</div>`;
     }
 
     #card(t, col) {
@@ -611,7 +615,10 @@
       const best = this.#bestDiff(t);
       const why = t.gate ? `<div class="why">${ICON.warn}<span>${esc(t.gate.title)}</span></div>` : '';
       const waiting = t.instances.find(i => i.status === 'queued' && i.waiting);
-      return `<button type="button" class="tcard${col === 'needs' ? ' needs' : ''}" data-open="${esc(t.id)}">
+      // Slides in only when it is new to this column (not on every refresh); nothing on the first paint
+      const seen = `${t.id}:${col}`;
+      const fresh = this.#seenCards && !this.#seenCards.has(seen);
+      return `<button type="button" class="tcard${col === 'needs' ? ' needs' : ''}${fresh ? ' fresh' : ''}" data-open="${esc(t.id)}" data-seen="${esc(seen)}">
         <div class="tt">${ICON.flow}<b>${esc(t.title)}</b></div>
         <div class="ln"><span class="chip out">${esc(t.project.name)}</span>${esc(PATTERN[t.template.id] || t.template.name)}</div>
         <div class="ln"><span class="chip c" style="--c:${color}"><span class="d${col === 'running' ? ' live' : ''}"></span>${esc(stageText)}</span></div>
@@ -654,7 +661,7 @@
         <nav class="stepbar" aria-label="Stages">${steps}</nav>
         ${t.status === 'stopped' ? `<div class="banner" style="--c:var(--idle)">${T.stopped}</div>` : ''}
         <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${k === 'reviews' && t.template.stages.some(x => x.role === 'analyst') ? T.analystsTab : T.tabs[k]}${n ? `<em>${n}</em>` : ''}</button>`).join('')}</div>
-        <div class="pane" id="pane">${pane}</div>
+        <div class="pane" id="pane" data-k="pane:${esc(t.id)}:${this.tab}">${pane}</div>
         ${t.gate ? this.#actions(t) : ''}`;
     }
 
@@ -695,7 +702,7 @@
           <div><span class="label">${T.the.tests}</span><b class="mono">${esc(t.testCommand || T.the.noTests)}</b></div>
         </div>
         <div><div class="label" style="margin-bottom:6px">${T.instances}</div>
-          ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : stateHtml({ line: T.noInstances })}</div>
+          ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : stateBlock({ line: T.noInstances })}</div>
       </div>`;
     }
 
@@ -993,9 +1000,9 @@
     // The loading or error block for an artifact, or '' once its text is here
     #loadState(id, name) {
       const key = `${id}:${name}`;
-      if (this.#artifact(id, name) === undefined) { return stateHtml({ kind: 'loading', line: T.loading }); }
+      if (this.#artifact(id, name) === undefined) { return stateBlock({ kind: 'loading', line: T.loading }); }
       if (!this.#artFailed.has(key)) { return ''; }
-      return stateHtml({ kind: 'error', title: T.loadFailed(name), action: { label: T.retry, data: { retry: key } }, details: this.#artFailed.get(key) });
+      return stateBlock({ kind: 'error', title: T.loadFailed(name), action: { label: T.retry, data: { retry: key } }, details: this.#artFailed.get(key) });
     }
 
     #openTask(id) {

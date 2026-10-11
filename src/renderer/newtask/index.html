@@ -537,7 +537,7 @@
         : `<div class="hintline">${recent.length ? T.noMatch : T.noRecent}</div>`;
       const i = this.info;
       const failed = this.infoFailed.get(this.cfg.project.cwd);
-      const box = !this.cfg.project.cwd ? '' : !i && failed ? stateHtml({ kind: 'error', title: T.infoFailed, action: { label: T.retry, data: { 'retry-info': '1' } }, details: failed })
+      const box = !this.cfg.project.cwd ? '' : !i && failed ? stateBlock({ kind: 'error', title: T.infoFailed, action: { label: T.retry, data: { 'retry-info': '1' } }, details: failed })
         : !i ? `<div class="projinfo"><div><span class="label">${T.git}</span><span class="skel"></span></div><div><span class="label">${T.stack}</span><span class="skel"></span></div><div><span class="label">${T.tests}</span><span class="skel"></span></div></div>`
         : `<div class="projinfo"><div><span class="label">${T.git}</span><b>${!i.exists ? T.missing : i.git ? `${esc(i.git.branch)} · ${i.git.changes ? `${i.git.changes} changes` : 'clean'}` : T.noGit}</b></div>
             <div><span class="label">${T.stack}</span><b>${esc(i.stack.join(', ') || '—')}</b></div>

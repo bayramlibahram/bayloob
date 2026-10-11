@@ -87,8 +87,8 @@
   --cat-analysis: #1d5fd6;
 }
 
-/* The loading / empty / error block (stateHtml() in ui-common.js): one look in every window */
-.state {
+/* The loading / empty / error block (stateBlock() in ui-common.js): one look in every window */
+.state-block {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -98,29 +98,29 @@
   font-size: 12px;
   text-align: center;
 }
-.state b {
+.state-block b {
   color: var(--soft);
   font-size: 13px;
 }
-.state > .thumb,
-.state > .novi {
+.state-block > .thumb,
+.state-block > .novi {
   width: 44px;
   height: 44px;
   opacity: 0.85;
 }
-.state.error b {
+.state-block.error b {
   color: var(--error);
 }
-.state details {
+.state-block details {
   align-self: stretch;
   text-align: left;
 }
-.state summary {
+.state-block summary {
   cursor: pointer;
   text-align: center;
   color: var(--muted);
 }
-.state pre {
+.state-block pre {
   margin-top: 6px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -134,7 +134,7 @@
   max-height: 160px;
   overflow: auto;
 }
-.state .spinner {
+.state-block .spinner {
   width: 18px;
   height: 18px;
   border-radius: 50%;
