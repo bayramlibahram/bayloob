@@ -243,6 +243,7 @@
     agent: 'Agent', prompt: 'Prompt', promptPh: 'What should be done?', paste: 'Paste clipboard', attach: 'Attach',
     attachTip: 'Attach files — or drop them here, or paste a screenshot (Ctrl+V)', pasteTip: 'Paste what you copied — an error becomes a fix-it prompt',
     attachTaskTip: 'Attach files for the agents to read — or drop them here, or paste a screenshot (Ctrl+V)',
+    filesFirst: 'Attach the files to analyse under the question — PDFs, logs, CSV, docx/xlsx, images or an archive',
     filesStay: 'Files stay on this computer', filesNote: 'copied into the task; the agents get their paths, read-only',
     secretWait: names => `${names.join(', ')} looks like it holds a secret — remove it, or press Send anyway`,
     chars: n => `${n} chars`, emptyClipboard: 'The clipboard is empty', attaching: 'Wait — the files are still being attached',
@@ -326,7 +327,13 @@
       this.att = new Attachments({ api: api.uploads, list: null, onChange: () => this.#fit(), onError: t => this.#message(t, true) });
       // Files for a workflow or an analysis: copied into the task when it starts; agents get their paths
       this.taskAtt = new Attachments({ api: api.uploads, list: null, task: true, onError: t => this.#message(t, true),
-        onChange: () => { this.cfg.attachments = this.taskAtt.toConfig(); this.#fit(); this.#changed({ render: false }); } });
+        onChange: () => {
+          this.cfg.attachments = this.taskAtt.toConfig();
+          // Analyze files: the "attach them" hint goes once there's a file (and comes back without one)
+          const files = this.step === 3 && this.cfg.category === 'analysis' && this.cfg.analysis.preset === 'files' && !this.taskAtt.busy;
+          this.#fit();
+          this.#changed({ render: files });
+        } });
       Attachments.guardWindow();
       this.#bind();
     }
@@ -723,6 +730,7 @@
         ${this.#agentRows(a.agents, 'read-only', T.word.analyst)}
         ${this.#select('analysis.arbiter', a.arbiter, T.arbiter, Object.keys(a.agents).filter(k => a.agents[k]))}
         <div class="label">${T.question}</div>
+        ${a.preset === 'files' && !this.taskAtt.items.length ? `<p class="hintline">${I('info')} ${T.filesFirst}</p>` : ''}
         <div class="composer" id="composer"><textarea id="text" data-focus rows="2" spellcheck="false" placeholder="${T.questionPh}" aria-label="${T.question}">${esc(this.cfg.text)}</textarea>${this.#fileTools()}</div>
         ${a.preset === 'incident' ? `<div class="label">${T.sources}</div>
           <ul class="sources">${a.logSources.map((s, i) => `<li><span>${esc(s)}</span><button type="button" class="iconbtn" data-unsource="${i}" aria-label="Remove">${I('x')}</button></li>`).join('')}</ul>
@@ -802,7 +810,9 @@
       if (c.category === 'analysis') {
         const a = c.analysis;
         const n = TaskShape.total(a.agents);
-        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ` The Arbiter also proposes a runbook for this machine${a.hosts?.length ? ' and the remote hosts you selected' : ''}; every command waits for your click.` : ''}`;
+        const files = c.attachments.length;
+        const what = a.preset === 'files' ? `the <b>${files} attached file${files === 1 ? '' : 's'}</b> (with <b>${esc(c.project.name)}</b> for context)` : `<b>${esc(c.project.name)}</b>`;
+        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read ${what}${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ` The Arbiter also proposes a runbook for this machine${a.hosts?.length ? ' and the remote hosts you selected' : ''}; every command waits for your click.` : ''}`;
       }
       const tpl = this.#template(c);
       if (tpl) {

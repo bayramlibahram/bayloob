@@ -19,6 +19,7 @@ const { TaskStore } = require("../src/main/modules/tasks/task-store");
 const { Scheduler } = require("../src/main/modules/tasks/scheduler");
 const { TaskWorkspace } = require("../src/main/modules/tasks/task-workspace");
 const { templateFor } = require("../src/shared/workflow-templates");
+const { AttachmentStore } = require("../src/main/modules/attachments/attachment-store");
 
 const t0 = Date.now();
 const log = (...a) => console.log(`t+${((Date.now() - t0) / 1000).toFixed(1).padStart(4)}s`, ...a);
@@ -58,6 +59,7 @@ function toyRepo(base) {
 
 // The runner port with stub agents: one child process per turn, the role's work played on exit
 class StubRunner {
+  read = []; // attached files the analysts found in their folder
   #n = 0;
   #tries = new Map(); // cwd → turns so far
   constructor(engine) {
@@ -125,6 +127,16 @@ class StubRunner {
       );
       return broken ? "Added discount()" : "Added discount() with 10% over 100";
     }
+    // Attached files are named at the end of the prompt; the analyst reads them where it works
+    const attached = [...prompt.matchAll(/^- (\.bayloob\/attachments\/\S+)/gm)].map(m => m[1]);
+    if (role === "analyst" && attached.length) {
+      const found = attached.filter(f => fs.existsSync(path.join(cwd, f)));
+      this.read.push(...found);
+      const log = found.find(f => f.endsWith(".log"));
+      return log
+        ? `high — ${log}:2 — the db pool ran out (10/10) — raise the pool size`
+        : "high — the attached files are missing — attach them again";
+    }
     if (role === "analyst") {
       return "high — logs/app.log:2 — the db pool ran out (10/10) — raise the pool size";
     }
@@ -164,11 +176,12 @@ class StubRunner {
   }
 }
 
+const runners = [];
 // The owner's answer at each gate: approve the plan, accept the Arbiter's pick, merge
 const OWNER = { approve: ["approve"], decision: ["accept"], merge: ["merge"] };
 const failures = [];
 
-async function run(name, draft, { expect, confidence = 0.9, answer = () => null }) {
+async function run(name, draft, { expect, confidence = 0.9, answer = () => null, files = null }) {
   console.log(`\n=== ${name} ===`);
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "bayloob-demo-"));
   const root = toyRepo(base);
@@ -178,14 +191,25 @@ async function run(name, draft, { expect, confidence = 0.9, answer = () => null 
     capacity,
     limits: () => ({ total: 6, perProject: 4, minFreeGB: 0 }),
   });
+  // Files attached in New task land in Bayloob's uploads first; the engine copies them when the task starts
+  const staging = path.join(base, "uploads");
+  const attachments = (files || []).map(([name, text], i) => {
+    const dir = path.join(staging, `u-${i}`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), text);
+    return { path: path.join(dir, name), name, size: text.length };
+  });
   const engine = new TaskEngine({
     store,
     scheduler,
     capacity,
     workspace: new TaskWorkspace({ shell: "/bin/sh" }),
     runner: null,
+    attachments: id => new AttachmentStore({ dir: path.join(store.dirOf(id), "attachments") }),
+    stagingDir: staging,
   });
   engine.runner = new StubRunner(engine);
+  runners.push(engine.runner);
   engine.runner.confidence = confidence;
   const seen = new Set();
   const done = new Promise(resolve => {
@@ -221,6 +245,7 @@ async function run(name, draft, { expect, confidence = 0.9, answer = () => null 
     project: { cwd: root, name: "shop" },
     text: "Add a 10% discount for orders over 100",
     ...draft,
+    attachments,
   });
   await engine.start(config, templateFor(config));
   const task = await done;
@@ -345,10 +370,45 @@ const reported = task =>
     },
     { expect: reported }
   );
+  await run(
+    "Analysis: Analyze files (a log and a CSV attached; Claude + Codex read them in .bayloob/attachments)",
+    {
+      category: "analysis",
+      text: "Why did checkout fail at noon, and which orders were hit?",
+      analysis: { preset: "files", agents: { claude: 1, codex: 1 } },
+    },
+    {
+      files: [
+        ["app.log", "12:02 INFO checkout\n12:03 ERROR db pool exhausted (10/10)\n"],
+        ["orders.csv", "id,total,status\n1,120,failed\n2,80,ok\n"],
+      ],
+      expect: task => {
+        const r = reported(task);
+        const read = runners.at(-1).read;
+        if (r) {
+          return r;
+        }
+        if (task.attachments?.length !== 2) {
+          return `${task.attachments?.length ?? 0} files attached`;
+        }
+        if (read.length !== 4) {
+          return `the analysts found ${read.length} of 4 files`;
+        }
+        // in their folder, read-only, and out of git
+        const ro = path.join(task.roDir, ".bayloob/attachments/app.log");
+        if (fs.statSync(ro).mode & 0o222) {
+          return "the attached log can be written";
+        }
+        return git(task.roDir, "status", "--porcelain")
+          ? "the read-only worktree isn't clean"
+          : null;
+      },
+    }
+  );
   console.log(
     failures.length
       ? `\n✗ ${failures.length} failed:\n  ${failures.join("\n  ")}`
-      : "\n✓ all 5 ran as expected"
+      : "\n✓ all 6 ran as expected"
   );
   process.exitCode = failures.length ? 1 : 0;
 })();

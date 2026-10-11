@@ -167,6 +167,12 @@
       "Quote the log lines you rely on."
     ),
     perf: "Do a performance review: slow paths, N+1 queries, needless work in loops, blocking I/O, memory growth, missing caching or indexes.",
+    files: lines(
+      "Answer the owner's question from the attached files (listed at the end, read-only). Read each one that matters;",
+      "the project's code is there too if a file refers to it. A PDF or office file may have a text version next to it",
+      "(→ name.txt / name.csv): read that, and cite a PDF's page (pages are separated by a form feed). Back every finding",
+      "with evidence: the file and line (or page), or the row of a table."
+    ),
     deps: "Write a dependency upgrade report: outdated or risky dependencies in the manifests and lock files, what an upgrade would break, and the order to upgrade in.",
   };
   const ANALYSIS_INPUT = { incident: "{{artifact:logs.md}}", security: "{{artifact:audit.md}}" };
@@ -212,6 +218,7 @@
     incident: "Incident / log analysis",
     perf: "Performance review",
     deps: "Dependency upgrade report",
+    files: "Analyze files",
   };
 
   /** An analysis configuration as a template: collect (when there is something to collect) → analysts → Arbiter. */

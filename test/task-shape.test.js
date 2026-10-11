@@ -67,3 +67,26 @@ test("problems explain what is missing", () => {
   const g = cfg({ category: "analysis", analysis: { agents: { gemini: 1 } } });
   assert.deepEqual(T.problems(g, ["claude", "codex"]), ["An agent you picked isn't installed"]);
 });
+
+test("Analyze files: needs at least one attached file; its analysts read the files, cited by file and page or line", () => {
+  const { analysisTemplate } = require("../src/shared/workflow-templates");
+  const c = cfg({
+    category: "analysis",
+    text: "What changed in Q3?",
+    analysis: { preset: "files", agents: { claude: 1, codex: 1 } },
+  });
+  assert.equal(c.analysis.preset, "files");
+  assert.deepEqual(T.problems(c), ["Attach the files to analyse"]);
+  const withFiles = cfg({
+    ...c,
+    attachments: [{ path: "/u/1/report.pdf", name: "report.pdf", size: 10 }],
+  });
+  assert.deepEqual(T.problems(withFiles), []);
+  const t = analysisTemplate(withFiles.analysis);
+  assert.equal(t.name, "Analyze files");
+  assert.deepEqual(
+    t.stages.map(s => s.id),
+    ["analyse", "report"]
+  ); // nothing to collect
+  assert.match(t.stages[0].prompt, /from the attached files[\s\S]*cite a PDF's page/);
+});

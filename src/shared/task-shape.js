@@ -18,6 +18,7 @@
     incident: "Incident / log analysis",
     perf: "Performance review",
     deps: "Dependency upgrade report",
+    files: "Analyze files",
   };
   const TEXT_MAX = 20_000;
   const SOURCES_MAX = 10;
@@ -277,6 +278,9 @@
     }
     if (!c.text.trim()) {
       out.push(c.category === "analysis" ? "Write the question" : "Describe the task");
+    }
+    if (c.category === "analysis" && c.analysis.preset === "files" && !c.attachments?.length) {
+      out.push("Attach the files to analyse");
     }
     return out;
   }
