@@ -95,13 +95,33 @@
   .msg { flex: 1; font-size: 12px; color: var(--muted); }
   .msg.error { color: var(--error); }
   .msg.ok { color: var(--ok); }
+  /* tabs: one topic at a time instead of one long column */
+  .tabs { display: flex; gap: 2px; margin: -4px -18px 0; padding: 0 12px; border-bottom: 1px solid var(--line); position: sticky; top: -16px; z-index: 2;
+    background: var(--surface-solid); }
+  .tab { position: relative; height: 34px; padding: 0 10px; color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--text); }
+  .tab[aria-selected="true"]::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--brand); }
+  .tab em { font-style: normal; margin-left: 4px; font-size: 10.5px; color: var(--muted); }
+  .tab em.warn { color: var(--waiting); }
+  .pane { display: flex; flex-direction: column; gap: 14px; }
+  .pane > * { flex-shrink: 0; }
+  .pane .none { color: var(--muted); font-size: 12.5px; padding: 6px 0; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
   <form class="panel" id="form" autocomplete="off">
     <div class="title"><b>Settings</b><kbd>Esc</kbd></div>
+    <nav class="tabs" role="tablist" aria-label="Settings" id="tabs">
+      <button type="button" class="tab" role="tab" data-tab="general" aria-selected="true">General</button>
+      <button type="button" class="tab" role="tab" data-tab="integrations">Integrations</button>
+      <button type="button" class="tab" role="tab" data-tab="sounds">Sounds</button>
+      <button type="button" class="tab" role="tab" data-tab="agents">Agents</button>
+      <button type="button" class="tab" role="tab" data-tab="permissions">Permissions</button>
+    </nav>
 
+    <section class="pane" data-pane="general" role="tabpanel">
     <div class="field">
       <span class="label">Mascot</span>
       <div class="seg" id="mascot"><button type="button" data-v="novi">Novi (3D)</button><button type="button" data-v="svg">Classic</button></div>
@@ -120,6 +140,15 @@
       <small>Empty turns it off. On Wayland, bind a system shortcut to <code>bayloob --new-session</code>.</small>
     </div>
     <div class="field">
+      <span class="label">Dance to music</span>
+      <button type="button" class="switch" id="music" role="switch" aria-checked="true" aria-label="Dance to music"></button>
+    </div>
+    </section>
+
+    <section class="pane" data-pane="integrations" role="tabpanel" hidden>
+    <div class="hooks" id="hooks"></div>
+    <div class="hooks" id="extension" hidden></div>
+    <div class="field">
       <label for="terminal">Terminal</label>
       <input type="text" id="terminal" spellcheck="false">
       <small>Used for launched sessions. The command is appended, e.g. <code>gnome-terminal --</code>.</small>
@@ -127,7 +156,7 @@
     <div class="field">
       <label for="editor">Editor</label>
       <input type="text" id="editor" placeholder="File manager" spellcheck="false">
-      <small>"Open workspace" runs it with the folder, e.g. <code>code</code>. Empty opens the file manager.</small>
+      <small>"Open folder" runs it with the agent's folder, e.g. <code>code</code>. Empty opens the file manager.</small>
     </div>
     <div class="field" id="shellField" hidden>
       <span class="label">Agents in tmux</span>
@@ -139,10 +168,9 @@
       <button type="button" class="switch" id="watchClipboard" role="switch" aria-checked="false" aria-label="Watch clipboard for errors"></button>
       <small>When you copy a stack trace, offer to hand it to an agent. Nothing is sent without you.</small>
     </div>
-    <div class="field">
-      <span class="label">Dance to music</span>
-      <button type="button" class="switch" id="music" role="switch" aria-checked="true" aria-label="Dance to music"></button>
-    </div>
+    </section>
+
+    <section class="pane" data-pane="sounds" role="tabpanel" hidden>
     <div class="field">
       <span class="label">Sounds</span>
       <div class="sound">
@@ -153,18 +181,22 @@
       <button type="button" class="link" id="soundMore" aria-expanded="false">Choose sounds…</button>
       <div class="soundgrid" id="soundGrid" hidden></div>
     </div>
+    </section>
 
+    <section class="pane" data-pane="agents" role="tabpanel" hidden>
     <div class="field">
       <span class="label">Agents</span>
       <span class="agentsum" id="agentSum"></span>
       <button type="button" class="link" id="agentsMore" aria-expanded="false">Agents and limits…</button>
       <div class="agentgrid" id="agentGrid" hidden></div>
     </div>
+    </section>
 
-    <div class="hooks" id="hooks"></div>
-    <div class="hooks" id="extension" hidden></div>
+    <section class="pane" data-pane="permissions" role="tabpanel" hidden>
     <div class="rules" id="rules" hidden></div>
     <div class="rules" id="denials" hidden></div>
+    <p class="none" id="noRules">No rules yet. "Always allow" on a permission card adds one here; denied requests are remembered here too.</p>
+    </section>
 
     <div class="foot">
       <div class="msg" id="msg"></div>
@@ -175,6 +207,7 @@
 
 <script src="../shared/ui-common.js"></script>
 <script>
+  const TAB_KEY = 'bayloob.settings.tab';
   const T = {
     denialsTitle: 'Denied before (similar requests get a red card)', forget: 'Forget',
     shellOn: (rc, backup) => `Added to ${rc}${backup ? ` (backup: ${backup})` : ''}. New terminals pick it up; in an open one run: source ${rc}`,
@@ -252,8 +285,15 @@
       this.#renderRules(this.state.rules || []);
       this.#renderDenials(this.state.denials || []);
       this.#message(locked.length ? T.lockedEnv(locked) : T.hint);
-      this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
-      this.el.shortcut.focus();
+      // Sounds and Agents have tabs of their own now: their lists show at once there
+      this.el.soundGrid.hidden = false;
+      this.el.soundMore.hidden = true;
+      this.el.agentGrid.hidden = false;
+      this.el.agentsMore.hidden = true;
+      let tab = 'general';
+      try { tab = localStorage.getItem(TAB_KEY) || tab; } catch { /* storage unavailable */ }
+      this.#tab(tab);
+      if (tab === 'general') { this.el.shortcut.focus(); }
     }
 
     #renderTheme() {
@@ -310,6 +350,29 @@
 
     #fit() { this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20); }
 
+    // One tab at a time; the window takes that tab's height; the last tab is remembered
+    #tab(name) {
+      const tabs = [...document.querySelectorAll('#tabs [data-tab]')];
+      if (!tabs.some(t => t.dataset.tab === name)) { name = 'general'; }
+      for (const t of tabs) {
+        const on = t.dataset.tab === name;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+      }
+      for (const p of document.querySelectorAll('[data-pane]')) { p.hidden = p.dataset.pane !== name; }
+      try { localStorage.setItem(TAB_KEY, name); } catch { /* storage unavailable */ }
+      this.el.form.scrollTop = 0;
+      this.#fit();
+    }
+
+    // Counts on the tabs: rules on Permissions
+    #tabCounts() {
+      const n = (this.state?.rules || []).length + (this.state?.denials || []).length;
+      const t = document.querySelector('#tabs [data-tab="permissions"]');
+      t.innerHTML = `Permissions${n ? `<em>${n}</em>` : ''}`;
+      document.getElementById('noRules').hidden = n > 0;
+    }
+
     #play(file) {
       const a = new Audio(`../../assets/sounds/${file}`);
       a.volume = Number(this.el.volume.value) / 100;
@@ -358,6 +421,7 @@
 
     // "Always allow" rules made from permission cards: each one visible here, and removable
     #renderRules(rules) {
+      if (this.state) { this.state.rules = rules; this.#tabCounts(); }
       const box = this.el.rules;
       box.hidden = !rules.length;
       const folder = p => p.split('/').filter(Boolean).pop() || p;
@@ -370,6 +434,7 @@
 
     // Remembered denials: similar requests get a red card. Forgetting one stops that.
     #renderDenials(list) {
+      if (this.state) { this.state.denials = list; this.#tabCounts(); }
       const box = this.el.denials;
       box.hidden = !list.length;
       const folder = p => (p || '').split('/').filter(Boolean).pop() || p || '';
@@ -446,6 +511,17 @@
         if (e.target.dataset.notes) { this.agents[e.target.dataset.notes].notes = e.target.value; }
       });
       this.el.watchClipboard.addEventListener('click', () => { this.watchClipboard = !this.watchClipboard; this.#renderWatch(); });
+      const tabs = document.getElementById('tabs');
+      tabs.addEventListener('click', e => { const t = e.target.closest('[data-tab]'); if (t) { this.#tab(t.dataset.tab); } });
+      // The tab list is one stop for Tab; arrows move between the tabs
+      tabs.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') { return; }
+        const all = [...tabs.querySelectorAll('[data-tab]')];
+        const i = all.findIndex(t => t.getAttribute('aria-selected') === 'true');
+        const next = all[(i + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length];
+        this.#tab(next.dataset.tab);
+        next.focus();
+      });
       this.el.sounds.addEventListener('click', () => { this.sounds = !this.sounds; this.#renderSounds(); });
       this.el.soundMore.addEventListener('click', () => {
         const open = this.el.soundGrid.hidden;

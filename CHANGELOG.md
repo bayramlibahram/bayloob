@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- **Settings in tabs** (step E of the UI deep dive): General (mascot, pill size, theme, shortcut, dance to music)
+  · Integrations (hooks and the GNOME extension, terminal, editor, agents in tmux, clipboard) · Sounds (the sound
+  list open) · Agents (agents and limits open) · Permissions (always-allowed rules and remembered denials, with a
+  count on the tab). The window takes the tab's height; the last tab is remembered; arrow keys move between tabs.
 - **Pill** (step D of the UI deep dive): Settings → Pill size S / M / L (the mascot's tile 28 / 36 / 46 px; the
   bar's height and the name follow; L is the original and the default). Open, the bar keeps the microphone,
   the panel and a new **⋯** button; mute and full view moved into the ⋯ row with their names. A muted pill
