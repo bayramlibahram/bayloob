@@ -134,9 +134,19 @@ function plainMarkdown(text) {
     .replace(/`([^`\n]+)`/g, (_, c) => `${codes.push(c) - 1}`)
     .split("\n")
     .filter(line => !FENCE.test(line) && !RULE.test(line))
-    .map(line => line.replace(BLOCK_MARK, ""));
+    // A heading or list item starts a new part (" · " between them); an ordered item keeps its number
+    .map(line => {
+      const mark = BLOCK_MARK.exec(line);
+      if (!mark) {
+        return line;
+      }
+      const num = /^\s*(\d+[.)])/.exec(line);
+      return `\u0001${num ? `${num[1]} ` : ""}${line.slice(mark[0].length)}`;
+    });
   return lines
     .join(" ")
+    .replace(/^\s*\u0001/, "")
+    .replace(/\s*\u0001/g, " · ")
     .replace(/!?\[([^\]\n]*)\]\([^)\s]*\)/g, "$1")
     .replace(/(\*\*|__|~~)(?=\S)(.+?)\1/g, "$2")
     .replace(/(^|[^\w*])\*(?=\S)([^*]+?)\*(?![\w*])/g, "$1$2")

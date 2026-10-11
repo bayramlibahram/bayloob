@@ -63,7 +63,7 @@ test("plain text: a folded one-line message loses its markers, keeps its words",
   );
   assert.equal(
     plainMarkdown("## Done\n1. Fixed the *flaky* test\n2. ~~old~~ new"),
-    "Done Fixed the flaky test old new"
+    "Done · 1. Fixed the flaky test · 2. old new"
   );
   assert.equal(
     plainMarkdown("> reviewing `a **b** c`\n```js\nx()\n```\n---"),
