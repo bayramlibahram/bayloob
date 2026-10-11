@@ -9,6 +9,7 @@ if (DEMO) {
 const { HOOKS_DIR, EXTENSION_DIR } = require("./app/paths");
 const { runCli } = require("./app/cli");
 const { BayloobApp } = require("./app/bayloob-app");
+const { Shutdown } = require("./app/shutdown");
 
 const IS_LINUX = process.platform === "linux";
 
@@ -23,6 +24,8 @@ function startApp(argv) {
   if (!app.requestSingleInstanceLock()) {
     return app.exit(0);
   }
+  // Ctrl+C, kill, a closed terminal, or (from source) the dev wrapper killed: quit, leaving nothing behind
+  new Shutdown({ app, watchParent: !app.isPackaged }).install();
   new BayloobApp().start({
     open: argv.includes("--new-session") ? "launcher" : argv.includes("--panel") ? "panel" : null,
     demo: DEMO,

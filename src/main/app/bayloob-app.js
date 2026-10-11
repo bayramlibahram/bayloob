@@ -1,4 +1,13 @@
-const { app, clipboard, ipcMain, globalShortcut, Menu, nativeTheme, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  globalShortcut,
+  Menu,
+  nativeTheme,
+  shell,
+} = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -203,6 +212,12 @@ class BayloobApp {
     app.on("will-quit", () => {
       globalShortcut.unregisterAll();
       this.blocked?.save();
+      // Every window goes with the app (popups are hidden, not closed, so they'd otherwise linger)
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed()) {
+          w.destroy();
+        }
+      }
     });
   }
 

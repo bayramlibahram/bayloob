@@ -20,6 +20,11 @@
   still shows the red sound icon on the bar.
 
 ### Fixed
+- Stopping Bayloob left Electron processes behind (~725 MB) when the dev wrapper was killed on its own — an
+  IDE's Stop sends SIGKILL to `bun` alone, and Electron kept running without its starter. Bayloob now quits
+  on SIGINT / SIGTERM / SIGHUP (app.exit after 3 s if quitting hangs), destroys every window on quit, and
+  when run from source quits as soon as its parent or its parent's parent goes away. Checked: Ctrl+C, SIGTERM,
+  SIGHUP, SIGKILL of bun, of the wrapper and of Electron — nothing is left in any case.
 - After a restart, a task's agent sessions came back through discovery without their task: the scheduler
   counted a builder's own idle session against its next round (`codex 2/2 running`, waiting forever), and a
   planner or reviewer lost the role that keeps it read-only at the hook. Sessions in a task's panes now get
