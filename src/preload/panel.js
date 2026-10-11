@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("panelAPI", {
   onWorkspace: cb => ipcRenderer.on("panel:workspace", (_e, snap) => cb(snap)),
   onBlocked: cb => ipcRenderer.on("panel:blocked", (_e, info) => cb(info)),
   onCollisions: cb => ipcRenderer.on("panel:collisions", (_e, map) => cb(map)),
+  onUsage: cb => ipcRenderer.on("panel:usage", (_e, usage) => cb(usage)),
   appMenu: appId => ipcRenderer.send("panel:app-menu", appId),
   focusApp: (appId, windowId) => ipcRenderer.invoke("panel:focus-app", appId, windowId),
   launchApp: appId => ipcRenderer.invoke("panel:launch-app", appId),

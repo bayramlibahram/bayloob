@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onDiffs: cb => ipcRenderer.on("diffs", (_e, diffs) => cb(diffs)),
   onTokens: cb => ipcRenderer.on("tokens", (_e, tokens) => cb(tokens)),
   onQueues: cb => ipcRenderer.on("queues", (_e, counts) => cb(counts)),
+  onUsage: cb => ipcRenderer.on("usage", (_e, usage) => cb(usage)),
   onBlocked: cb => ipcRenderer.on("blocked", (_e, info) => cb(info)),
   onReceipts: cb => ipcRenderer.on("receipts", (_e, receipts) => cb(receipts)),
   onProgress: cb => ipcRenderer.on("progress", (_e, progress) => cb(progress)),

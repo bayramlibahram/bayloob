@@ -262,7 +262,7 @@
     agent: 'Agent', prompt: 'Prompt', promptPh: 'What should be done?', paste: 'Paste clipboard', attach: 'Attach',
     attachTip: 'Attach files — or drop them here, or paste a screenshot (Ctrl+V)', pasteTip: 'Paste what you copied — an error becomes a fix-it prompt',
     chars: n => `${n} chars`, emptyClipboard: 'The clipboard is empty', attaching: 'Wait — the files are still being attached',
-    worktree: 'In a new git worktree', worktreeSub: 'its own copy on a bayloob/… branch', openIn: 'Open in', notInstalled: 'Not installed',
+    worktree: 'In a new git worktree', worktreeSub: 'its own copy on a bayloob/… branch', openIn: 'Open in', notInstalled: 'Not installed', turnedOff: 'Turned off in Settings',
     builders: 'Builders · each in its own worktree', reviewers: 'Reviewers · read-only, on the current branch', analysts: 'Analysts · read-only, in parallel',
     planner: 'Planner', reviewer: 'Reviewer', arbiter: 'Arbiter', task: 'Task', taskPh: 'Describe the change — what, where, and how to know it works.',
     question: 'Question', questionPh: 'What should the analysts find out?',
@@ -325,7 +325,10 @@
     }
 
     get agents() { return this.state.agents; }
-    get installed() { return Object.keys(this.agents).filter(a => this.agents[a].installed); }
+    // Installed and not turned off in Settings → Agents
+    get installed() { return Object.keys(this.agents).filter(a => this.usable(a)); }
+    usable(a) { return !!this.agents[a]?.installed && !(this.state.disabled || []).includes(a); }
+    whyNot(a) { return this.agents[a]?.installed ? T.turnedOff : T.notInstalled; }
     get shaped() { return TaskShape.normalize(this.cfg, Object.keys(this.agents)); }
     get hasGit() { return !!this.info?.git; }
     free(a) { return Math.max(0, (this.state.capacity[a] || 1) - (this.state.running[a] || 0)); }
@@ -366,7 +369,7 @@
       // A prompt from the pill (voice, copied error) or a preset is for one agent; otherwise the project's last choice
       const last = state.recent.find(r => r.cwd === cwd)?.category;
       const category = state.prefill || state.preset ? 'single' : last || 'single';
-      const agent = [state.preset?.agent, recent?.agent].find(a => a && this.agents[a]?.installed) || first;
+      const agent = [state.preset?.agent, recent?.agent].find(a => a && this.usable(a)) || first;
       return {
         category,
         project: { cwd, name: cwd.split('/').pop() || '' },
@@ -547,8 +550,8 @@
       const terms = this.state.terminals || [];
       return `<div class="label">${T.agent}</div>
         <div class="arows" role="radiogroup" aria-label="${T.agent}">${Object.entries(this.agents).map(([k, a]) => `
-          <button type="button" class="arow pick${a.installed ? '' : ' off'}" role="radio" aria-checked="${k === s.agent}" data-agent="${k}" ${a.installed ? '' : `disabled title="${T.notInstalled}"`}>
-            <span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${a.installed ? T.free(this.free(k), this.state.capacity[k]) : T.notInstalled}</small></span><span class="tick">${k === s.agent ? I('check') : ''}</span></button>`).join('')}</div>
+          <button type="button" class="arow pick${this.usable(k) ? '' : ' off'}" role="radio" aria-checked="${k === s.agent}" data-agent="${k}" ${this.usable(k) ? '' : `disabled title="${this.whyNot(k)}"`}>
+            <span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${this.usable(k) ? T.free(this.free(k), this.state.capacity[k]) : this.whyNot(k)}</small></span><span class="tick">${k === s.agent ? I('check') : ''}</span></button>`).join('')}</div>
         <div class="label">${T.prompt}</div>
         <div class="composer" id="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.promptPh}" aria-label="${T.prompt}"></textarea>
           <ul class="atts" id="atts" hidden></ul>
@@ -564,9 +567,9 @@
       return `<div class="arows">${Object.entries(this.agents).map(([k, a]) => {
         const n = bag[k] || 0;
         const max = this.state.capacity[k] || 1;
-        if (!a.installed) {
-          return `<div class="arow off"><span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${T.notInstalled}</small></span><span></span><span class="cap"></span>
-            <span class="stepper" title="${T.notInstalled}"><button type="button" disabled aria-label="Fewer">${I('minus')}</button><output>0</output><button type="button" disabled aria-label="More">${I('plus')}</button></span></div>`;
+        if (!this.usable(k)) {
+          return `<div class="arow off"><span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${this.whyNot(k)}</small></span><span></span><span class="cap"></span>
+            <span class="stepper" title="${this.whyNot(k)}"><button type="button" disabled aria-label="Fewer">${I('minus')}</button><output>0</output><button type="button" disabled aria-label="More">${I('plus')}</button></span></div>`;
         }
         const q = Math.max(0, n - this.free(k));
         return `<div class="arow"><span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${n ? `${n} ${word}${n > 1 ? 's' : ''}` : 'not used'}</small></span>

@@ -58,6 +58,32 @@ class Git {
     return dir;
   }
 
+  /**
+   * A task instance's worktree: branch `bayloob/<task>/<step>-<n>` from `base` (default HEAD), folder
+   * `<parent>/<repo>-<task>-<step>-<n>` next to the repo. Each writing instance gets its own. Returns its path.
+   */
+  async addTaskWorktree(repoRoot, { task, step, n, base = "HEAD" }) {
+    const leaf = `${step}-${n}`;
+    for (const part of [task, leaf]) {
+      if (!WORKTREE_NAME.test(String(part))) {
+        throw new Error(`Not a usable worktree name: ${part}`);
+      }
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/.test(base) || base.includes("..")) {
+      throw new Error(`Not a usable base: ${base}`);
+    }
+    const root = await this.toplevel(repoRoot);
+    if (!root) {
+      throw new Error(`Not a git repository: ${repoRoot}`);
+    }
+    const dir = path.join(path.dirname(root), `${path.basename(root)}-${task}-${leaf}`);
+    if (fs.existsSync(dir)) {
+      throw new Error(`Already exists: ${dir}`);
+    }
+    await gitOrThrow(root, ["worktree", "add", "-b", `bayloob/${task}/${leaf}`, dir, base]);
+    return dir;
+  }
+
   /** The checked-out branch ("HEAD" when detached), or null outside a repo. */
   async branch(cwd) {
     const out = await git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);

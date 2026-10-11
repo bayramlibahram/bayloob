@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Added
+- **Settings → Agents and limits**: per agent on/off, max parallel instances (Claude Code 4, Codex 2, Gemini CLI 2,
+  Grok 1), the launch and read-only commands Bayloob runs, notes; limits for all agents (6), per project (4) and
+  free memory (hold launches below 2 GB). The New task dialog's counts, "free of max" and "will queue" follow them.
+- Task scheduler (`src/main/modules/tasks/scheduler.js`): queues instances per task, launches up to the limits
+  (agent max, total, per project, free memory; sessions started by hand count too), high priority first then first
+  come, releases on stop / crash, picks up after a restart (dead instances → interrupted), and backs an agent off
+  after a rate-limit signal (1, 2, 4 … 30 min; never a retry loop). Codex rate limits are read from its rollout;
+  Claude Code's format hasn't been seen yet, so nothing is guessed. Not wired to tasks until the engine (04).
+- Usage dots in the panel header and the open pill: `Claude ●●●○ 3/4 +1`.
+- `Git.addTaskWorktree`: one worktree per writing instance on `bayloob/<task>/<step>-<n>`.
+- `scripts/scheduler-demo.js` with `scripts/stub-agent.js`: 9 instances from three tasks against the limits.
 - **New task** dialog (Ask Bayloob, tray, global shortcut, `Ctrl+K → New task…`): ① Project (recent folders with
   branch, uncommitted changes, stack and test command) ② Category (Single agent · Agentic workflow · Analysis &
   operations, remembered per project) ③ Configure ④ Confirm. **Single agent** starts the session exactly as the

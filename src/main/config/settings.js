@@ -3,6 +3,15 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
+const { CAPACITY } = require("../../shared/task-shape");
+
+// Settings → Agents: per agent on/off, how many may run at once, and a note. Limits for all of them together.
+const AGENT_DEFAULTS = Object.fromEntries(
+  Object.entries(CAPACITY).map(([k, max]) => [k, { enabled: true, max, notes: "" }])
+);
+const LIMIT_DEFAULTS = { total: 6, perProject: 4, minFreeGB: 2 };
+const clampInt = (v, lo, hi, fb) =>
+  Number.isFinite(Number(v)) ? Math.max(lo, Math.min(hi, Math.round(Number(v)))) : fb;
 
 const DEFAULTS = {
   mascot: "novi", // 'novi' (layered raster) or 'svg' (the original flat one)
@@ -15,6 +24,8 @@ const DEFAULTS = {
   soundVolume: 0.8, // 0..1
   soundToggles: {}, // sound name -> on/off, overriding the pack's default_enabled
   watchClipboard: false, // opt-in: offer "Fix this error?" when a stack trace is copied
+  agents: AGENT_DEFAULTS, // per agent: { enabled, max (parallel instances), notes }
+  limits: LIMIT_DEFAULTS, // { total, perProject, minFreeGB } for task instances (see tasks/scheduler.js)
 };
 
 // How each environment variable maps onto a setting
@@ -29,6 +40,8 @@ const ENV = {
   soundVolume: () => undefined,
   soundToggles: () => undefined,
   watchClipboard: () => undefined,
+  agents: () => undefined,
+  limits: () => undefined,
 };
 
 const VALIDATE = {
@@ -46,6 +59,29 @@ const VALIDATE = {
         ([k, on]) => /^[a-z][a-z-]{0,39}$/.test(k) && typeof on === "boolean"
       )
     ),
+  // Known agents only; a missing one keeps its defaults
+  agents: v =>
+    Object.fromEntries(
+      Object.entries(AGENT_DEFAULTS).map(([k, d]) => {
+        const a = v && typeof v === "object" && v[k] && typeof v[k] === "object" ? v[k] : {};
+        return [
+          k,
+          {
+            enabled: typeof a.enabled === "boolean" ? a.enabled : d.enabled,
+            max: clampInt(a.max, 1, 16, d.max),
+            notes: String(a.notes ?? d.notes).slice(0, 200),
+          },
+        ];
+      })
+    ),
+  limits: v => {
+    const l = v && typeof v === "object" ? v : {};
+    return {
+      total: clampInt(l.total, 1, 32, LIMIT_DEFAULTS.total),
+      perProject: clampInt(l.perProject, 1, 32, LIMIT_DEFAULTS.perProject),
+      minFreeGB: clampInt(l.minFreeGB, 0, 64, LIMIT_DEFAULTS.minFreeGB),
+    };
+  },
   soundVolume: v =>
     Number.isFinite(Number(v)) ? Math.max(0, Math.min(1, Number(v))) : DEFAULTS.soundVolume,
 };

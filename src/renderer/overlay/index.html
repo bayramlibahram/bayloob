@@ -370,6 +370,15 @@
     background: linear-gradient(135deg, #B049F9, #601ADA); }
   .music .t { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .music .t span { color: var(--muted); }
+  /* Agent usage (open pill only, while something runs): Claude ●●●○ 3/4 — limits from Settings → Agents */
+  .usage { display: none; gap: 12px; flex-wrap: wrap; padding: 0 16px 8px; color: var(--muted); font-size: 11.5px; }
+  .pill.open .usage.on { display: flex; }
+  .usage span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .usage b { color: var(--soft); font-variant-numeric: tabular-nums; }
+  .usage .ud { display: inline-flex; gap: 2px; }
+  .usage .ud i { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--c); }
+  .usage .ud i.on { background: var(--c); }
+  .usage em { font-style: normal; color: var(--working); }
 </style>
 </head>
 <body>
@@ -387,6 +396,7 @@
       <div class="progress" id="progress"><i></i></div>
       <span class="plabel" id="plabel"></span>
     </div>
+    <div class="usage" id="usage" title="Agents running"></div>
     <div class="card" id="card"></div>
     <div class="voice" id="voice" data-s="off">
       <div class="vhead"><span class="vdot"></span><span id="vtitle">Voice prompt</span><button type="button" class="vtarget" id="vtarget" data-voice="target"></button></div>
@@ -1626,6 +1636,17 @@
     window.bayloobAPI.onDiffs?.(diffs => view.setDiffs(diffs));
     window.bayloobAPI.onTokens?.(tokens => view.setTokens(tokens));
     window.bayloobAPI.onQueues?.(q => view.setQueues(q));
+    // Shown in the open pill while any agent runs; the pill's ResizeObserver keeps its shape in step
+    window.bayloobAPI.onUsage?.(usage => {
+      const box = document.getElementById('usage');
+      const rows = Object.entries(usage?.agents || {}).filter(([, u]) => u.enabled && (u.running || u.queued));
+      box.classList.toggle('on', rows.length > 0);
+      box.innerHTML = rows.map(([a, u]) => {
+        const dots = Array.from({ length: Math.min(u.max, 8) }, (_, i) => `<i class="${i < u.running ? 'on' : ''}"></i>`).join('');
+        return `<span title="${esc(`${Agent.displayName(a)}: ${u.running} of ${u.max} running${u.queued ? `, ${u.queued} queued` : ''}`)}">${esc(Agent.displayName(a).split(' ')[0])}
+          <span class="ud" style="--c:${Agent.color(a)}">${dots}</span><b>${u.running}/${u.max}</b>${u.queued ? `<em>+${u.queued}</em>` : ''}</span>`;
+      }).join('');
+    });
     window.bayloobAPI.onBlocked?.(info => view.setBlocked(info));
     window.bayloobAPI.onReceipts?.(r => view.setReceipts(r));
     window.bayloobAPI.onProgress?.(p => view.setProgress(p));
