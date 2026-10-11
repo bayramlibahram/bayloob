@@ -43,7 +43,10 @@ contextBridge.exposeInMainWorld("panelAPI", {
   newSession: () => ipcRenderer.send("open-launcher"),
   launchOptions: () => ipcRenderer.invoke("panel:launch-options"),
   launch: opts => ipcRenderer.invoke("launcher:launch", opts),
-  sendPrompt: (sessionId, text) => ipcRenderer.invoke("launcher:send-prompt", sessionId, text),
+  // format: a response format id, 'none', or undefined for the agent's / the default (Settings)
+  sendPrompt: (sessionId, text, format) =>
+    ipcRenderer.invoke("launcher:send-prompt", sessionId, text, format),
+  promptFormats: () => ipcRenderer.invoke("prompt-formats"),
   continueInBayloob: sessionId => ipcRenderer.invoke("continue-in-bayloob", sessionId),
   openSettings: () => ipcRenderer.send("panel:open-settings"),
   resize: height => ipcRenderer.send("panel:resize", height),

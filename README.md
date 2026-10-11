@@ -345,6 +345,13 @@ Read-only from start to finish. Pick a preset in New task → **Analysis & opera
 | **Incident / log analysis** | The last 400 lines of each log source you name: a file, `journalctl …`, `pm2 logs … --nostream` or `docker logs …`, collected read-only into the task |
 | **Performance review** | Slow paths, N+1 queries, work in loops, blocking I/O, memory growth, missing caching or indexes |
 | **Dependency upgrade report** | What's outdated or risky, what an upgrade would break, and the order to upgrade in |
+| **Analyze files** | The files you attach: PDFs, logs, CSV, docx/xlsx, images, archives. Findings cite file and line, or a PDF's page |
+
+**Attach files** to any workflow or analysis: 📎, drop them on the text box, or paste a screenshot. They stay on this
+computer and are copied into the task, and each agent finds them, read-only, in `.bayloob/attachments/` where it
+works. A file that looks like it holds a secret (a `.env`, a private key, an API token) is flagged on its chip and
+isn't sent until you remove it or press *Send anyway*. Click a chip to preview it. PDFs and office files are also
+converted to text when `pdftotext` or LibreOffice is installed.
 
 Several analysts read in parallel (say Claude ×2 + Codex ×1). The Arbiter merges their findings into
 **one report**, each with severity, evidence (`file:line` or the log line), a recommendation and a
@@ -419,10 +426,10 @@ as choices in New task.
 
 | Tab | What's in it |
 |---|---|
-| **General** | Mascot (Novi 3D / Classic) · Pill size S / M / L · UI scale 90–150% · Theme System / Light / Dark · Launcher shortcut · Dance to music |
+| **General** | Mascot (Novi 3D / Classic) · Pill size S / M / L · UI scale 90–150% · Theme System / Light / Dark · Launcher shortcut · Dance to music · **Response formats**: templates your prompts go into (ADHD-friendly, Concise, Step-by-step plan, Explain like a teacher, or your own) |
 | **Integrations** | Claude Code hooks and the GNOME extension (install from here) · Terminal · Editor · Agents in tmux · Watch clipboard |
 | **Sounds** | Volume, a sample, and each sound on or off |
-| **Agents** | Per agent: on/off, max parallel instances, the exact commands Bayloob runs, a note. Limits for all agents, per project and free memory. The Arbiter's confidence threshold |
+| **Agents** | Per agent: on/off, max parallel instances, its response format, the exact commands Bayloob runs, a note. Limits for all agents, per project and free memory. The Arbiter's confidence threshold |
 | **Permissions** | Your *always allowed* rules and remembered denials. Each one can be removed |
 | **Hosts** | The hosts a runbook may use: SSH alias, environment, allowed commands, Test connection |
 
@@ -552,7 +559,7 @@ bun run dev              # from source
 bun run test             # unit tests (node --test)
 bun run check            # Biome: lint + format (check:fix applies)
 bun run demo             # the scripted tour
-node scripts/task-demo.js  # every workflow preset + an incident analysis on a toy repo, with stub agents
+node scripts/task-demo.js  # every workflow preset, an incident analysis and Analyze files, with stub agents
 ```
 
 ## 🗺 Next up

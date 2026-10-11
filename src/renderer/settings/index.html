@@ -41,6 +41,20 @@
   .field > :first-child { grid-column: 1; color: var(--text); font-weight: 600; }
   .field > :not(:first-child, small, .link, .agentgrid, .soundgrid) { grid-column: 2; grid-row: 1 / span 2; justify-self: end; }
   .field > small { grid-column: 1; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  /* a control that needs the whole row (the response format's template) */
+  .field > .wide { grid-column: 1 / -1; grid-row: auto; justify-self: stretch; }
+  #promptText { min-height: 150px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--text);
+    font: 12.5px/1.5 ui-monospace, monospace; resize: vertical; }
+  #promptText[readonly] { opacity: .7; }
+  #fmtName { padding: 6px 9px; }
+  .fmtlist { display: flex; flex-wrap: wrap; gap: 6px; border: 0; margin: 0; padding: 0; min-width: 0; }
+  .fmtlist button { padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--field); color: var(--soft); font-size: 12.5px; }
+  .fmtlist button[aria-pressed="true"] { border-color: var(--brand); color: var(--text); background: color-mix(in srgb, var(--brand) 14%, transparent); }
+  .fmtlist button.add { border-style: dashed; }
+  .field > .row.wide small { flex: 1; }
+  .arow .fmt { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .arow .fmt select { padding: 4px 8px; font-size: 12px; }
+  .field > .row.wide { display: flex; align-items: center; gap: 10px; }
   .field:has(> input[type=text]) { grid-template-columns: 1fr; }
   .field:has(> input[type=text]) > * { grid-column: 1; grid-row: auto; justify-self: stretch; }
   input[type=text] { width: 100%; padding: 8px 10px; border-radius: 10px; background: var(--field); border: 1px solid var(--line);
@@ -207,6 +221,22 @@
         <button type="button" class="switch" id="music" role="switch" aria-checked="true" aria-label="Dance to music"></button>
       </div>
       </div>
+      <h3>Prompts</h3>
+      <div class="group">
+      <div class="field">
+        <label for="promptDefault">Response format</label>
+        <small>Your prompts go into it: your text where <code>{{prompt}}</code> is. An agent can have its own (Agents), and a prompt box can pick another. Workflow, Arbiter and ⚔ Challenge prompts never get one (Bayloob reads their answers), and slash commands go as they are.</small>
+        <select id="promptDefault"></select>
+      </div>
+      <div class="field">
+        <span class="label">Formats</span>
+        <small>Built-in ones can't be changed — add your own.</small>
+        <fieldset class="fmtlist wide" id="fmtList" aria-label="Formats"></fieldset>
+        <input type="text" id="fmtName" class="wide" maxlength="40" placeholder="Name" aria-label="Format name" hidden>
+        <textarea id="promptText" class="wide" spellcheck="false" aria-label="Format template"></textarea>
+        <div class="row wide"><small id="promptNote"></small><button type="button" class="btn sm" id="fmtRemove" hidden>Remove this format</button></div>
+      </div>
+      </div>
     </section>
 
     <section class="pane" data-pane="integrations" role="tabpanel" hidden>
@@ -302,6 +332,7 @@
   </form>
 
 <script src="../shared/ui-common.js"></script>
+<script src="../../shared/prompt-format.js"></script>
 <script>
   const TAB_KEY = 'bayloob.settings.tab';
   const H = {
@@ -336,7 +367,7 @@
     saved: 'Saved', hint: 'Ctrl+Enter to save',
     agentOff: 'off', notInstalled: 'Not installed — install the CLI, then restart Bayloob', running: (n, max) => `${n} of ${max} running`,
     enabledTip: name => `Use ${name} in tasks`, launch: 'Starts', readOnly: 'Read-only', noReadOnly: 'no read-only flag — Bayloob denies writes',
-    notesPh: 'Notes, e.g. subscription plan — rate limits apply',
+    notesPh: 'Notes, e.g. subscription plan — rate limits apply', format: 'Response format',
     total: 'Max parallel agents', totalSub: 'all tasks together', perProject: 'Per project', perProjectSub: 'at the same time',
     attachFile: 'Attached file', attachFileSub: 'MB at most, each', attachTask: 'Attachments per task', attachTaskSub: 'MB at most, together',
     memory: 'Hold launches below', memorySub: (gb) => `GB of free memory${gb ? ` · now ${gb} GB free` : ''}`,
@@ -357,7 +388,7 @@
       $('logo').innerHTML = Agent.thumb(MANAGER);
       this.el = { form: $('form'), mascot: $('mascot'), pillSize: $('pillSize'), uiScale: $('uiScale'), arbiterConfidence: $('arbiterConfidence'), theme: $('theme'), shortcut: $('shortcut'), workspaceShortcut: $('workspaceShortcut'), onClose: $('onClose'), terminal: $('terminal'), editor: $('editor'),
         agentSum: $('agentSum'), agentsMore: $('agentsMore'), agentGrid: $('agentGrid'),
-        music: $('music'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), promptDefault: $('promptDefault'), fmtList: $('fmtList'), fmtName: $('fmtName'), promptText: $('promptText'), fmtRemove: $('fmtRemove'), promptNote: $('promptNote'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -371,6 +402,8 @@
       this.theme = values.theme;
       this.onClose = values.onClose || 'pill';
       this.music = values.music;
+      this.promptFormat = PromptFormat.normalize(values.promptFormat);
+      this.fmtShown = this.promptFormat.default || 'adhd'; // the format whose text is on view
       this.watchClipboard = values.watchClipboard;
       this.sounds = values.sounds;
       this.soundToggles = { ...(values.soundToggles || {}) };
@@ -396,6 +429,7 @@
       this.#renderMascot();
       this.#renderTheme();
       this.#renderMusic();
+      this.#renderPrompt();
       this.#renderWatch();
       this.#renderShell();
       this.#renderSounds();
@@ -461,7 +495,8 @@
           <button type="button" class="switch" role="switch" aria-checked="${!!a.enabled && !!i.installed}" data-enable="${k}" ${i.installed ? '' : 'disabled'} title="${esc(T.enabledTip(name(k)))}" aria-label="${esc(T.enabledTip(name(k)))}"></button>
           ${stepper(`agent.${k}`, a.max, 1, 16, `${name(k)} max parallel`, !i.installed)}
           ${i.launch ? `<span class="cmds"><span><b>${T.launch}</b>${esc(i.launch)}</span><span><b>${T.readOnly}</b>${esc(i.readOnly || T.noReadOnly)}</span></span>
-          <input type="text" class="notes" data-notes="${k}" value="${esc(a.notes)}" placeholder="${esc(T.notesPh)}" aria-label="${esc(name(k))} notes">` : ''}</div>`;
+          <input type="text" class="notes" data-notes="${k}" value="${esc(a.notes)}" placeholder="${esc(T.notesPh)}" aria-label="${esc(name(k))} notes">` : ''}
+          ${i.installed ? `<label class="fmt">${T.format}<select data-format="${k}" aria-label="${esc(name(k))} response format">${this.#formatOptions(this.promptFormat.agents[k] ?? '', true)}</select></label>` : ''}</div>`;
       }).join('');
       const freeGB = this.state.freeGB;
       const l = this.limits;
@@ -536,6 +571,32 @@
       this.el.watchClipboard.setAttribute('aria-checked', this.watchClipboard);
     }
 
+    // The format choices for a <select>: none (and, for an agent, the default), then every format
+    #formatOptions(value, withDefault = false) {
+      const all = PromptFormat.formats(this.promptFormat);
+      const def = all.find(f => f.id === this.promptFormat.default);
+      const opts = [...(withDefault ? [['', `Default (${def ? def.name : 'none'})`]] : []), [withDefault ? 'none' : '', 'None — prompts go as typed'], ...all.map(f => [f.id, f.name])];
+      return opts.map(([id, name]) => `<option value="${esc(id)}"${id === (value ?? '') ? ' selected' : ''}>${esc(name)}</option>`).join('');
+    }
+
+    #renderPrompt() {
+      const f = this.promptFormat;
+      const all = PromptFormat.formats(f);
+      const shown = all.find(x => x.id === this.fmtShown) || all[0];
+      this.fmtShown = shown.id;
+      this.el.promptDefault.innerHTML = this.#formatOptions(f.default);
+      this.el.fmtList.innerHTML = all.map(x => `<button type="button" data-fmt="${esc(x.id)}" aria-pressed="${x.id === shown.id}">${esc(x.name)}</button>`).join('') +
+        '<button type="button" class="add" data-fmt-add>+ New format</button>';
+      this.el.fmtName.hidden = !!shown.builtin;
+      if (!shown.builtin && document.activeElement !== this.el.fmtName) { this.el.fmtName.value = shown.name; }
+      if (document.activeElement !== this.el.promptText) { this.el.promptText.value = shown.text; }
+      this.el.promptText.readOnly = !!shown.builtin;
+      this.el.fmtRemove.hidden = !!shown.builtin;
+      this.el.promptNote.textContent = shown.text.includes(PromptFormat.PLACEHOLDER) ? '' : 'No {{prompt}}: your text goes first, the format after it';
+    }
+
+    #customShown() { return this.promptFormat.custom.find(c => c.id === this.fmtShown); }
+
     #renderMusic() {
       this.el.music.setAttribute('aria-checked', this.music);
       this.el.music.disabled = this.state.locked.includes('music');
@@ -599,7 +660,7 @@
       this.el.save.disabled = true;
       const res = await this.api?.save({
         agents: this.agents, limits: this.limits, attachLimits: this.attachLimits, hosts: this.hosts,
-        mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
+        mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, promptFormat: this.promptFormat, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, workspaceShortcut: this.el.workspaceShortcut.value, onClose: this.onClose, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -635,6 +696,42 @@
         if (b) { this.pillSize = b.dataset.v; this.#renderMascot(); }
       });
       this.el.music.addEventListener('click', () => { this.music = !this.music; this.#renderMusic(); });
+      this.el.promptDefault.addEventListener('change', () => { this.promptFormat.default = this.el.promptDefault.value || null; this.#renderPrompt(); this.#renderAgents(); });
+      this.el.fmtList.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b) { return; }
+        if (b.dataset.fmtAdd !== undefined) {
+          const id = `c-${Date.now().toString(36)}`;
+          this.promptFormat.custom.push({ id, name: 'My format', text: `${PromptFormat.PLACEHOLDER}\n\n---\nHow to answer:\n- ` });
+          this.fmtShown = id;
+          this.#renderPrompt();
+          this.#renderAgents();
+          this.el.fmtName.focus();
+          this.el.fmtName.select();
+          return;
+        }
+        this.fmtShown = b.dataset.fmt;
+        this.#renderPrompt();
+      });
+      this.el.fmtName.addEventListener('input', () => {
+        const c = this.#customShown();
+        if (c) { c.name = this.el.fmtName.value; this.#renderPrompt(); }
+      });
+      this.el.fmtName.addEventListener('change', () => this.#renderAgents());
+      this.el.promptText.addEventListener('input', () => {
+        const c = this.#customShown();
+        if (c) { c.text = this.el.promptText.value; this.#renderPrompt(); }
+      });
+      this.el.fmtRemove.addEventListener('click', () => {
+        const id = this.fmtShown;
+        const f = this.promptFormat;
+        f.custom = f.custom.filter(c => c.id !== id);
+        if (f.default === id) { f.default = null; }
+        for (const [k, v] of Object.entries(f.agents)) { if (v === id) { delete f.agents[k]; } }
+        this.fmtShown = 'adhd';
+        this.#renderPrompt();
+        this.#renderAgents();
+      });
       this.el.shellTmux.addEventListener('click', async () => {
         const on = !this.state.shell.installed;
         this.el.shellTmux.disabled = true;
@@ -664,6 +761,11 @@
           else { const [lo, hi] = LIMIT_RANGE[name]; this.limits[name] = Math.max(lo, Math.min(hi, this.limits[name] + Number(delta))); }
           this.#renderAgents();
         }
+      });
+      this.el.agentGrid.addEventListener('change', e => {
+        const k = e.target.dataset.format;
+        if (!k) { return; }
+        if (e.target.value) { this.promptFormat.agents[k] = e.target.value; } else { delete this.promptFormat.agents[k]; }
       });
       this.el.agentGrid.addEventListener('input', e => {
         if (e.target.dataset.notes) { this.agents[e.target.dataset.notes].notes = e.target.value; }

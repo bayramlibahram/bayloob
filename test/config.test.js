@@ -138,6 +138,18 @@ test("attachment limits: 50 MB a file, 200 MB a task by default; clamped", () =>
   assert.deepEqual(s.get("attachLimits"), { fileMB: 1, taskMB: 2000 });
 });
 
+test("response formats: none by default; kept as chosen", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
+  const s = new Settings(path.join(dir, "settings.json"));
+  assert.deepEqual(s.get("promptFormat"), { default: null, agents: {}, custom: [] });
+  const v = {
+    default: "adhd",
+    agents: { codex: "plan" },
+    custom: [{ id: "c-x", name: "Mine", text: "{{prompt}}!" }],
+  };
+  s.save({ promptFormat: v });
+  assert.deepEqual(new Settings(path.join(dir, "settings.json")).get("promptFormat"), v);
+});
 test("UI scale: 0.9 … 1.5 on a 0.05 grid (100 % when it isn't a number)", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
   const s = new Settings(path.join(dir, "settings.json"));

@@ -6,6 +6,7 @@ const { EventEmitter } = require("node:events");
 const { CAPACITY } = require("../../shared/task-shape");
 const { clampScale } = require("../windows/ui-scale");
 const { normalizeHost } = require("../modules/tasks/runbook");
+const PromptFormat = require("../../shared/prompt-format");
 
 // Settings → Agents: per agent on/off, how many may run at once, and a note. Limits for all of them together.
 const AGENT_DEFAULTS = Object.fromEntries(
@@ -31,6 +32,7 @@ const DEFAULTS = {
   soundVolume: 0.8, // 0..1
   soundToggles: {}, // sound name -> on/off, overriding the pack's default_enabled
   watchClipboard: false, // opt-in: offer "Fix this error?" when a stack trace is copied
+  promptFormat: PromptFormat.DEFAULT, // { default, agents, custom }: response formats (see prompt-format.js)
   attachLimits: { fileMB: 50, taskMB: 200 }, // files attached to a task: per file, and all of a task's together
   hosts: [], // operations: { id, name, alias (~/.ssh/config), env dev|staging|prod, allow: [patterns], notes }
   agents: AGENT_DEFAULTS, // per agent: { enabled, max (parallel instances), notes }
@@ -58,6 +60,7 @@ const ENV = {
   limits: () => undefined,
   hosts: () => undefined,
   attachLimits: () => undefined,
+  promptFormat: () => undefined,
 };
 
 const VALIDATE = {
@@ -109,6 +112,7 @@ const VALIDATE = {
         ];
       })
     ),
+  promptFormat: v => PromptFormat.normalize(v),
   attachLimits: v => {
     const l = v && typeof v === "object" ? v : {};
     return { fileMB: clampInt(l.fileMB, 1, 500, 50), taskMB: clampInt(l.taskMB, 1, 2000, 200) };

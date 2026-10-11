@@ -237,6 +237,9 @@
   .say .confirm .badge { margin-right: auto; }
   .ask { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   .ask .box { align-items: center; }
+  /* the response format a prompt goes into (as set in Settings, another, or none) */
+  .fmtpick { flex: none; max-width: 170px; height: 30px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 12px; }
+  .fmtpick:hover { color: var(--text); }
   .ask .spark { color: var(--brand-soft); font-size: 15px; }
   .askpick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .pick { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
@@ -478,6 +481,7 @@
           <div class="slash" id="slash" hidden role="listbox"></div>
           <div class="sugg" id="saySugg" hidden></div>
           <div class="box"><textarea id="sayText" rows="1" spellcheck="false" aria-label="Prompt to the agent"></textarea>
+<select class="fmtpick" id="sayFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
             <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
             <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
           <ul class="atts" id="sayAtts" hidden></ul>
@@ -490,6 +494,7 @@
 
     <form class="ask" id="ask" autocomplete="off">
       <div class="box"><span class="spark">✦</span><input id="askText" spellcheck="false" aria-label="Ask Bayloob" placeholder="Ask Bayloob — what should be done?">
+<select class="fmtpick" id="askFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
         <button type="button" class="attach" id="askAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
         <button type="submit" class="send" id="askSend" title="Next (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
       <ul class="atts" id="askAtts" hidden></ul>
@@ -814,7 +819,7 @@
         saySend: $('saySend'), sayHint: $('sayHint'), saySugg: $('saySugg'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
         sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
         pal: $('pal'), palText: $('palText'), palList: $('palList'),
-        sayAttach: $('sayAttach'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts') };
+        sayAttach: $('sayAttach'), sayFormat: $('sayFormat'), askFormat: $('askFormat'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
       // Files attached to the agent's prompt and to Ask Bayloob; the agent gets their paths
       this.sayAtt = new Attachments({ api: api?.uploads, list: this.el.sayAtts,
@@ -828,6 +833,7 @@
     // ---------- data in ----------
 
     show(state) {
+      this.#loadFormats();
       this.sessions = state.sessions || [];
       this.tasks = new Map((state.tasks || []).map(t => [t.id, t]));
       this.#prevStates = new Map(this.sessions.map(s => [s.id, s.state]));
@@ -1533,6 +1539,30 @@
     // ---------- prompts ----------
 
     // The selected agent's prompt box: only for sessions running in tmux and not waiting on a permission
+    // ---------- response formats (Settings → General → Prompts): a prompt box can pick another, or none ----------
+
+    formats = null; // { formats: [{ id, name }], default, agents } — null: not available here (no picker)
+
+    async #loadFormats() {
+      this.formats = (await this.api?.promptFormats?.().catch(() => null)) || null;
+      this.#fillFormats(this.el.sayFormat, this.sayFormatAgent, true);
+      this.#fillFormats(this.el.askFormat, this.askAgent, true);
+    }
+
+    // "Format: <what this agent gets>" (as set), "No format", then every format; `reset` goes back to "as set"
+    #fillFormats(sel, agent, reset = false) {
+      const f = this.formats;
+      sel.hidden = !f;
+      if (!f) { return; }
+      const keep = reset ? '' : sel.value;
+      const set = (agent && f.agents[agent]) || f.default;
+      const name = id => f.formats.find(x => x.id === id)?.name;
+      const asSet = set && set !== 'none' ? name(set) : 'none';
+      sel.innerHTML = [['', `Format: ${asSet}`], ['none', 'No format'], ...f.formats.map(x => [x.id, x.name])]
+        .map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join('');
+      sel.value = keep;
+    }
+
     #renderSay() {
       const s = !this.launchMode && this.current?.kind === 'agent' ? this.current.data : null;
       const can = !!s && !s.perm;
@@ -1541,6 +1571,8 @@
       if (this.sayFor !== s.id) {   // another session: its own empty box
         if (this.#sayConfirming) { this.#confirmSay(false); }
         this.sayFor = s.id;
+        this.sayFormatAgent = s.agent;
+        this.#fillFormats(this.el.sayFormat, s.agent, true);
         this.el.sayText.value = '';
         this.sayAtt.clear();
         this.#sayHint('');
@@ -1629,7 +1661,7 @@
       if (!this.#sayConfirming) { return this.#confirmSay(true); }
       this.#confirmSay(false);
       this.el.saySend.disabled = true;
-      const res = await this.api?.sendPrompt(this.sayFor, this.sayAtt.compose(text));
+      const res = await this.api?.sendPrompt(this.sayFor, this.sayAtt.compose(text), this.el.sayFormat.value || undefined);
       if (res?.ok) {
         if (text) { this.#remember(this.sayFor, text); }
         this.el.sayText.value = '';
@@ -1720,6 +1752,7 @@
       const last = opts.recent?.[0];
       const installed = Object.keys(opts.agents).filter(k => opts.agents[k].installed);
       this.askAgent = [sel?.agent, last?.agent].find(a => a && opts.agents[a]?.installed) || installed[0] || null;
+      this.#fillFormats(this.el.askFormat, this.askAgent);
       this.askCwd = tilde(sel?.cwd || last?.cwd || '', opts.home);
       this.askWorktree = false;
       this.#renderAskPick();
@@ -1769,7 +1802,7 @@
       const cwd = this.askCwd;
       if (!this.askAgent || !cwd) { return this.#askHint(T.pickFolder, 'err'); }
       this.#askHint(T.starting);
-      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.askAtt.compose(this.el.askText.value), worktree: this.askWorktree });
+      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.askAtt.compose(this.el.askText.value), worktree: this.askWorktree, format: this.el.askFormat.value || undefined });
       if (res?.ok) {
         this.#askReset();
         this.askAtt.clear();
@@ -2194,7 +2227,7 @@
       this.el.askText.addEventListener('input', () => { if (!this.el.askText.value.trim() && !this.el.askPick.hidden) { this.#askReset(); } });
       this.el.askPick.addEventListener('click', e => {
         const a = e.target.closest('[data-agent]');
-        if (a && !a.disabled) { this.askAgent = a.dataset.agent; }
+        if (a && !a.disabled) { this.askAgent = a.dataset.agent; this.#fillFormats(this.el.askFormat, this.askAgent); }
         if (e.target.closest('[data-worktree]')) { this.askWorktree = !this.askWorktree; }
         if (a || e.target.closest('[data-worktree]')) {
           this.askCwd = this.el.askPick.querySelector('#askCwd')?.value || this.askCwd;

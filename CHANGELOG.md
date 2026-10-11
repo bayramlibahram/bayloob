@@ -11,6 +11,31 @@
 - Settings → General → **Workspace ✕ button**: hide to pill (default), close the window (as before), or quit
   Bayloob. Alt+F4 follows it too.
 - The pill's ⋯ menu: **Workspace window** and **Quit Bayloob**.
+- **Attachments for workflows and analyses** (orchestration 11): Attach, drop or paste files under the task's text in
+  New task. They're copied into the task when it starts (never moved), with their sha256, and every agent finds
+  them in `.bayloob/attachments/` where it works — read-only, out of git (the repo's local exclude), and named in
+  its prompt by path, never by content. The hook refuses any agent's change to them.
+  - **Allowed:** text, code, logs, CSV/TSV, JSON/YAML/XML, PDF, docx/xlsx, images, zip/tar.gz; 50 MB a file and
+    200 MB a task by default (Settings → Agents).
+  - **Secrets:** a file that looks like it holds one (.env, private keys, cloud / API tokens, passwords in config,
+    database URLs with a password) is flagged on its chip, masked; nothing is sent until you remove it or press
+    *Send anyway* — in New task, the panel's prompt box and the launcher.
+  - **Preview:** a click on a chip's name: text with line numbers, a CSV's first 100 rows, an image, a PDF's first
+    page.
+  - **Converted when installed:** PDF → text (`pdftotext -layout`), docx → text and xlsx → CSV (LibreOffice); the
+    original goes along either way.
+  - **Archives** are listed, never extracted by themselves; extraction (in the store) refuses "..", absolute paths,
+    links and devices, and holds 5 000 files / 500 MB even against headers that lie.
+- **Analyze files**, a new analysis preset: analysts answer your question from the attached files, citing file and
+  line (or a PDF's page); the Arbiter merges their findings into one report.
+- `scripts/task-demo.js` runs Analyze files too (6 scenarios).
+- **Response formats** (Settings → General → Prompts): templates your prompts go into, your text where `{{prompt}}`
+  is — a new session, the prompt box, the queue, "run the tests". Four ship with Bayloob: **ADHD-friendly**,
+  **Concise**, **Step-by-step plan** and **Explain like a teacher**; add, rename and remove your own.
+  - Which one a prompt gets: the one picked in the prompt box (Workspace prompt box and Ask Bayloob), else its
+    agent's (Settings → Agents → Response format), else the default (none until you choose one).
+  - Workflow, Arbiter and Challenge prompts never get one (Bayloob reads their answers), slash commands go as they
+    are, and nothing is wrapped twice.
 - **Expand** in the Workspace window (the button in the detail's header, or Ctrl+Shift+E): the detail or an
   agent's console takes the list's place too.
 

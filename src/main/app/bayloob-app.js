@@ -54,6 +54,7 @@ const { UploadStore } = require("../modules/uploads/upload-store");
 const { AttachmentStore } = require("../modules/attachments/attachment-store");
 const { Converters } = require("../modules/attachments/converters");
 const { inspect, preview, inside } = require("../modules/attachments/preview");
+const PromptFormat = require("../../shared/prompt-format");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
@@ -1041,6 +1042,14 @@ class BayloobApp {
     });
   }
 
+  /**
+   * The owner's prompt in its response format: `choice` picked in the prompt box, else the agent's, else the
+   * default (Settings). Never for a workflow's or a challenger's prompt.
+   */
+  #formatted(text, agent = null, choice = undefined) {
+    return PromptFormat.apply(text, this.settings.get("promptFormat"), { agent, choice });
+  }
+
   /** Types (tmux), queues (busy) or copies (other terminals) a prompt for a session — see PromptDelivery. */
   deliverPrompt(s, text) {
     return this.delivery.deliver(s, text);
@@ -1517,12 +1526,29 @@ class BayloobApp {
     ipcMain.on("ask-tests", (_e, sessionId) => {
       const s = session(sessionId);
       if (s) {
-        this.deliverPrompt(s, "Run the project's tests and fix any failures.").catch(() => {});
+        this.deliverPrompt(
+          s,
+          this.#formatted("Run the project's tests and fix any failures.", s.agent)
+        ).catch(() => {});
       }
     });
 
     // Launcher
-    ipcMain.handle("launcher:launch", (_e, opts) => result(() => this.launch(opts)));
+    // The owner's prompts (a new session, the prompt box, the queue) go out in the response format, if one is on
+    ipcMain.handle("launcher:launch", (_e, opts) =>
+      result(() =>
+        this.launch({ ...opts, prompt: this.#formatted(opts?.prompt, opts?.agent, opts?.format) })
+      )
+    );
+    // The formats a prompt box offers: [{ id, name }], and which one each agent gets by default
+    ipcMain.handle("prompt-formats", () => {
+      const f = this.settings.get("promptFormat");
+      return {
+        formats: PromptFormat.formats(f).map(({ id, name }) => ({ id, name })),
+        default: f.default,
+        agents: f.agents,
+      };
+    });
     // The panel's own "Ask Bayloob" box: which agents it can start, and where
     ipcMain.handle("panel:launch-options", async () => ({
       agents: await this.#agentChoices(),
@@ -1530,13 +1556,13 @@ class BayloobApp {
       home: os.homedir(),
     }));
     // A busy agent (or one waiting on a permission) gets the prompt queued; it goes out when the turn ends
-    ipcMain.handle("launcher:send-prompt", async (_e, sessionId, text) => {
+    ipcMain.handle("launcher:send-prompt", async (_e, sessionId, text, format) => {
       const s = session(sessionId);
       try {
         if (!s) {
           throw new Error("This session has ended");
         }
-        return await this.deliverPrompt(s, String(text));
+        return await this.deliverPrompt(s, this.#formatted(String(text), s.agent, format));
       } catch (e) {
         return { ok: false, error: e.message };
       }
@@ -1797,7 +1823,13 @@ class BayloobApp {
     });
     ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
       const cwd = expandHome(String(opts?.cwd || "").trim());
-      const res = await result(() => this.launch({ ...opts, cwd }));
+      const res = await result(() =>
+        this.launch({
+          ...opts,
+          cwd,
+          prompt: this.#formatted(opts?.prompt, opts?.agent, opts?.format),
+        })
+      );
       if (res.ok) {
         this.tasks.rememberCategory(cwd, "single");
         if (draftId) {
