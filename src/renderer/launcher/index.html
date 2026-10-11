@@ -367,7 +367,7 @@
 
     #renderAgents() {
       this.el.agents.innerHTML = Object.entries(this.state.agents).map(([key, a], i) => `
-        <button type="button" class="agent${key === this.agent ? ' on' : ''}" data-agent="${key}" style="--c:${a.color}"
+        <button type="button" class="agent${key === this.agent ? ' on' : ''}" data-agent="${key}" style="--c:${Agent.color(key)}"
           ${a.installed ? '' : 'disabled'} aria-pressed="${key === this.agent}">
           <kbd>${i + 1}</kbd><div class="m">${Agent.thumb(key)}</div><b>${esc(a.name)}</b>${a.installed ? '' : `<small>${T.notInstalled}</small>`}
         </button>`).join('');
@@ -389,7 +389,7 @@
       const current = this.el.cwd.value;
       this.el.recent.innerHTML = recent.slice(0, 6).map(r => `
         <button type="button" class="chip${tilde(r.cwd, home) === current ? ' on' : ''}" data-cwd="${esc(r.cwd)}" title="${esc(tilde(r.cwd, home))}">
-          <i style="--c:${this.state.agents[r.agent]?.color || 'var(--warn)'}"></i>${esc(r.name)}</button>`).join('');
+          <i style="--c:${this.state.agents[r.agent] ? Agent.color(r.agent) : 'var(--warn)'}"></i>${esc(r.name)}</button>`).join('');
     }
 
     // The confirmation panel: agent, where it runs, how the prompt is delivered, and the prompt itself

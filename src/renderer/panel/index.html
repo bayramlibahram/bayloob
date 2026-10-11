@@ -1634,7 +1634,7 @@
     #renderAskPick() {
       const { agents } = this.askOpts;
       const chips = Object.entries(agents).map(([k, a]) => `<button type="button" class="pick${k === this.askAgent ? ' on' : ''}" data-agent="${esc(k)}"
-        ${a.installed ? '' : `disabled title="${T.notInstalled}"`}><span class="dot" style="--c:${esc(a.color)}"></span>${esc(a.name)}</button>`).join('');
+        ${a.installed ? '' : `disabled title="${T.notInstalled}"`}><span class="dot" style="--c:${Agent.color(k)}"></span>${esc(a.name)}</button>`).join('');
       this.el.askPick.innerHTML = `${chips}
         <label class="where" title="${T.pickFolder}">${FOLDER}<input id="askCwd" value="${esc(this.askCwd)}" placeholder="${T.folder}" spellcheck="false"></label>
         <button type="button" class="pick${this.askWorktree ? ' on' : ''}" data-worktree>${T.worktree}</button>
