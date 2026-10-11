@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onErrorCopied: cb => ipcRenderer.on("error-copied", (_e, info) => cb(info)),
   // Workflow tasks waiting at a gate: [{ id, title, project, gate: { id, kind, title } }]
   onTaskGates: cb => ipcRenderer.on("task-gates", (_e, gates) => cb(gates)),
+  // Open tasks: [{ id, title, project, stage, stageNo, stages, live, queued, needsYou }]
+  onTaskSummary: cb => ipcRenderer.on("task-summary", (_e, list) => cb(list)),
   // { pillSize: 's' | 'm' | 'l' } from Settings
   onAppearance: cb => ipcRenderer.on("appearance", (_e, a) => cb(a)),
   openTasks: taskId => ipcRenderer.send("open-tasks", taskId || null),

@@ -266,6 +266,18 @@
   .item .mini { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--muted); }
   .item .mini.wide-mini { width: auto; padding: 0 10px; font-size: 12px; font-weight: 600; color: var(--text); background: rgb(var(--ink) / .06); }
   .item .mini.danger { background: var(--waiting); color: #fff; }
+  /* An agent that works for a task: which task, stage and part, and Stop (through the task, so it isn't a crash) */
+  .taskbox { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; margin-bottom: 12px; padding: 10px 12px;
+    border-radius: 12px; border: 1px solid var(--line); background: rgb(var(--ink) / .03); font-size: 12.5px; }
+  .taskbox > span { color: var(--muted); }
+  .taskbox > b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .taskbox .tlink { justify-self: start; max-width: 100%; color: var(--brand-soft); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .taskbox .tlink:hover { text-decoration: underline; }
+  .taskbox .acts { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .taskbox .acts .ask { flex: 1; color: var(--waiting); font-weight: 600; }
+  .taskbox .acts button { padding: 5px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; background: rgb(var(--ink) / .06); }
+  .taskbox .acts button.danger { background: var(--waiting); color: #fff; }
+  .taskbox .acts button.stop { color: var(--waiting); }
   .item .ask { flex: 1; min-width: 0; color: var(--soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   pre.logs { max-height: 220px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: rgb(var(--ink) / .04);
     border: 1px solid var(--line); font: 11.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; color: var(--softer); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
@@ -574,7 +586,10 @@
     unhealthyN: n => `${n} unhealthy`, allHealthy: 'All healthy',
     needsExtension: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows.',
     start: 'Start', stop: 'Stop', restart: 'Restart', cancel: 'Cancel', close: 'Close',
-    dockerAsk: action => `Really ${action.toLowerCase()}?`, logs: 'Logs', logsTip: 'Show the last 200 lines (read-only)',
+    dockerAsk: action => `Really ${action.toLowerCase()}?`,
+    tbTask: 'Task', tbStage: 'Stage', tbRole: 'Role', tbRound: n => `round ${n}`, tbAgents: 'Agents',
+    stopAgent: 'Stop this agent', stopAgentAsk: 'Stop this agent? Its worktree stays.', stopIt: 'Stop it',
+    instStatus: { queued: 'queued', starting: 'starting', running: 'working' }, logs: 'Logs', logsTip: 'Show the last 200 lines (read-only)',
     logsOf: name => `Logs · ${name}`, noLogs: 'No output yet.', logsFailed: 'Couldn’t read the logs', loadingLogs: 'Reading the logs…',
     appsFailed: 'Couldn’t list the apps', retry: 'Retry', wrong: 'Something went wrong', launched: name => `Launching ${name}…`,
     cpuTip: 'All cores of this computer', memTip: 'Memory in use on this computer, of the total',
@@ -738,6 +753,7 @@
     launchMode = false;    // the list shows installed apps to launch
     launchable = null;
     launchFailed = null; // why the app list couldn't be read
+    instAsk = null;      // `${task}|${instance}` whose Stop is asking "really?"
     #flashTimer = null;
     #sayTimer = null;
     #consoles = new Map(); // session id -> { turns | unavailable, at }
@@ -1299,7 +1315,56 @@
         ${t.gate ? `<div class="note">⚠ ${esc(t.gate.title)}</div>` : ''}
         <div class="doing"><b>${esc(T.taskStage(st?.title || '', Math.min(t.stage + 1, total), total))}</b><span>${esc(t.project.name)} · ${esc(t.template.name)}</span></div>
         <ul class="timeline">${stages}</ul>
+        ${this.#taskAgents(t)}
         <div class="buttons"><button class="wide" data-act="open-task">${ICONS.tasks}${T.openTasks}</button></div>`;
+    }
+
+    // The task's agents that are queued or working, each with its Stop
+    #taskAgents(t) {
+      const live = t.instances.filter(i => ['queued', 'starting', 'running'].includes(i.status));
+      if (!live.length) { return ''; }
+      const stage = id => t.template.stages.find(x => x.id === id)?.title || id;
+      return `<h3>${T.tbAgents}</h3><div class="items">${live.map(i => {
+        const key = `${t.id}|${i.id}`;
+        const asking = this.instAsk === key;
+        return `<div class="item"><span class="dot" style="--c:${i.status === 'queued' ? 'var(--idle)' : 'var(--thinking)'}"></span>
+          <span class="t" title="${esc(i.id)}">${esc(Agent.displayName(i.adapter))} · ${esc(stage(i.stage))}${i.candidate ? ` · ${esc(i.candidate)}` : ''}</span>
+          ${asking ? `<span class="ask">${T.stopAgentAsk}</span>
+            <button class="mini wide-mini danger" data-stop-inst="${esc(key)}" data-confirmed="1">${T.stopIt}</button>
+            <button class="mini wide-mini" data-inst-cancel>${T.cancel}</button>`
+          : `<span class="m">${esc(T.instStatus[i.status] || i.status)}</span>
+            <button class="mini" data-stop-inst="${esc(key)}" title="${T.stopAgent}" aria-label="${T.stopAgent}">${ICONS.stop}</button>`}</div>`;
+      }).join('')}</div>`;
+    }
+
+    // The task instance an agent session runs (by its tmux pane), with the task
+    #taskInstance(s) {
+      const t = s.task ? this.tasks.get(s.task) : null;
+      const inst = t && [...t.instances].reverse().find(i => i.handle?.paneId && i.handle.paneId === s.term?.tmux);
+      return t ? { t, inst } : null;
+    }
+
+    // Stop for one of a task's agents: asks first, in place; the engine keeps its worktree
+    #stopInstHtml(taskId, inst, label = '') {
+      if (!inst || !['queued', 'starting', 'running'].includes(inst.status)) { return ''; }
+      const key = `${taskId}|${inst.id}`;
+      return this.instAsk === key
+        ? `<span class="ask">${T.stopAgentAsk}</span><button type="button" class="danger" data-stop-inst="${esc(key)}" data-confirmed="1">${T.stopIt}</button><button type="button" data-inst-cancel>${T.cancel}</button>`
+        : `<button type="button" class="stop" data-stop-inst="${esc(key)}" title="${T.stopAgentAsk}">${ICONS.stop} ${label || T.stopAgent}</button>`;
+    }
+
+    #taskBox(s) {
+      const found = this.#taskInstance(s);
+      if (!found) { return ''; }
+      const { t, inst } = found;
+      const st = inst && t.template.stages.find(x => x.id === inst.stage);
+      const stop = this.#stopInstHtml(t.id, inst);
+      return `<div class="taskbox">
+        <span>${T.tbTask}</span><button type="button" class="tlink" data-open-task="${esc(t.id)}" title="${esc(t.title)}">${esc(t.title)}</button>
+        ${st ? `<span>${T.tbStage}</span><b>${esc(st.title)}${inst.round > 1 ? ` · ${T.tbRound(inst.round)}` : ''}</b>` : ''}
+        ${inst ? `<span>${T.tbRole}</span><b>${esc(inst.role)}${inst.candidate ? ` · ${esc(inst.candidate)}` : ''}</b>` : ''}
+        ${stop ? `<div class="acts">${stop}</div>` : ''}
+      </div>`;
     }
 
     #agentDetail(s) {
@@ -1314,6 +1379,7 @@
         : `<div class="doing"><b title="${esc(doing.title)}">${esc(doing.title)}</b><span title="${esc(doing.detail)}">${esc(doing.detail || projectPath(s))}</span></div>
            <ul class="timeline">${history.map((h, i) => `<li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>`;
       return `
+        ${this.#taskBox(s)}
         ${this.#inboxCard(s)}
         ${this.collisions?.[s.id] ? `<div class="clashbox ${this.collisions[s.id].level}">⚠ ${esc(this.#clashText(this.collisions[s.id]))}<small>${T.clashFix}</small></div>` : ''}
         ${body}`;
@@ -1955,6 +2021,18 @@
         const win = e.target.closest('[data-window]');
         if (win) { return this.#run(this.api?.focusApp(item.id, win.dataset.window)); }
         if (e.target.closest('[data-docker-cancel]')) { this.dockerAsk = null; return this.#renderDetail(); }
+        if (e.target.closest('[data-inst-cancel]')) { this.instAsk = null; return this.#renderDetail(); }
+        const stopInst = e.target.closest('[data-stop-inst]');
+        if (stopInst) {
+          const key = stopInst.dataset.stopInst;
+          if (!stopInst.dataset.confirmed) { this.instAsk = key; return this.#renderDetail(); }
+          this.instAsk = null;
+          stopInst.disabled = true;
+          const [taskId, instId] = key.split('|');
+          return this.#run(this.api?.stopInstance(taskId, instId));
+        }
+        const openTask = e.target.closest('[data-open-task]');
+        if (openTask) { return this.api?.openTasks(openTask.dataset.openTask); }
         if (e.target.closest('[data-logs-close]')) { this.dockerLogs = null; return this.#renderDetail(); }
         const logs = e.target.closest('[data-logs]');
         if (logs) { return this.#showLogs(item, logs.dataset.logs); }

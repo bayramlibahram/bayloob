@@ -451,6 +451,19 @@
   .usage .ud i { width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--ink) / .16); }
   .usage .ud i.on { background: color-mix(in srgb, var(--c) 85%, var(--chip-tint)); }
   .usage em { font-style: normal; font-weight: 600; color: var(--working); }
+  /* Open tasks (open pill only): one quiet line each — title · stage n/m · working · queued; a click opens it */
+  .tasksum { display: none; flex-direction: column; gap: 2px; margin: -4px 8px 8px; }
+  .pill.open .tasksum.on { display: flex; }
+  .tasksum button { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 12px; border-radius: 10px; text-align: left;
+    background: rgb(var(--ink) / .04); color: var(--muted); font-size: 12px; transition: background .15s; }
+  .tasksum button:hover { background: rgb(var(--ink) / .08); }
+  .tasksum svg { width: 13px; height: 13px; flex: none; color: var(--cat-workflow); }
+  .tasksum .tt { flex: 1; min-width: 0; color: var(--soft); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tasksum .sg, .tasksum .n { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tasksum .n b { color: var(--text); font-weight: 650; }
+  .tasksum .q { color: var(--working); font-weight: 600; }
+  .tasksum .you { color: var(--waiting); font-weight: 650; }
+  .tasksum .more { padding: 2px 12px; color: var(--muted); font-size: 11.5px; }
 
   @media (prefers-reduced-motion: reduce) {
     .row, .acts, .icon, .new, .status.busy .dots i, .music .art.on i { transition: none; animation: none; }
@@ -475,6 +488,7 @@
     </div>
     <div class="moremenu" id="moremenu" role="menu"></div>
     <div class="usage" id="usage" role="status" aria-label="Agents running"></div>
+    <div class="tasksum" id="tasksum"></div>
     <div class="card" id="card"></div>
     <div class="voice" id="voice" data-s="off">
       <div class="vhead"><span class="vdot"></span><span id="vtitle">Voice prompt</span><button type="button" class="vtarget" id="vtarget" data-voice="target"></button></div>
@@ -533,6 +547,7 @@
     filesChanged: n => `${n} file${n === 1 ? '' : 's'}`,
     asksInTerminal: 'asks in the terminal', termDefault: '(terminal default)',
     taskNeedsYou: 'Task needs you', openTask: 'Open task', later: 'Later', moreTasks: n => `+${n} more`,
+    taskStageOf: (s, n, m) => `Stage ${n} of ${m}: ${s}`, taskNeedsYouShort: 'needs you', working: 'working', queuedWord: 'queued',
     menuHint: 'Bayloob picks the option you click in the terminal for you',
     soundMute: 'Sounds on — click to mute', soundUnmute: 'Sounds off — click to turn on',
     soundLocked: 'Sounds are turned off by BAYLOOB_SOUNDS=0',
@@ -564,6 +579,7 @@
   const ERROR_NOTE_MS = 30_000; // how long "Error copied — fix it?" stays (longer while hovered)
   const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const STACK_MAX = 3; // agent tiles in the pill before "+N"
+  const TASKS_SHOWN = 2; // open tasks listed under the usage band before "+N more"
   const REMIND_MS = 60_000; // an unanswered permission card gets a reminder sound this often
   const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
   const RECEIPT_MARK = { passed: ' ✓', failed: ' ✗', untested: ' ⚠' };
@@ -928,6 +944,21 @@
 
     // Shown in the open pill while any agent runs — "Claude ●●○○ 2/4 · Codex ●○ 1/2 +1"; the pill's
     // ResizeObserver keeps the Linux shape in step when the band appears or wraps
+    // One line per open task under the usage band (at most TASKS_SHOWN, then "+N more")
+    setTaskSummary(list) {
+      const box = document.getElementById('tasksum');
+      const all = list || [];
+      box.classList.toggle('on', all.length > 0);
+      const flow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a4 4 0 0 1 4 4v5.5"/></svg>';
+      box.innerHTML = all.slice(0, TASKS_SHOWN).map(t => `<button type="button" data-act="open-task" data-task="${esc(t.id)}"
+          title="${esc(`${t.title} — ${t.project}\n${T.taskStageOf(t.stage, t.stageNo, t.stages)}`)}" aria-label="${esc(`${T.openTask}: ${t.title}`)}">
+          ${flow}<span class="tt">${esc(t.title)}</span>
+          <span class="sg">${esc(t.stage)} <span class="num">${t.stageNo}/${t.stages}</span></span>
+          ${t.needsYou ? `<span class="you">${T.taskNeedsYouShort}</span>`
+            : `<span class="n"><b>${t.live}</b> ${T.working}</span>${t.queued ? `<span class="q">+${t.queued} ${T.queuedWord}</span>` : ''}`}
+        </button>`).join('') + (all.length > TASKS_SHOWN ? `<div class="more">${T.moreTasks(all.length - TASKS_SHOWN)}</div>` : '');
+    }
+
     setUsage(usage) {
       const box = document.getElementById('usage');
       const rows = Object.entries(usage?.agents || {}).filter(([, u]) => u.enabled && (u.running || u.queued));
@@ -1844,6 +1875,7 @@
     window.bayloobAPI.onRuleAllowed?.(r => view.setRuleAllowed(r));
     window.bayloobAPI.onErrorCopied?.(e => view.setErrorCopied(e));
     window.bayloobAPI.onTaskGates?.(g => view.setTaskGates(g));
+    window.bayloobAPI.onTaskSummary?.(list => view.setTaskSummary(list));
     window.bayloobAPI.onAppearance?.(a => view.setAppearance(a));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo

@@ -303,6 +303,7 @@ class BayloobApp {
     });
     this.engine.on("change", task => {
       this.overlay.send("task-gates", this.#taskGates());
+      this.overlay.send("task-summary", this.#taskSummary());
       this.#panelSend("panel:task", task);
       this.#tasksSend("tasks:task", task);
       this.#sendUsage();
@@ -343,6 +344,7 @@ class BayloobApp {
           this.overlay.send("sessions", this.server.store.list());
           this.overlay.send("health", this.#lastHealth);
           this.overlay.send("task-gates", this.#taskGates());
+          this.overlay.send("task-summary", this.#taskSummary());
           this.overlay.send("appearance", { pillSize: this.settings.get("pillSize") });
           this.#sendSoundConfig();
         });
@@ -829,6 +831,23 @@ class BayloobApp {
         title: t.title,
         project: t.project.name,
         gate: { id: t.gate.id, kind: t.gate.kind, title: t.gate.title },
+      }));
+  }
+
+  // The pill's line per open task: where it is (stage n of m) and how many of its agents work or wait
+  #taskSummary() {
+    return (this.engine?.list() || [])
+      .filter(t => t.status === "running" || t.status === "needs-you")
+      .map(t => ({
+        id: t.id,
+        title: t.title,
+        project: t.project.name,
+        stage: t.template.stages[t.stage]?.title || "",
+        stageNo: t.stage + 1,
+        stages: t.template.stages.length,
+        live: t.instances.filter(i => i.status === "starting" || i.status === "running").length,
+        queued: t.instances.filter(i => i.status === "queued").length,
+        needsYou: t.status === "needs-you",
       }));
   }
 
