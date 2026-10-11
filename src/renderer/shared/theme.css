@@ -87,6 +87,67 @@
   --cat-analysis: #1d5fd6;
 }
 
+/* The loading / empty / error block (stateHtml() in ui-common.js): one look in every window */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.state b {
+  color: var(--soft);
+  font-size: 13px;
+}
+.state > .thumb,
+.state > .novi {
+  width: 44px;
+  height: 44px;
+  opacity: 0.85;
+}
+.state.error b {
+  color: var(--error);
+}
+.state details {
+  align-self: stretch;
+  text-align: left;
+}
+.state summary {
+  cursor: pointer;
+  text-align: center;
+  color: var(--muted);
+}
+.state pre {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: var(--soft);
+  font:
+    11.5px ui-monospace,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow: auto;
+}
+.state .spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--brand);
+  animation: state-spin 0.8s linear infinite;
+}
+@keyframes state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Reduced motion (every page): nothing slides, spins, bounces or dances — opacity may still fade, briefly */
 @media (prefers-reduced-motion: reduce) {
   *,

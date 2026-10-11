@@ -506,7 +506,11 @@
       this.el.queued.addEventListener('click', async e => {
         const b = e.target.closest('[data-unqueue]');
         if (!b) { return; }
-        this.state.session.queue = (await this.api.unqueue?.(this.state.session.id, Number(b.dataset.unqueue))) || [];
+        try {
+          this.state.session.queue = (await this.api.unqueue?.(this.state.session.id, Number(b.dataset.unqueue))) || [];
+        } catch (err) {
+          return this.#message(`Couldn’t remove it from the queue: ${errorText(err)}`, true);
+        }
         this.#renderQueue();
         this.#fit();
       });

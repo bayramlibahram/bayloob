@@ -572,7 +572,8 @@
     needsExtension: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows.',
     start: 'Start', stop: 'Stop', restart: 'Restart', cancel: 'Cancel', close: 'Close',
     dockerAsk: action => `Really ${action.toLowerCase()}?`, logs: 'Logs', logsTip: 'Show the last 200 lines (read-only)',
-    logsOf: name => `Logs · ${name}`, noLogs: 'No output yet.', wrong: 'Something went wrong', launched: name => `Launching ${name}…`,
+    logsOf: name => `Logs · ${name}`, noLogs: 'No output yet.', logsFailed: 'Couldn’t read the logs', loadingLogs: 'Reading the logs…',
+    appsFailed: 'Couldn’t list the apps', retry: 'Retry', wrong: 'Something went wrong', launched: name => `Launching ${name}…`,
     cpuTip: 'All cores of this computer', memTip: 'Memory in use on this computer, of the total',
     cores: (busy, n) => `${busy.toFixed(1)} of ${n} cores busy`,
     waited: 'Agents waited', waitedTip: 'Today, agents spent this long waiting on your permission and question cards (screen-locked time not counted)',
@@ -730,6 +731,7 @@
     query = '';
     launchMode = false;    // the list shows installed apps to launch
     launchable = null;
+    launchFailed = null; // why the app list couldn't be read
     #flashTimer = null;
     #sayTimer = null;
     #consoles = new Map(); // session id -> { turns | unavailable, at }
@@ -1019,7 +1021,11 @@
     }
 
     #renderLaunchable() {
-      if (!this.launchable) { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
+      if (this.launchFailed) {
+        this.el.rows.innerHTML = stateHtml({ kind: 'error', title: T.appsFailed, action: { label: T.retry, data: { 'retry-launch': '1' } }, details: this.launchFailed });
+        return;
+      }
+      if (!this.launchable) { this.el.rows.innerHTML = stateHtml({ kind: 'loading', line: T.loading }); return; }
       const q = this.query.trim().toLowerCase();
       const list = this.launchable.filter(a => !q || a.name.toLowerCase().includes(q)).slice(0, 80);
       if (!list.length) { this.el.rows.innerHTML = `<div class="empty">${T.noMatch(esc(this.query))}</div>`; return; }
@@ -1241,7 +1247,8 @@
       const lg = this.dockerLogs;
       const logs = lg && cs.some(c => c.id === lg.id)
         ? `<h3>${T.logsOf(esc(lg.name))} <button class="link" data-logs-close>${T.close}</button></h3>
-           <pre class="logs">${lg.text == null ? T.loading : esc(lg.text) || T.noLogs}</pre>`
+           ${lg.error ? stateHtml({ kind: 'error', title: T.logsFailed, action: { label: T.retry, data: { logs: lg.id } }, details: lg.error })
+             : lg.text == null ? stateHtml({ kind: 'loading', line: T.loadingLogs }) : `<pre class="logs">${esc(lg.text) || T.noLogs}</pre>`}`
         : '';
       return `
         <div class="tiles">
@@ -1386,12 +1393,19 @@
       this.launchMode = !this.launchMode;
       this.query = '';
       this.el.search.value = '';
-      if (this.launchMode && !this.launchable) {
-        this.render();
-        this.launchable = await this.api?.launchable() || [];
-      }
+      if (this.launchMode && !this.launchable) { await this.#loadLaunchable(); }
       this.render();
       this.el.search.focus();
+    }
+
+    async #loadLaunchable() {
+      this.launchFailed = null;
+      this.render();
+      try {
+        this.launchable = await this.api?.launchable() || [];
+      } catch (err) {
+        this.launchFailed = errorText(err);
+      }
     }
 
     // ---------- prompts ----------
@@ -1751,9 +1765,14 @@
       const c = item.data.details.containers.find(x => x.id === id);
       this.dockerLogs = { id, name: c?.name || id, text: null };
       this.#renderDetail();
-      const r = await this.api?.dockerLogs(id);
+      let r;
+      try {
+        r = await this.api?.dockerLogs(id);
+      } catch (err) {
+        r = { ok: false, error: errorText(err) };
+      }
       if (this.dockerLogs?.id !== id) { return; } // closed or switched meanwhile
-      this.dockerLogs.text = r?.ok ? r.text : `⚠ ${r?.error || T.wrong}`;
+      if (r?.ok) { this.dockerLogs.text = r.text; } else { this.dockerLogs.error = r?.error || T.wrong; }
       this.#renderDetail();
       const pre = this.el.detail.querySelector('.logs');
       if (pre) { pre.scrollTop = pre.scrollHeight; } // newest at the bottom, in view
@@ -1865,10 +1884,11 @@
       document.addEventListener('mousedown', e => {
         if (!this.el.pal.hidden && !e.target.closest('#pal')) { this.#closePal(); }
       });
-      this.el.rows.addEventListener('click', e => {
+      this.el.rows.addEventListener('click', async e => {
+        if (e.target.closest('[data-retry-launch]')) { await this.#loadLaunchable(); return this.render(); }
         const launch = e.target.closest('[data-launch]');
         if (launch) {
-          const app = this.launchable.find(a => a.id === launch.dataset.launch);
+          const app = this.launchable?.find(a => a.id === launch.dataset.launch);
           this.#flash(T.launched(app?.name || ''));
           return this.#run(this.api?.launchApp(launch.dataset.launch));
         }

@@ -611,7 +611,11 @@
         if (!confirm(H.testAsk(h.alias))) { return; }
         this.hostStatus[i] = { busy: true };
         this.#renderHosts();
-        this.hostStatus[i] = (await this.api?.testHost?.(h)) || { error: 'No answer' };
+        try {
+          this.hostStatus[i] = (await this.api?.testHost?.(h)) || { error: 'No answer' };
+        } catch (err) {
+          this.hostStatus[i] = { error: errorText(err) };
+        }
         this.#renderHosts();
       });
       this.el.watchClipboard.addEventListener('click', () => { this.watchClipboard = !this.watchClipboard; this.#renderWatch(); });
@@ -661,7 +665,13 @@
         const b = e.target.closest('[data-revoke]');
         if (!b) { return; }
         b.disabled = true;
-        const rules = await this.api?.revokeRule(b.dataset.revoke);
+        let rules;
+        try {
+          rules = await this.api?.revokeRule(b.dataset.revoke);
+        } catch (err) {
+          b.disabled = false;
+          return this.#message(`Couldn’t revoke the rule: ${errorText(err)}`, 'error');
+        }
         this.#renderRules(rules || []);
         this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
       });
@@ -669,7 +679,14 @@
         const b = e.target.closest('[data-forget]');
         if (!b) { return; }
         b.disabled = true;
-        this.#renderDenials((await this.api?.forgetDenial(b.dataset.forget)) || []);
+        let denials;
+        try {
+          denials = await this.api?.forgetDenial(b.dataset.forget);
+        } catch (err) {
+          b.disabled = false;
+          return this.#message(`Couldn’t forget the denial: ${errorText(err)}`, 'error');
+        }
+        this.#renderDenials(denials || []);
         this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20);
       });
       this.el.hooks.addEventListener('click', async e => {

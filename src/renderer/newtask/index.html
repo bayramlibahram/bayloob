@@ -220,6 +220,7 @@
     title: 'New task', steps: ['Project', 'Category', 'Configure', 'Confirm'],
     subProject: 'Where should the agents work?',
     next: 'Next', start: 'Start', back: 'Back', cancel: 'Cancel',
+    infoFailed: 'Couldn’t look at this folder', retry: 'Retry',
     startLater: c => c.category === 'analysis' ? 'Analysis arrives with step 07 — the draft is saved'
       : `${TaskShape.PATTERNS[c.workflow.pattern]?.name || 'This pattern'} arrives with a later step (Pipeline and Best-of-N run now) — the draft is saved`,
     startTask: 'Start the task — the Tasks window opens on it',
@@ -306,6 +307,7 @@
     draftId = null;
     info = null;          // the selected project's git / stack / tests
     infos = new Map();    // cwd → info, for the recent list
+    infoFailed = new Map(); // cwd → why the folder couldn't be looked at
     query = '';
     busy = false;
     #saveTimer = 0;
@@ -337,6 +339,7 @@
       this.busy = false;
       this.query = '';
       this.infos = new Map();
+      this.infoFailed = new Map();
       this.att.clear();
       const d = state.draft;
       if (d) {
@@ -396,7 +399,8 @@
     // One look per folder; the map holds the promise until it resolves, then the value
     async #infoFor(cwd) {
       if (!this.infos.has(cwd)) {
-        const p = this.api.project(cwd).catch(() => null);
+        this.infoFailed.delete(cwd);
+        const p = this.api.project(cwd).catch(err => { this.infoFailed.set(cwd, errorText(err)); return null; });
         this.infos.set(cwd, p);
         this.infos.set(cwd, await p);
       }
@@ -532,7 +536,9 @@
             <span class="nm"><b>${esc(r.name)}</b><span class="mono">${esc(tilde(r.cwd, home))}</span></span><span class="meta"></span><span class="meta">${meta(r)}</span></button>`).join('')
         : `<div class="hintline">${recent.length ? T.noMatch : T.noRecent}</div>`;
       const i = this.info;
-      const box = !this.cfg.project.cwd ? '' : !i ? `<div class="projinfo"><div><span class="label">${T.git}</span><span class="skel"></span></div><div><span class="label">${T.stack}</span><span class="skel"></span></div><div><span class="label">${T.tests}</span><span class="skel"></span></div></div>`
+      const failed = this.infoFailed.get(this.cfg.project.cwd);
+      const box = !this.cfg.project.cwd ? '' : !i && failed ? stateHtml({ kind: 'error', title: T.infoFailed, action: { label: T.retry, data: { 'retry-info': '1' } }, details: failed })
+        : !i ? `<div class="projinfo"><div><span class="label">${T.git}</span><span class="skel"></span></div><div><span class="label">${T.stack}</span><span class="skel"></span></div><div><span class="label">${T.tests}</span><span class="skel"></span></div></div>`
         : `<div class="projinfo"><div><span class="label">${T.git}</span><b>${!i.exists ? T.missing : i.git ? `${esc(i.git.branch)} · ${i.git.changes ? `${i.git.changes} changes` : 'clean'}` : T.noGit}</b></div>
             <div><span class="label">${T.stack}</span><b>${esc(i.stack.join(', ') || '—')}</b></div>
             <div><span class="label">${T.tests}</span><b class="${i.test ? 'mono' : 'muted'}">${esc(i.test || T.notDetected)}</b></div></div>
@@ -838,6 +844,7 @@
         const d = b.dataset;
         const c = this.cfg;
         if (d.cwd) { return this.#setProject(d.cwd); }
+        if (d.retryInfo !== undefined) { this.infos.delete(c.project.cwd); return this.#loadInfo(c.project.cwd); }
         if (d.usepath !== undefined) { return this.#setProject(this.query); }
         if (d.browse !== undefined) {
           const dir = await this.api.pickFolder(c.project.cwd || this.state.home);

@@ -96,6 +96,37 @@ class Agent {
   }
 }
 
+// The loading / empty / error block of every list and panel (styles: .state in theme.css).
+// kind: "loading" | "empty" | "error". icon: HTML (a mascot thumb, an svg). action: { label, data } → a button
+// with data-<key>="<value>" for each data entry, handled by the page. details: the raw error, behind an expander.
+function stateHtml({
+  kind = "empty",
+  icon = "",
+  title = "",
+  line = "",
+  action = null,
+  details = "",
+} = {}) {
+  const attrs = action
+    ? Object.entries(action.data || {})
+        .map(([k, v]) => ` data-${k}="${esc(v)}"`)
+        .join("")
+    : "";
+  const role = kind === "error" ? ' role="alert"' : kind === "loading" ? ' role="status"' : "";
+  return `<div class="state ${kind}"${role}${kind === "loading" ? ' aria-busy="true"' : ""}>
+    ${kind === "loading" ? '<span class="spinner" aria-hidden="true"></span>' : icon}
+    ${title ? `<b>${esc(title)}</b>` : ""}${line ? `<span>${esc(line)}</span>` : ""}
+    ${action ? `<button class="btn sm" type="button"${attrs}>${esc(action.label)}</button>` : ""}
+    ${details ? `<details><summary>Details</summary><pre>${esc(details)}</pre></details>` : ""}
+  </div>`;
+}
+
+// The readable text of a rejected IPC call ("Error invoking remote method 'x': Error: …" → "…")
+function errorText(err) {
+  const m = String(err?.message ?? err ?? "Unknown error");
+  return m.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, "");
+}
+
 // "just now", "2m ago", "3h ago"
 function timeAgo(at, now = Date.now()) {
   const s = Math.max(0, Math.round((now - at) / 1000));

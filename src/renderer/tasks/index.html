@@ -372,7 +372,8 @@
     diff: 'Diff', review: 'Review', status2: 'Status', findings: n => n ? `${n} finding${n === 1 ? '' : 's'}` : 'no findings', files: n => `${n} file${n === 1 ? '' : 's'}`,
     out: 'Out', active: 'In the race', winner: 'Chosen', mergedInto: (b, applied) => `Chosen · ${applied ? 'applied to' : 'merged into'} ${b}`, choose: 'Choose this one', chosen: 'Picked',
     answer: 'Builder’s answer', reviewText: 'Review', noOutput: 'No output yet',
-    loading: 'Loading…', noLog: 'Nothing logged yet',
+    loading: 'Loading…', noLog: 'Nothing logged yet', retry: 'Retry', noInstances: 'No agent has started yet',
+    loadFailed: name => `Couldn’t load ${name === '#log' ? 'the log' : name}`,
     gate: {
       approve: { approve: 'Approve', changes: 'Request changes', abort: 'Abort' },
       pick: { pick: 'Pick', retry: 'Retry with note', abort: 'Abort' },
@@ -496,6 +497,7 @@
     opsUi = null; // the runbook step being confirmed / typed / edited: { task, step, mode, action, typed, argv }
     composing = null; // { action } while a note / confirmation is being written
     #art = new Map(); // `${task}:${name}` → text | null (artifacts and logs, refreshed when the task changes)
+    #artFailed = new Map(); // `${task}:${name}` → why loading it failed
     #toastTimer = null;
     templates = [];
     #builder = null;
@@ -692,13 +694,14 @@
           <div><span class="label">${T.the.tests}</span><b class="mono">${esc(t.testCommand || T.the.noTests)}</b></div>
         </div>
         <div><div class="label" style="margin-bottom:6px">${T.instances}</div>
-          ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">${T.loading}</div>`}</div>
+          ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : stateHtml({ line: T.noInstances })}</div>
       </div>`;
     }
 
     #plan(t) {
       const plan = this.#artifact(t.id, 'plan.md');
-      if (plan === undefined) { return `<div class="empty">${T.loading}</div>`; }
+      const loading = this.#loadState(t.id, 'plan.md');
+      if (loading) { return loading; }
       if (!plan) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noPlan}</b>${T.noPlanHint}</div>`; }
       // Split work: the subtasks block is shown as cards above; the raw JSON stays one click away
       let body = plan;
@@ -866,7 +869,7 @@
         const n = text ? findingsIn(text) : 0;
         return `<article class="cand"><div class="ch">${novi(i.adapter, 'l')}<div class="nm"><b>${esc(Agent.displayName(i.adapter))}</b><small class="mono">${esc(i.artifact)}</small></div>
             <span class="chip c" style="--c:${n ? 'var(--working)' : 'var(--done)'}">${T.findings(n)}</span></div>
-          <div class="md">${text === undefined ? T.loading : renderMarkdown(text || '')}</div></article>`;
+          ${this.#loadState(t.id, i.artifact) || `<div class="md">${renderMarkdown(text || '')}</div>`}</article>`;
       }).join('')}</div>`;
     }
 
@@ -906,13 +909,14 @@
         const ok = c.tests.skipped ? null : c.tests.ok;
         return `<div><div class="row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${novi(c.adapter)}<b>${esc(c.id)}</b>
             <span class="chip c" style="--c:${ok === null ? 'var(--idle)' : ok ? 'var(--done)' : 'var(--waiting)'}">${ok === null ? T.testsSkip : ok ? T.testsPass : T.testsFail}</span></div>
-          <pre class="output">${out === undefined ? T.loading : esc(out || T.noOutput)}</pre></div>`;
+          ${this.#loadState(t.id, `test-output.${c.id}.txt`) || `<pre class="output">${esc(out || T.noOutput)}</pre>`}</div>`;
       }).join('')}</div>`;
     }
 
     #log(t) {
       const entries = this.#artifact(t.id, '#log');
-      if (entries === undefined) { return `<div class="empty">${T.loading}</div>`; }
+      const loading = this.#loadState(t.id, '#log');
+      if (loading) { return loading; }
       if (!entries?.length) { return `<div class="empty">${T.noLog}</div>`; }
       return `<ul class="timeline">${[...entries].reverse().map(e => {
         const text = (T.log[e.event] || (x => x.event.startsWith('gate:') ? `You: ${x.event.slice(5)}${x.candidate ? ` ${x.candidate}` : ''}${x.note ? ` — “${x.note}”` : ''}` : x.event))(e);
@@ -966,17 +970,30 @@
 
     // ---------- data ----------
 
-    // An artifact's text: undefined while it loads (then a re-render), null when there is none
+    // An artifact's text: undefined while it loads (then a re-render), null when there is none or it failed
+    // (the reason is kept in #artFailed, so the view says what failed instead of "nothing yet")
     #artifact(id, name) {
       const key = `${id}:${name}`;
       if (this.#art.has(key)) { return this.#art.get(key); }
       this.#art.set(key, undefined);
-      const load = name === '#log' ? this.api.log(id) : this.api.artifact(id, name);
-      Promise.resolve(load).then(v => {
-        this.#art.set(key, v ?? null);
-        if (this.view === 'detail' && this.open === id && !this.composing) { this.render(); }
-      }, () => this.#art.set(key, null));
+      this.#artFailed.delete(key);
+      const done = () => { if (this.view === 'detail' && this.open === id && !this.composing) { this.render(); } };
+      Promise.resolve()
+        .then(() => (name === '#log' ? this.api.log(id) : this.api.artifact(id, name)))
+        .then(v => { this.#art.set(key, v ?? null); done(); }, err => {
+          this.#art.set(key, null);
+          this.#artFailed.set(key, errorText(err));
+          done();
+        });
       return undefined;
+    }
+
+    // The loading or error block for an artifact, or '' once its text is here
+    #loadState(id, name) {
+      const key = `${id}:${name}`;
+      if (this.#artifact(id, name) === undefined) { return stateHtml({ kind: 'loading', line: T.loading }); }
+      if (!this.#artFailed.has(key)) { return ''; }
+      return stateHtml({ kind: 'error', title: T.loadFailed(name), action: { label: T.retry, data: { retry: key } }, details: this.#artFailed.get(key) });
     }
 
     #openTask(id) {
@@ -1045,6 +1062,8 @@
         const t = this.tasks.get(this.open);
         const open = e.target.closest('[data-open]');
         if (open) { return this.#openTask(open.dataset.open); }
+        const retry = e.target.closest('[data-retry]');
+        if (retry) { this.#art.delete(retry.dataset.retry); return this.render(); }
         const d = e.target.closest('[data-density]');
         if (d) {
           this.density = d.dataset.density;
