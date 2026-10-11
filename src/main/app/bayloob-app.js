@@ -165,6 +165,7 @@ class BayloobApp {
   installed = detectAgents();
   #statsTimer = null;
   #quitting = false; // from before-quit on: a window's close is a close, never a hide to the pill
+  #livePanes = null; // every live tmux pane id (from the last reconcile), or null: not known
   output = new SessionOutput();
   git = new Git();
   discovery = new AgentDiscovery();
@@ -303,10 +304,13 @@ class BayloobApp {
       // A task's own sessions are counted by the scheduler itself while they work. After a restart they come
       // back through discovery without their task, so the engine is asked too — otherwise a builder's idle
       // session would count against its own next round and that round would wait forever.
+      // A row whose tmux pane is gone isn't a running session: Codex runs its turns in a shared app-server
+      // daemon, so its hook events can name the pane the daemon was started from, long closed
       external: () =>
         this.server.store
           .list()
           .filter(s => !s.task && !this.engine?.ownsPane(s.term?.tmux))
+          .filter(s => !(s.term?.tmux && this.#livePanes && !this.#livePanes.has(s.term.tmux)))
           .map(s => ({ adapter: s.agent, project: s.cwd })),
     });
     // The workflow engine: tasks run stage by stage; their agents are tmux sessions in the background
@@ -337,6 +341,7 @@ class BayloobApp {
             pane,
             question,
           }),
+        onSignIn: (_taskId, pane, screen) => this.engine.sessionNeedsSignIn(pane, screen),
       }),
     });
     this.engine.on("change", task => {
@@ -1467,6 +1472,7 @@ class BayloobApp {
     }
     const store = this.server.store;
     const panes = await this.launcher.managedPanes();
+    this.#livePanes = await this.launcher.allPanes();
     this.engine?.panesAlive(new Set(panes.keys()));
     const recovered = store.recoverLaunches(panes);
     const tracked = store.launchedNames();

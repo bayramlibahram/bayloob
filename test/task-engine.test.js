@@ -1701,3 +1701,74 @@ test("Lead + team: the lead plans, reviews each part (changes go back to that bu
   await decide(env, task, "merge");
   assert.equal(task.status, "done");
 });
+
+// ---------- An agent that isn't signed in; a discussion turn that's lost ----------
+
+test("An agent waiting on its login screen: stopped, and the gate says it isn't signed in, with its screen and the fix", async () => {
+  const env = setup();
+  const task = await toBuilders(env, { ...BEST, agents: { codex: 1 } });
+  const [b1] = env.runner.by({ role: "builder" });
+  assert.ok(
+    env.engine.sessionNeedsSignIn(b1.paneId, "How would you like to authenticate?\n● 1. Sign in")
+  );
+  await env.engine.settled(task.id);
+  assert.equal(task.gate.kind, "interrupted");
+  assert.match(task.gate.title, /^Codex isn't signed in$/);
+  assert.match(task.gate.screen, /authenticate/);
+  assert.match(task.gate.hint, /isn't signed in: open it in a terminal, log in/);
+  assert.ok(env.runner.stopped.includes(b1.name));
+  assert.equal(env.engine.sessionNeedsSignIn(b1.paneId, "again"), false); // already handled
+});
+
+test("Discussion: a participant's lost turn is skipped — you go on (the rest of the round), end, or stop", async () => {
+  const env = setup();
+  const task = await startTalk(env, {
+    participants: [
+      { adapter: "claude", count: 1, role: "Architect" },
+      { adapter: "codex", count: 1, role: "Skeptic" },
+      { adapter: "claude", count: 1, role: "Pragmatist" },
+    ],
+  });
+  await speak(env, task, "claude-1", say("propose"));
+  const codex = task.instances.find(i => i.speaker === "codex-1" && i.status === "running");
+  env.engine.sessionNeedsSignIn(codex.handle.paneId, "Select login method:");
+  await env.engine.settled(task.id);
+  assert.equal(task.gate.kind, "discussion");
+  assert.match(task.gate.title, /Codex · Skeptic isn't signed in — its turn is skipped/);
+  assert.match(task.gate.hint, /log in/);
+  // on: the round goes on with the next speaker, not a new round
+  await decide(env, task, "next");
+  assert.equal(task.discussion.round, 1);
+  await speak(env, task, "claude-2", say("support", ["claude-1"]));
+  assert.equal(task.discussion.round, 2);
+});
+
+test("Discussion: the decider's lost turn leaves the decision to you — adopt the leading proposal, or another round", async () => {
+  const env = setup();
+  const task = await startTalk(env, { rounds: 1, decider: { adapter: "gemini" } });
+  await speak(env, task, "claude-1", say("propose"));
+  await speak(env, task, "codex-1", say("support", ["claude-1"]));
+  const dec = task.instances.find(i => i.speaker === "decider" && i.status === "running");
+  assert.ok(dec, "the decider speaks");
+  env.engine.sessionGone(dec.handle.paneId);
+  await env.engine.settled(task.id);
+  assert.equal(task.gate.kind, "discussion-end");
+  assert.match(task.gate.title, /Gemini CLI's session ended — it couldn't write the decision/);
+  await decide(env, task, "adopt");
+  assert.match(env.store.readArtifact(task.id, "decision.md"), /proposal \(2 of 2 agree\)/);
+});
+
+test("Discussion: End while the next turn only waits for a slot drops that turn and ends now", async () => {
+  const env = setup();
+  const task = await startTalk(env, { rounds: 3 });
+  await speak(env, task, "claude-1", say("propose"));
+  // codex's turn waits (pretend its slot is taken): no one is speaking
+  const codex = task.instances.find(i => i.speaker === "codex-1");
+  Object.assign(codex, { status: "queued", handle: null });
+  const r = await env.engine.discussionAction(task.id, "end");
+  assert.equal(r.ok, true);
+  await env.engine.settled(task.id);
+  assert.equal(codex.status, "stopped");
+  assert.equal(task.gate.kind, "discussion-end");
+  assert.match(task.gate.title, /you ended it/);
+});

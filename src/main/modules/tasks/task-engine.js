@@ -58,6 +58,10 @@ const STARTUP_MS = 60_000; // a session that ends this soon after its start cras
 // Known start-up crashes and what fixes them (shown at the 'interrupted' gate with the session's last lines)
 const STARTUP_HINTS = [
   {
+    match: /authenticate|sign in|log ?in/i,
+    hint: "This agent isn't signed in: open it in a terminal, log in, then Run again — or stop the task and pick another agent.",
+  },
+  {
     match: /account\/read failed|TUI bootstrap|app-server/i,
     hint: "Codex's background app-server looks stale: run `codex app-server daemon restart`, then Run again.",
   },
@@ -413,6 +417,36 @@ class TaskEngine extends EventEmitter {
     return true;
   }
 
+  /**
+   * The session behind `paneId` waits on its login screen (the agent isn't signed in): it's stopped, and the
+   * stage asks you, with that screen and how to fix it — instead of waiting forever.
+   */
+  sessionNeedsSignIn(paneId, screen) {
+    const found = this.#findByPane(paneId, "running");
+    if (!found) {
+      return false;
+    }
+    const { task, inst } = found;
+    this.#serial(task.id, async () => {
+      if (inst.status !== "running") {
+        return;
+      }
+      this.scheduler.release(inst.schedId, "sign-in");
+      Object.assign(inst, {
+        status: "interrupted",
+        endedAt: this.now(),
+        crashedAtStart: true,
+        signIn: true,
+        screen: String(screen || ""),
+      });
+      this.#log(task, "engine", "needs-sign-in", { instance: inst.id, adapter: inst.adapter });
+      await this.runner.stop(inst.handle).catch(() => {});
+      await this.#checkStage(task);
+      this.#save(task);
+    });
+    return true;
+  }
+
   /** tmux's live panes: a running instance whose pane is gone (and that started a while ago) was lost. */
   panesAlive(panes, graceMs = 10_000) {
     for (const task of this.#tasks.values()) {
@@ -492,7 +526,12 @@ class TaskEngine extends EventEmitter {
       switch (action) {
         case "next":
           task.discussion.pauseAfterRound = false;
-          await this.#discussRound(task, this.#stage(task));
+          if (task.discussion.resume) {
+            task.discussion.resume = false;
+            await this.#discussNext(task, this.#stage(task));
+          } else {
+            await this.#discussRound(task, this.#stage(task));
+          }
           break;
         case "end":
           await this.#discussEnd(task, this.#stage(task), "owner");
@@ -965,8 +1004,21 @@ class TaskEngine extends EventEmitter {
             task.gate = null;
             task.status = "running";
             await this.#discussEnd(task, st, "owner");
-          } else {
+          } else if (
+            task.instances.some(
+              i => i.stage === st.id && ["starting", "running"].includes(i.status)
+            )
+          ) {
             d.endRequested = true; // after the turn that's running
+          } else {
+            // No one is speaking (a turn waits for a free slot): it's dropped, and the discussion ends now
+            for (const i of task.instances.filter(
+              x => x.stage === st.id && x.status === "queued"
+            )) {
+              this.scheduler.release(i.schedId, "stopped");
+              Object.assign(i, { status: "stopped", endedAt: this.now() });
+            }
+            await this.#discussEnd(task, st, "owner");
           }
           this.#log(task, "you", "discussion:end", {});
           break;
@@ -1119,6 +1171,42 @@ class TaskEngine extends EventEmitter {
     } else {
       await this.#discussRound(task, st);
     }
+  }
+
+  // A turn lost (its session crashed or ended, or the agent isn't signed in): the discussion waits for you —
+  // a participant's turn is skipped (go on, end and decide, or stop); the decider's leaves the decision to you
+  #discussLost(task, st) {
+    const d = task.discussion;
+    const lost = task.instances.find(
+      i => i.stage === st.id && i.speaker && i.status === "interrupted" && !i.lostSeen
+    );
+    if (!lost || task.gate) {
+      return;
+    }
+    lost.lostSeen = true;
+    const name =
+      lost.speaker === "decider"
+        ? AGENTS[lost.adapter]?.name || lost.adapter
+        : d.participants.find(p => p.id === lost.speaker)?.name || lost.speaker;
+    const why = lost.signIn ? `${name} isn't signed in` : `${name}'s session ended`;
+    const extra = {
+      ...(lost.screen ? { screen: lost.screen } : {}),
+      ...(lost.crashedAtStart
+        ? { hint: STARTUP_HINTS.find(h => h.match.test(lost.screen || ""))?.hint || null }
+        : {}),
+    };
+    if (lost.speaker === "decider") {
+      this.#openGate(task, "discussion-end", `${why} — it couldn't write the decision`, {
+        ...this.#discussEndExtra(task),
+        ...extra,
+      });
+      return;
+    }
+    d.resume = true; // "next" goes on with the rest of this round
+    this.#openGate(task, "discussion", `${why} — its turn is skipped`, {
+      ...this.#discussGate(task),
+      ...extra,
+    });
   }
 
   #discussGate(task) {
@@ -1509,6 +1597,10 @@ class TaskEngine extends EventEmitter {
   async #checkStage(task) {
     const st = this.#stage(task);
     const state = task.stages[task.stage];
+    if (st?.role === "discussion" && task.discussion && state.status === "running") {
+      this.#discussLost(task, st);
+      return;
+    }
     if (!st || state.status !== "running" || st.action || !st.agents) {
       return;
     }
@@ -1539,9 +1631,11 @@ class TaskEngine extends EventEmitter {
       this.#openGate(
         task,
         "interrupted",
-        atStart.length
-          ? `${atStart.length} agent session(s) crashed right after starting${repeats > 1 ? ` (${repeats} times)` : ""}`
-          : `${interrupted.length} agent session(s) ended before finishing`,
+        atStart.some(i => i.signIn)
+          ? `${[...new Set(atStart.filter(i => i.signIn).map(i => AGENTS[i.adapter]?.name || i.adapter))].join(", ")} isn't signed in`
+          : atStart.length
+            ? `${atStart.length} agent session(s) crashed right after starting${repeats > 1 ? ` (${repeats} times)` : ""}`
+            : `${interrupted.length} agent session(s) ended before finishing`,
         {
           ...(screen ? { screen } : {}),
           ...(hint ? { hint } : {}),

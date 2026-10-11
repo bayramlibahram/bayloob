@@ -220,6 +220,17 @@ class SessionLauncher {
     }
   }
 
+  /** Every live tmux pane id (anyone's), or null when tmux can't be asked. */
+  async allPanes() {
+    try {
+      return new Set(
+        (await tmux(["list-panes", "-a", "-F", "#{pane_id}"])).split("\n").filter(Boolean)
+      );
+    } catch {
+      return null;
+    }
+  }
+
   /** Names of Bayloob-launched tmux sessions that are still alive. */
   async alive() {
     try {

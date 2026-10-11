@@ -182,3 +182,29 @@ test("a session's last screen is kept after its pane is gone (a crash at start)"
   await settle();
   assert.equal(runner.lastScreen(h), crash);
 });
+
+test("An agent on its login screen is reported once (from the login question on), and its screen isn't answered", async () => {
+  const GEMINI_LOGIN = `Tips for getting started:
+1. Create GEMINI.md files
+│ ? Get started                                   │
+│   How would you like to authenticate for this project? │
+│   ● 1. Sign in with Google                      │
+│   Failed to sign in. Message: This client is no longer supported │
+`;
+  const { runner, calls } = make(["", GEMINI_LOGIN]);
+  const seen = [];
+  runner.onSignIn = (task, pane, screen) => seen.push([task, pane, screen]);
+  await runner.launch({
+    adapter: "gemini",
+    cwd: "/w/ro",
+    prompt: "x",
+    mode: "read-only",
+    role: "arbiter",
+    taskId: "t1",
+  });
+  await settle();
+  assert.equal(seen.length, 1);
+  assert.deepEqual(seen[0].slice(0, 2), ["t1", "%7"]);
+  assert.match(seen[0][2], /authenticate[\s\S]*Failed to sign in/);
+  assert.deepEqual(calls.keys, []);
+});
