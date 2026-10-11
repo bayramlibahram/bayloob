@@ -6,16 +6,6 @@
 <title>Bayloob settings</title>
 <link rel="stylesheet" href="../shared/theme.css">
 <style>
-  :root {
-    --glass: rgba(18, 17, 23, 0.97);
-    --field: rgb(var(--ink) / 0.05);
-    --line: rgb(var(--ink) / 0.09);
-    --text: #f2f2f5;
-    --muted: #8b8b96;
-    --brand: #8b5cff;
-    --error: #ff5d6c;
-    --ok: #4fd59a;
-  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: transparent; height: 100%; overflow: hidden;
     font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
@@ -44,7 +34,7 @@
 
   .seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); width: max-content; }
   .seg button { padding: 5px 12px; border-radius: 7px; color: var(--muted); }
-  .seg button[aria-pressed="true"] { background: rgba(139,92,255,.22); color: var(--text); }
+  .seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--brand) 22%, transparent); color: var(--text); }
   .seg button:disabled { cursor: not-allowed; opacity: .5; }
 
   .link { grid-column: 2; justify-self: start; margin-top: -4px; color: var(--brand-soft); font-size: 12px; font-weight: 600; }
@@ -54,7 +44,7 @@
     background: var(--field); border: 1px solid var(--line); }
   .soundgrid[hidden] { display: none; }
   .soundgrid button { padding: 4px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
-  .soundgrid button[aria-pressed="true"] { color: var(--text); background: rgba(139,92,255,.16); border-color: rgba(139,92,255,.45); }
+  .soundgrid button[aria-pressed="true"] { color: var(--text); background: color-mix(in srgb, var(--brand) 16%, transparent); border-color: color-mix(in srgb, var(--brand) 45%, transparent); }
   .soundgrid button:disabled { opacity: .45; }
   .sound { display: flex; align-items: center; gap: 10px; }
   .sound input[type=range] { width: 130px; accent-color: var(--brand); }
@@ -77,7 +67,7 @@
   .rules .btn { padding: 4px 10px; }
   .btn { padding: 8px 14px; border-radius: 10px; background: rgb(var(--ink) / .08); font-weight: 600; white-space: nowrap; }
   .btn:hover { background: rgb(var(--ink) / .14); }
-  .btn.primary { background: var(--brand); color: #fff; }
+  .btn.primary { background: var(--primary-bg); color: var(--primary-fg); }
   .btn:disabled { opacity: .5; cursor: progress; }
   /* Settings → Agents: per agent on/off, max parallel instances, commands, notes; then the limits for all */
   .agentsum { color: var(--soft); font-size: 12.5px; }
@@ -341,7 +331,7 @@
       const h = this.state.hooks;
       const ok = h.complete, partial = h.installed && !h.complete;
       const text = override || (ok ? T.hooksOk : partial ? T.hooksPartial(h.events.length) : T.hooksMissing);
-      const color = ok || override ? 'var(--ok)' : partial ? '#ffb547' : 'var(--error)';
+      const color = ok || override ? 'var(--ok)' : partial ? 'var(--warn)' : 'var(--error)';
       this.el.hooks.innerHTML = `<span class="dot" style="--c:${color}"></span><span>${text}</span>` +
         (ok || override ? '' : `<button type="button" class="btn" id="install">${T.install}</button>`);
     }
@@ -355,7 +345,7 @@
       const relogin = result?.needsRelogin || (ext.installed && !ext.state);
       const ok = !result && ext.state === 'ACTIVE' || result && !result.needsRelogin;
       const text = ok ? T.extOk : relogin ? T.extRelogin : T.extOff;
-      const color = ok ? 'var(--ok)' : relogin ? '#ffb547' : 'var(--error)';
+      const color = ok ? 'var(--ok)' : relogin ? 'var(--warn)' : 'var(--error)';
       box.innerHTML = `<span class="dot" style="--c:${color}"></span><span>${text}</span>` +
         (ok || relogin ? '' : `<button type="button" class="btn" id="enableExt">${T.enable}</button>`);
     }

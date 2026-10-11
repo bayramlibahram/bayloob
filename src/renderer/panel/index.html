@@ -7,19 +7,6 @@
 <link rel="stylesheet" href="../shared/theme.css">
 <link rel="stylesheet" href="../shared/attachments.css">
 <style>
-  :root {
-    --glass: rgba(17, 16, 22, 0.97);
-    --raised: rgb(var(--ink) / 0.04);
-    --line: rgb(var(--ink) / 0.08);
-    --text: #f2f2f5;
-    --muted: #8b8b96;
-    --idle: #8b8b96;
-    --thinking: #6aa8ff;
-    --working: #ffb547;
-    --waiting: #ff5d6c;
-    --done: #4fd59a;
-    --brand: #8b5cff;
-  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: transparent; height: 100%; overflow: hidden;
     font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
@@ -72,7 +59,7 @@
   .side { padding: 12px 10px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
   .nav { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; color: var(--soft); text-align: left; transition: background .12s; }
   .nav:hover { background: rgb(var(--ink) / .04); }
-  .nav.on { background: rgba(139,92,255,.14); color: var(--text); }
+  .nav.on { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--text); }
   .nav span { flex: 1; }
   .nav em { font-style: normal; font-size: 11px; color: var(--muted); }
   .nav em.hot { color: #fff; background: var(--waiting); padding: 0 6px; border-radius: 999px; font-weight: 700; }
@@ -99,7 +86,7 @@
   .icard .opts { display: flex; flex-wrap: wrap; gap: 5px; }
   .icard .opt { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12px; color: var(--soft); text-align: left; }
   .icard .opt:hover { background: rgb(var(--ink) / .08); }
-  .icard .opt.on { border-color: rgba(139,92,255,.6); background: rgba(139,92,255,.18); color: var(--text); }
+  .icard .opt.on { border-color: color-mix(in srgb, var(--brand) 60%, transparent); background: color-mix(in srgb, var(--brand) 18%, transparent); color: var(--text); }
   .icard .acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
   .icard .btn { padding: 6px 12px; }
   .icard .btn.allow { background: var(--done); color: var(--on-done); border-color: transparent; }
@@ -114,7 +101,7 @@
   .pal .pin kbd { font: 11px ui-monospace, monospace; padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line); }
   .pal .plist { max-height: 300px; overflow-y: auto; padding: 5px; display: flex; flex-direction: column; }
   .pal .plist button { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 9px; text-align: left; }
-  .pal .plist button.on { background: rgba(139,92,255,.16); }
+  .pal .plist button.on { background: color-mix(in srgb, var(--brand) 16%, transparent); }
   .pal .plist button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pal .plist button small { color: var(--muted); font-size: 11.5px; }
   .pal .plist .none { padding: 14px; color: var(--muted); text-align: center; }
@@ -131,12 +118,20 @@
   .rows { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
   .row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .12s; }
   .row:hover { background: rgb(var(--ink) / .03); }
-  .row.sel { background: rgba(139,92,255,.09); border-color: rgba(139,92,255,.22); }
+  .row.sel { background: color-mix(in srgb, var(--brand) 9%, transparent); border-color: color-mix(in srgb, var(--brand) 22%, transparent); }
   .row .ic { width: 38px; height: 38px; }
   .row .who { flex: 1; min-width: 0; }
   .row .who b { display: block; font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .who span { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .state { display: flex; align-items: center; gap: 7px; width: 118px; font-size: 12.5px; color: var(--c); flex: none; }
+  /* A list row's right side: the status, and on hover / selection / keyboard focus the row's buttons in the same
+     place — the name keeps the width the buttons used to take, and nothing shifts when they appear */
+  .row .slot { position: relative; display: flex; align-items: center; justify-content: flex-end; width: 118px; height: 30px; flex: none; }
+  .row .slot .state { width: auto; }
+  .row .slot .acts { position: absolute; inset: 0; display: none; align-items: center; justify-content: flex-end; gap: 4px; }
+  .row:hover .slot .acts, .row.sel .slot .acts, .row:focus-within .slot .acts { display: flex; }
+  .row:hover .slot > .state .lbl, .row.sel .slot > .state .lbl, .row:focus-within .slot > .state .lbl { visibility: hidden; }
+  .row .slot > .state { position: absolute; left: 0; }
   .row .square { width: 30px; height: 30px; }
   .clash { flex: none; font-style: normal; font-size: 15px; color: var(--working); }
   .clash.conflict { color: var(--waiting); }
@@ -171,7 +166,7 @@
     border-radius: 12px; background: var(--glass); border: 1px solid var(--line); box-shadow: 0 8px 24px rgb(var(--shade) / calc(.4 * var(--shade-k))); z-index: 5; }
   .slash[hidden] { display: none; }
   .slash button { display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: 8px; text-align: left; font-size: 12.5px; }
-  .slash button.on, .slash button:hover { background: rgba(139,92,255,.16); }
+  .slash button.on, .slash button:hover { background: color-mix(in srgb, var(--brand) 16%, transparent); }
   .slash code { font: 600 12px ui-monospace, monospace; color: var(--brand-soft); }
   .slash span { color: var(--soft); }
   .pqueue { list-style: none; display: flex; flex-direction: column; gap: 3px; }
@@ -180,10 +175,10 @@
   .pqueue li:not(.cap) { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 9px; border-radius: 8px; background: rgb(var(--ink) / .04); font-size: 12px; }
   .pqueue li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--softer); }
   .pqueue li button { width: 20px; height: 20px; border-radius: 6px; color: var(--muted); }
-  .pqueue li button:hover { background: rgba(255,93,108,.15); color: var(--waiting); }
+  .pqueue li button:hover { background: color-mix(in srgb, var(--waiting) 15%, transparent); color: var(--waiting); }
   .box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px;
     background: rgb(var(--ink) / .05); border: 1px solid var(--line); transition: border-color .15s; }
-  .box:focus-within { border-color: rgba(139,92,255,.55); }
+  .box:focus-within { border-color: color-mix(in srgb, var(--brand) 55%, transparent); }
   .box textarea, .box input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: none; color: var(--text);
     font: inherit; line-height: 1.4; max-height: 120px; }
   .box textarea::placeholder, .box input::placeholder { color: var(--muted); }
@@ -196,7 +191,7 @@
   /* confirm strip: what is about to happen, before it happens (Enter confirms, Esc / Edit goes back) */
   /* "an agent just finished": reply from here, no terminal needed */
   .finished { display: flex; align-items: center; gap: 12px; margin: 10px 16px 0; padding: 10px 10px 10px 12px; border-radius: 14px;
-    background: linear-gradient(90deg, rgba(79,213,154,.13), rgba(79,213,154,.04)); border: 1px solid rgba(79,213,154,.35);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--done) 13%, transparent), color-mix(in srgb, var(--done) 4%, transparent)); border: 1px solid color-mix(in srgb, var(--done) 35%, transparent);
     animation: cin .2s ease-out; }
   .finished[hidden] { display: none; }
   .finished .ic { width: 30px; height: 30px; flex: none; }
@@ -209,16 +204,16 @@
   .finished .x { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
   .finished .x:hover { background: rgb(var(--ink) / .08); color: var(--text); }
   .confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 8px 8px 12px; border-radius: 12px;
-    background: rgba(139,92,255,.09); border: 1px solid rgba(139,92,255,.35); animation: cin .15s ease-out; }
+    background: color-mix(in srgb, var(--brand) 9%, transparent); border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); animation: cin .15s ease-out; }
   .confirm[hidden] { display: none; }
   @keyframes cin { from { opacity: 0; transform: translateY(-3px); } }
   .confirm .q { flex: 1; min-width: 0; color: var(--soft, var(--soft)); font-size: 12.5px; overflow-wrap: anywhere; }
   .confirm .q b { color: var(--text); }
   .confirm code { font: 12px ui-monospace, monospace; color: var(--text); }
   .confirm .badge { padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-  .confirm .badge.now { color: var(--done); background: rgba(79,213,154,.12); }
-  .confirm .badge.paste { color: var(--brand-soft); background: rgba(139,92,255,.12); }
-  .confirm .badge.queue { color: var(--working); background: rgba(255,181,71,.12); }
+  .confirm .badge.now { color: var(--done); background: color-mix(in srgb, var(--done) 12%, transparent); }
+  .confirm .badge.paste { color: var(--brand-soft); background: color-mix(in srgb, var(--brand) 12%, transparent); }
+  .confirm .badge.queue { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
   .confirm .btn { padding: 6px 12px; }
   .confirm .btn.on[type=submit] { background: var(--brand); border-color: transparent; color: #fff; }
   .confirm .btn.on[type=submit]:hover { filter: brightness(1.1); background: var(--brand); }
@@ -232,7 +227,7 @@
   .pick { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
     border: 1px solid var(--line); background: var(--raised); color: var(--soft); }
   .pick .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
-  .pick.on { border-color: rgba(139,92,255,.6); background: rgba(139,92,255,.18); color: var(--text); }
+  .pick.on { border-color: color-mix(in srgb, var(--brand) 60%, transparent); background: color-mix(in srgb, var(--brand) 18%, transparent); color: var(--text); }
   .pick:disabled { opacity: .4; cursor: default; }
   .askpick .where { flex: 1; min-width: 160px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
   .askpick .where input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); font: inherit;
@@ -266,7 +261,7 @@
     border: 1px solid var(--line); background: var(--raised); font-weight: 600; transition: background .15s; }
   .wide:hover { background: rgb(var(--ink) / .08); }
   .wide:disabled { opacity: .4; cursor: default; }
-  .note { margin-top: 12px; padding: 9px 11px; border-radius: 10px; background: rgba(255,181,71,.08); border: 1px solid rgba(255,181,71,.2); color: var(--note-text); font-size: 12px; }
+  .note { margin-top: 12px; padding: 9px 11px; border-radius: 10px; background: color-mix(in srgb, var(--working) 8%, transparent); border: 1px solid color-mix(in srgb, var(--working) 20%, transparent); color: var(--note-text); font-size: 12px; }
   .doing { padding: 12px 0; border-bottom: 1px solid var(--line); margin-top: 12px; border-top: 1px solid var(--line); }
   .doing b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .doing span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -283,7 +278,7 @@
   .tsep .live { color: var(--thinking); font-weight: 600; }
   /* messages: Markdown, folded to a few lines with a fade until opened */
   .msg { position: relative; padding: 8px 12px; color: var(--text); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; user-select: text; }
-  .msg.you { align-self: flex-end; max-width: 88%; border-radius: 12px 12px 4px 12px; background: rgba(139,92,255,.16); }
+  .msg.you { align-self: flex-end; max-width: 88%; border-radius: 12px 12px 4px 12px; background: color-mix(in srgb, var(--brand) 16%, transparent); }
   .msg.said { border-radius: 12px 12px 12px 4px; background: rgb(var(--ink) / .05); border: 1px solid var(--line); }
   .msg.you i.cont { color: var(--muted); }
   .msg.long:not(.open) { overflow: hidden; -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
@@ -338,7 +333,7 @@
   .working i:nth-child(2) { animation-delay: .2s; } .working i:nth-child(3) { animation-delay: .4s; margin-right: 4px; }
   .timeline { list-style: none; padding: 8px 0 0; }
   .timeline li { position: relative; display: flex; align-items: baseline; gap: 10px; padding: 5px 0 5px 22px; font-size: 12.5px; }
-  .timeline li::before { content: ''; position: absolute; left: 3px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 6px rgba(139,92,255,.6); }
+  .timeline li::before { content: ''; position: absolute; left: 3px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 6px color-mix(in srgb, var(--brand) 60%, transparent); }
   .timeline li.now::before { background: transparent; border: 1.5px solid var(--brand); box-shadow: none; }
   .timeline li + li::after { content: ''; position: absolute; left: 7px; top: -9px; height: 16px; border-left: 1px solid rgb(var(--ink) / .14); }
   .timeline.plain li::before { background: none; border: 1.5px solid var(--muted); box-shadow: none; }
@@ -350,7 +345,7 @@
   .foot { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); }
   .btn { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); font-weight: 600; transition: background .15s; }
   .btn:hover { background: rgb(var(--ink) / .08); }
-  .btn.on { background: rgba(139,92,255,.16); border-color: rgba(139,92,255,.3); }
+  .btn.on { background: color-mix(in srgb, var(--brand) 16%, transparent); border-color: color-mix(in srgb, var(--brand) 30%, transparent); }
   .btn:disabled { opacity: .4; cursor: default; }
   .meters { flex: 1; display: flex; justify-content: center; align-items: center; gap: 16px; color: var(--muted); font-size: 12.5px; }
   .meters b { color: var(--text); font-weight: 600; margin-left: 4px; }
@@ -478,6 +473,8 @@
     palAsk: 'Ask Bayloob — start a new session', palNewTask: 'New task… — project, category, agents', palLaunch: 'Launch an app', palSettings: 'Open Settings',
     palTerminal: name => `Open ${name}’s terminal`, palWorkspace: name => `Open ${name}’s folder`,
     launchTitle: 'Launch app', searchApps: 'Search apps…', searchInstalled: 'Search installed apps…',
+    searchIn: { inbox: 'Filter the inbox…', agents: 'Search agents…', tasks: 'Search tasks…', overview: 'Search apps and agents…' },
+    groupAgents: 'Agents', groupApps: 'Apps',
     status: { active: 'Active', running: 'Running', healthy: 'Healthy', unhealthy: 'Unhealthy', stopped: 'Stopped',
       idle: 'Idle', thinking: 'Thinking', working: 'Working', waiting: 'Needs approval', done: 'Done', 'needs-you': 'Needs you' },
     kind: { browser: 'Browser', ide: 'IDE', terminal: 'Terminal', files: 'Files', app: 'Application', system: 'System tool', agent: 'AI agent', task: 'Workflow task' },
@@ -607,7 +604,7 @@
     const parts = String(s.cwd || '').split('/').filter(Boolean);
     return parts.length >= 2 ? parts.slice(-2).join(' / ') : (s.project || '');
   };
-  const stateHtml = status => `<span class="state" style="--c:${STATUS_COLOR[status] || 'var(--idle)'}"><span class="dot"></span>${T.status[status] || status}</span>`;
+  const stateHtml = status => `<span class="state" style="--c:${STATUS_COLOR[status] || 'var(--idle)'}"><span class="dot"></span><span class="lbl">${T.status[status] || status}</span></span>`;
   const pct = v => v == null ? '—' : `${Math.round(v)}%`;
 
   /** One row's data, whatever it is: an installed app, Docker, or an agent session. */
@@ -781,7 +778,8 @@
         const rank = { 'needs-you': 3, running: 2 };
         return [...this.tasks.values()].sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0) || b.updatedAt - a.updatedAt).map(taskItem);
       }
-      if (section === 'agents') { return this.#byProject(agents); }
+      // Under a project heading the path would repeat it: the row says what the agent is doing instead
+      if (section === 'agents') { return this.#byProject(agents).map(i => ({ ...i, subtitle: i.data.label || i.data.activity?.title || i.subtitle })); }
       if (section === 'overview') { return [...apps, ...agents]; }
       return apps.filter(i => SECTION_OF[i.category] === section);
     }
@@ -862,7 +860,7 @@
 
     #renderList() {
       this.el.listTitle.textContent = this.launchMode ? T.launchTitle : T.listTitle[this.section];
-      this.el.search.placeholder = this.launchMode ? T.searchInstalled : T.searchApps;
+      this.el.search.placeholder = this.launchMode ? T.searchInstalled : T.searchIn[this.section] || T.searchApps;
       this.el.launch.classList.toggle('on', this.launchMode);
       if (this.launchMode) { return this.#renderLaunchable(); }
       if (this.apps === null && !['inbox', 'agents', 'tasks'].includes(this.section)) { this.el.rows.innerHTML = `<div class="empty">${T.loading}</div>`; return; }
@@ -874,20 +872,22 @@
         return;
       }
       const sel = this.current?.key;
-      // Agents: a heading over each project's sessions
-      const groupOf = i => this.section === 'agents' ? i.data.cwd || i.data.project || '' : null;
+      // Agents: a heading over each project's sessions; Overview: the apps, then the agents
+      const groupOf = i => this.section === 'agents' ? i.data.cwd || i.data.project || ''
+        : this.section === 'overview' ? (i.kind === 'agent' ? 'agents' : 'apps') : null;
+      const groupName = i => this.section === 'overview' ? (i.kind === 'agent' ? T.groupAgents : T.groupApps) : i.data.project || projectPath(i.data);
       const sizes = new Map();
       for (const i of items) { sizes.set(groupOf(i), (sizes.get(groupOf(i)) || 0) + 1); }
       this.el.rows.innerHTML = items.map((i, n) => `
         ${groupOf(i) !== null && (n === 0 || groupOf(items[n - 1]) !== groupOf(i))
-          ? `<div class="group" title="${esc(i.data.cwd || '')}">${esc(i.data.project || projectPath(i.data))}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
+          ? `<div class="group" title="${esc(this.section === 'agents' ? i.data.cwd || '' : '')}">${esc(groupName(i))}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
         <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
           ${iconHtml(i)}
           <div class="who"><b>${esc(i.name)}</b><span title="${esc(i.subtitle || '')}"${i.why ? ` class="why" style="--c:${WHY_COLOR[i.why]}"` : ''}>${esc(i.subtitle || '')}</span></div>
           ${i.kind === 'agent' ? this.#clashBadge(i.data) : ''}
-          ${stateHtml(i.status)}
-          <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
-          <button class="kebab" data-act="menu" title="${T.more}"${i.kind === 'docker' || i.kind === 'task' ? ' style="visibility:hidden"' : ''}>${ICONS.dots}</button>
+          <div class="slot">${stateHtml(i.status)}<div class="acts">
+            <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}" aria-label="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
+            ${i.kind === 'docker' || i.kind === 'task' ? '' : `<button class="kebab" data-act="menu" title="${T.more}" aria-label="${T.more}">${ICONS.dots}</button>`}</div></div>
         </div>`).join('');
     }
 
@@ -926,7 +926,9 @@
       const item = this.launchMode ? null : this.current;
       if (!item) { this.el.detail.innerHTML = ''; return; }
       const term = item.kind === 'agent' ? `<button type="button" class="square" data-act="terminal" title="${T.openTerminal}" aria-label="${T.openTerminal}">${ICON_TERM}</button>` : '';
-      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span>${T.kind[item.category] || ''}</span></div>${stateHtml(item.status)}${term}</div>`;
+      // An agent's header names its project (and its task, when it works for one), not just "AI agent"
+      const sub = item.kind === 'agent' ? [item.data.label, projectPath(item.data)].filter(Boolean).join(' · ') : T.kind[item.category] || '';
+      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span title="${esc(item.data.cwd || '')}">${esc(sub)}</span></div>${stateHtml(item.status)}${term}</div>`;
       const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'task' ? this.#taskDetail(item.data)
         : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
       // Keep the console's scroll: stuck to the newest step while at the bottom, left alone when scrolled up
@@ -1151,7 +1153,7 @@
       }).join('');
       return `
         ${t.gate ? `<div class="note">⚠ ${esc(t.gate.title)}</div>` : ''}
-        <div class="doing"><b title="${esc(t.title)}">${esc(t.title)}</b><span>${esc(T.taskStage(st?.title || '', Math.min(t.stage + 1, total), total))} · ${esc(t.project.name)}</span></div>
+        <div class="doing"><b>${esc(T.taskStage(st?.title || '', Math.min(t.stage + 1, total), total))}</b><span>${esc(t.project.name)} · ${esc(t.template.name)}</span></div>
         <ul class="timeline">${stages}</ul>
         <div class="buttons"><button class="wide" data-act="open-task">${ICONS.tasks}${T.openTasks}</button></div>`;
     }

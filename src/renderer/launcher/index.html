@@ -7,19 +7,6 @@
 <link rel="stylesheet" href="../shared/theme.css">
 <link rel="stylesheet" href="../shared/attachments.css">
 <style>
-  :root {
-    --glass: rgba(18, 17, 23, 0.97);
-    --field: rgb(var(--ink) / 0.05);
-    --raised: rgb(var(--ink) / 0.035);
-    --line: rgb(var(--ink) / 0.09);
-    --text: #f2f2f5;
-    --soft: #c9c7d4;
-    --muted: #8b8b96;
-    --brand: #8b5cff;
-    --ok: #4fd59a;
-    --warn: #ffb547;
-    --error: #ff5d6c;
-  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: transparent; height: 100%; overflow: hidden;
     font: 500 13px/1.4 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; color: var(--text);
@@ -51,7 +38,7 @@
     border: 1px solid var(--line); font-style: normal; }
   .steps li.on { color: var(--text); }
   .steps li.on i { background: var(--brand); border-color: var(--brand); color: #fff; }
-  .steps li.past i { background: rgba(139,92,255,.18); border-color: rgba(139,92,255,.45); color: var(--brand-soft); }
+  .steps li.past i { background: color-mix(in srgb, var(--brand) 18%, transparent); border-color: color-mix(in srgb, var(--brand) 45%, transparent); color: var(--brand-soft); }
   .close { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); flex: none; }
   .close:hover { background: rgb(var(--ink) / .08); color: var(--text); }
   .close svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
@@ -65,7 +52,7 @@
 
   /* ---------- step: write ---------- */
   .composer { border-radius: 14px; background: var(--field); border: 1px solid var(--line); transition: border-color .15s, box-shadow .15s; }
-  .composer:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); box-shadow: 0 0 0 3px rgba(139,92,255,.12); }
+  .composer:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 12%, transparent); }
   .composer textarea { display: block; width: 100%; resize: none; padding: 12px 14px 6px; font-size: 14px; line-height: 1.5;
     min-height: 72px; max-height: 240px; overflow-y: auto; }
   .composer textarea.code { font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; }
@@ -88,7 +75,7 @@
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--field);
     border: 1px solid var(--line); font-size: 12px; color: var(--soft); }
   .chip:hover { background: rgb(var(--ink) / .08); }
-  .chip.on { border-color: rgba(139,92,255,.5); background: rgba(139,92,255,.14); color: var(--text); }
+  .chip.on { border-color: color-mix(in srgb, var(--brand) 50%, transparent); background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--text); }
   .chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 
   /* prompts already waiting for a busy agent */
@@ -98,10 +85,10 @@
   .queued li.item em { font-style: normal; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .queued li.item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--softer); }
   .queued li.item button { width: 22px; height: 22px; border-radius: 6px; color: var(--muted); }
-  .queued li.item button:hover { background: rgba(255,93,108,.15); color: var(--error); }
+  .queued li.item button:hover { background: color-mix(in srgb, var(--waiting) 15%, transparent); color: var(--error); }
 
   /* ---------- step: agent ---------- */
-  .quote { padding: 9px 12px; border-left: 2px solid var(--brand); background: rgba(139,92,255,.06); border-radius: 0 10px 10px 0;
+  .quote { padding: 9px 12px; border-left: 2px solid var(--brand); background: color-mix(in srgb, var(--brand) 6%, transparent); border-radius: 0 10px 10px 0;
     color: var(--softer); font-size: 12.5px; max-height: 58px; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
   .quote.empty { color: var(--muted); font-style: italic; }
   .agents { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -137,9 +124,9 @@
   .review .v code { font: 12.5px ui-monospace, "Ubuntu Mono", monospace; }
   .review .v small { color: var(--muted); font-size: 11.5px; }
   .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
-  .badge.now { color: var(--ok); background: rgba(79,213,154,.12); }
-  .badge.paste { color: var(--brand-soft); background: rgba(139,92,255,.12); }
-  .badge.queue { color: var(--warn); background: rgba(255,181,71,.12); }
+  .badge.now { color: var(--ok); background: color-mix(in srgb, var(--done) 12%, transparent); }
+  .badge.paste { color: var(--brand-soft); background: color-mix(in srgb, var(--brand) 12%, transparent); }
+  .badge.queue { color: var(--warn); background: color-mix(in srgb, var(--working) 12%, transparent); }
   .review .prompt { padding: 10px 14px 12px; border-top: 1px solid var(--line); }
   .review .prompt pre { margin-top: 6px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere;
     font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", monospace; color: var(--softer); }
@@ -152,7 +139,7 @@
   .msg.error { color: var(--error); }
   .btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 10px; background: rgb(var(--ink) / .08); font-weight: 600; white-space: nowrap; }
   .btn:hover { background: rgb(var(--ink) / .14); }
-  .btn.primary { background: var(--brand); color: #fff; box-shadow: 0 4px 14px rgba(139,92,255,.35); }
+  .btn.primary { background: var(--primary-bg); color: var(--primary-fg); box-shadow: 0 4px 14px color-mix(in srgb, var(--brand) 35%, transparent); }
   .btn.primary:hover { filter: brightness(1.1); }
   .btn.primary.confirm { padding: 8px 16px; }
   .btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -402,7 +389,7 @@
       const current = this.el.cwd.value;
       this.el.recent.innerHTML = recent.slice(0, 6).map(r => `
         <button type="button" class="chip${tilde(r.cwd, home) === current ? ' on' : ''}" data-cwd="${esc(r.cwd)}" title="${esc(tilde(r.cwd, home))}">
-          <i style="--c:${this.state.agents[r.agent]?.color || '#ffb547'}"></i>${esc(r.name)}</button>`).join('');
+          <i style="--c:${this.state.agents[r.agent]?.color || 'var(--warn)'}"></i>${esc(r.name)}</button>`).join('');
     }
 
     // The confirmation panel: agent, where it runs, how the prompt is delivered, and the prompt itself

@@ -9,15 +9,6 @@
   :root {
     --glass: rgba(16, 15, 21, 0.985); /* nearly solid: whatever is behind never shows through */
     --card: rgb(var(--ink) / 0.045);
-    --line: rgb(var(--ink) / 0.08);
-    --text: #f2f2f5;
-    --muted: #8b8b96;
-    --idle: #8b8b96;
-    --thinking: #6aa8ff;
-    --working: #ffb547;
-    --waiting: #ff5d6c;
-    --done: #4fd59a;
-    --brand: #8b4dff;
     --accent: var(--idle);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -162,7 +153,7 @@
   .reply { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 4px 4px 4px 12px; border-radius: 12px;
     background: rgb(var(--ink) / .05); border: 1px solid var(--line); }
   .reply:focus-within { border-color: color-mix(in srgb, var(--brand) 70%, transparent); }
-  .reply.confirm { border-color: color-mix(in srgb, var(--brand) 70%, transparent); background: rgba(139,92,255,.1); }
+  .reply.confirm { border-color: color-mix(in srgb, var(--brand) 70%, transparent); background: color-mix(in srgb, var(--brand) 10%, transparent); }
   .reply .rtext { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); font: inherit; padding: 6px 0; user-select: text; }
   .reply .rtext::placeholder { color: var(--muted); }
   .reply .ricon { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
@@ -253,7 +244,7 @@
   .card .head b { color: var(--text); font-weight: 600; }
   .card .head .adot { width: 7px; height: 7px; border-radius: 50%; }
   .chip { display: inline-block; padding: 2px 8px; border-radius: 7px; font-size: 12px; font-weight: 600;
-    background: rgba(255,181,71,.14); color: var(--working); margin-right: 6px; }
+    background: color-mix(in srgb, var(--working) 14%, transparent); color: var(--working); margin-right: 6px; }
   .code { font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", "DejaVu Sans Mono", monospace; color: var(--softer);
     background: rgb(var(--shade) / calc(.35 * var(--shade-k))); border-radius: 8px; padding: 6px 8px; margin-top: 6px;
     max-height: 160px; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
@@ -261,7 +252,7 @@
   .code::-webkit-scrollbar-thumb { background: rgb(var(--ink) / .18); border-radius: 3px; }
   .questions { display: flex; flex-direction: column; gap: 14px; margin-top: 2px; max-height: 360px; overflow-y: auto; }
   .q .qh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
-  .q .qh small { flex: none; padding: 1px 7px; border-radius: 6px; background: rgba(106,168,255,.14); color: var(--thinking);
+  .q .qh small { flex: none; padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--thinking) 14%, transparent); color: var(--thinking);
     font-size: 11px; font-weight: 600; }
   .q .qh span { color: var(--softer); }
   .opts { display: flex; flex-wrap: wrap; gap: 6px; }

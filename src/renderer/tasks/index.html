@@ -7,37 +7,6 @@
 <link rel="stylesheet" href="../shared/theme.css">
 <style>
   /* Tokens follow the approved prototype (docs/orchestration/prototype); theme.css switches light/dark */
-  :root {
-    --backdrop: #121118;
-    --surface: #17161e;
-    --raised: rgb(var(--ink) / 0.04);
-    --raised-2: rgb(var(--ink) / 0.07);
-    --hover: rgb(var(--ink) / 0.09);
-    --line: rgb(var(--ink) / 0.08);
-    --line-strong: rgb(var(--ink) / 0.16);
-    --text: #f2f2f5;
-    --muted: #9a99a6;
-    --brand: #8b5cff;
-    --primary-bg: #7444f2;
-    --primary-fg: #ffffff;
-    --focus: rgba(139, 92, 255, 0.7);
-    --idle: #9a99a6;
-    --thinking: #6aa8ff;
-    --working: #ffb547;
-    --waiting: #ff6b78;
-    --done: #4fd59a;
-    --cat-workflow: #b28bff;
-    --code-bg: rgb(var(--ink) / 0.05);
-  }
-  :root[data-theme="light"] {
-    --backdrop: #ffffff;
-    --surface: #faf9fd;
-    --muted: #625f78;
-    --brand: #6a3fe0;
-    --primary-bg: #6a3fe0;
-    --focus: rgba(106, 63, 224, 0.6);
-    --cat-workflow: #5a32d0;
-  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
   body { background: var(--backdrop); color: var(--text); font: 500 13px/1.45 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif;

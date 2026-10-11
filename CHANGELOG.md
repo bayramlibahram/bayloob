@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed
+- **UI cleanup** (step A of the UI deep dive): the panel's search says what it searches ("Search agents…",
+  "Filter the inbox…", "Search tasks…"); a list row's buttons appear on hover / selection / keyboard focus in
+  the status's place, so names get the room (no layout shift); under a project heading an agent row says what
+  it is doing instead of repeating the path; an agent's header names its project (and task) instead of "AI
+  agent"; Overview groups Apps and Agents; the task detail no longer repeats its title.
+- **One set of colour tokens** (step B): every colour lives in `shared/theme.css` (dark + light, following the
+  prototype); the pages' duplicate `:root` blocks are gone, and 45 inline `rgba()` state/brand colours are now
+  `color-mix()` of tokens, so they follow the light theme. Values that differed between pages are one now
+  (muted, waiting, the pill's brand). Primary buttons are the same purple everywhere (the pill's were white).
+
 ### Added
 - Workflows can **start from your files as they are** (found in the first real run: a project whose code was
   never committed gave the builders an empty worktree). New task → Start from: "Your files now · N
