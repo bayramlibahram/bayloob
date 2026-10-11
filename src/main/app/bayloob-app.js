@@ -1619,8 +1619,15 @@ class BayloobApp {
       [this.launcherWindow, this.newTask, this.panel].find(p => p.win?.webContents === sender);
     // Every upload comes back with its type and any secret it seems to hold (the chips warn before sending)
     const inspected = r => ({ ...r, items: r.items.map(inspect) });
+    // The file picker over the window that asked: a popup (kept open meanwhile), or the Workspace window
     ipcMain.handle("uploads:pick", async e => {
-      const paths = await popupOf(e.sender)?.pickFiles();
+      const ws = this.workspaceWindow?.win;
+      const paths =
+        ws && e.sender === ws.webContents
+          ? await dialog
+              .showOpenDialog(ws, { properties: ["openFile", "multiSelections"] })
+              .then(r => (r.canceled ? [] : r.filePaths))
+          : await popupOf(e.sender)?.pickFiles();
       return inspected(this.uploads.addFiles(paths || []));
     });
     ipcMain.handle("uploads:add-paths", (_e, paths) =>
