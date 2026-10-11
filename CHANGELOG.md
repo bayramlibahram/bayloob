@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 — 2026-10-11
 
 ### Fixed
 - **Read-only Codex can't write any more.** It now runs with `--sandbox read-only --ask-for-approval never`.
