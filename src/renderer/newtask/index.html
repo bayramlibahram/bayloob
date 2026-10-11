@@ -242,6 +242,9 @@
     lastUsed: (p, c) => `Last used for <b>${p}</b>: ${c}.`, needsGit: 'Needs a git repository',
     agent: 'Agent', prompt: 'Prompt', promptPh: 'What should be done?', paste: 'Paste clipboard', attach: 'Attach',
     attachTip: 'Attach files — or drop them here, or paste a screenshot (Ctrl+V)', pasteTip: 'Paste what you copied — an error becomes a fix-it prompt',
+    attachTaskTip: 'Attach files for the agents to read — or drop them here, or paste a screenshot (Ctrl+V)',
+    filesStay: 'Files stay on this computer', filesNote: 'copied into the task; the agents get their paths, read-only',
+    secretWait: names => `${names.join(', ')} looks like it holds a secret — remove it, or press Send anyway`,
     chars: n => `${n} chars`, emptyClipboard: 'The clipboard is empty', attaching: 'Wait — the files are still being attached',
     worktree: 'In a new git worktree', worktreeSub: 'its own copy on a bayloob/… branch', openIn: 'Open in', notInstalled: 'Not installed', turnedOff: 'Turned off in Settings',
     builders: 'Builders · each in its own worktree', reviewers: 'Reviewers · read-only, on the current branch', analysts: 'Analysts · read-only, in parallel',
@@ -321,6 +324,9 @@
         nextWrap: $('nextWrap'), close: $('close'), startOver: $('startOver') };
       // Files attached to a single agent's prompt; the chips live in the composer, which is rebuilt on render
       this.att = new Attachments({ api: api.uploads, list: null, onChange: () => this.#fit(), onError: t => this.#message(t, true) });
+      // Files for a workflow or an analysis: copied into the task when it starts; agents get their paths
+      this.taskAtt = new Attachments({ api: api.uploads, list: null, task: true, onError: t => this.#message(t, true),
+        onChange: () => { this.cfg.attachments = this.taskAtt.toConfig(); this.#fit(); this.#changed({ render: false }); } });
       Attachments.guardWindow();
       this.#bind();
     }
@@ -343,6 +349,7 @@
       this.infos = new Map();
       this.infoFailed = new Map();
       this.att.clear();
+      this.taskAtt.items = [];
       const d = state.draft;
       if (d) {
         this.cfg = d;
@@ -352,6 +359,7 @@
         this.draftId = null;
       }
       this.el.startOver.hidden = !d;
+      if (d?.attachments?.length) { this.taskAtt.restore(d.attachments).then(() => this.#render()); }
       this.#loadInfo(this.cfg.project.cwd);
       for (const r of state.recent.slice(0, 8)) { this.#loadRecent(r.cwd); }
       // A draft or a preset goes straight to where the work is; otherwise start at the project
@@ -426,7 +434,9 @@
         return !c.project.cwd ? [TaskShape.problems(c)[0]] : this.info && !this.info.exists ? [`${T.missing}: ${tilde(this.info.cwd, this.state.home)}`] : [];
       }
       if (this.step < 3) { return []; }
-      if (c.category === 'single' && this.att.busy) { return [T.attaching]; }
+      const files = c.category === 'single' ? this.att : this.taskAtt;
+      if (files.busy) { return [T.attaching]; }
+      if (files.unconfirmed.length) { return [T.secretWait(files.unconfirmed.map(f => f.name))]; }
       const tpl = this.#template(c);
       if (tpl) {
         return [!c.text.trim() ? 'Describe the task' : null, tpl.issues?.length ? T.tplProblems : null].filter(Boolean);
@@ -522,6 +532,7 @@
       this.el.subtitle.textContent = this.step === 1 || !c.project.cwd ? T.subProject : `${c.project.name} · ${T.cats[c.category].title}`;
       this.el.body.innerHTML = [null, () => this.#project(), () => this.#category(), () => this.#configure(), () => this.#confirm()][this.step]();
       if (this.step === 3 && c.category === 'single') { this.#mountComposer(); }
+      if (this.step === 3 && c.category !== 'single') { this.#mountTaskFiles(); }
       this.el.back.textContent = this.step === 1 ? T.cancel : T.back;
       const last = this.step === 4 || (this.step === 3 && c.category === 'single');
       const later = last && c.category !== 'single' && !runnable(c);
@@ -683,7 +694,7 @@
       const canCustomize = !!tpl || RUNNABLE.includes(w.pattern);
       const customize = `<span title="${canCustomize ? T.customizeTip : T.customizeLater}"><button type="button" class="expander" data-customize ${canCustomize ? '' : 'disabled'}>${I('edit')}${T.customize}</button></span>`;
       const text = `<div class="label">${T.task}</div>
-        <div class="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.taskPh}" aria-label="${T.task}">${esc(this.cfg.text)}</textarea></div>`;
+        <div class="composer" id="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.taskPh}" aria-label="${T.task}">${esc(this.cfg.text)}</textarea>${this.#fileTools()}</div>`;
       if (tpl) {
         return `${presets}
           <p class="sentence" style="font-size:13px">${T.tplRuns(esc(tpl.name))} ${tpl.stages.map(s => `${esc(s.title)}${(s.agents || []).length ? ` ×${s.agents.reduce((a, x) => a + Number(x.count || 0), 0)}` : ''}`).join(' → ')}</p>
@@ -712,13 +723,33 @@
         ${this.#agentRows(a.agents, 'read-only', T.word.analyst)}
         ${this.#select('analysis.arbiter', a.arbiter, T.arbiter, Object.keys(a.agents).filter(k => a.agents[k]))}
         <div class="label">${T.question}</div>
-        <div class="composer"><textarea id="text" data-focus rows="2" spellcheck="false" placeholder="${T.questionPh}" aria-label="${T.question}">${esc(this.cfg.text)}</textarea></div>
+        <div class="composer" id="composer"><textarea id="text" data-focus rows="2" spellcheck="false" placeholder="${T.questionPh}" aria-label="${T.question}">${esc(this.cfg.text)}</textarea>${this.#fileTools()}</div>
         ${a.preset === 'incident' ? `<div class="label">${T.sources}</div>
           <ul class="sources">${a.logSources.map((s, i) => `<li><span>${esc(s)}</span><button type="button" class="iconbtn" data-unsource="${i}" aria-label="Remove">${I('x')}</button></li>`).join('')}</ul>
           <div class="field"><input id="source" placeholder="${esc(T.sourcePh)}" spellcheck="false" aria-label="Log source" class="mono"><button type="button" class="btn sm" data-picksource>${I('folder')}${T.chooseFile}</button><button type="button" class="btn sm" data-addsource>${I('plus')}${T.add}</button></div>` : ''}
         <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}</small></span></button>
         ${hostPicker}
         <span title="${T.customizeTipAnalysis}"><button type="button" class="expander" data-customize>${I('edit')}${T.customize}</button></span>`;
+    }
+
+    // A workflow's or analysis's files: chips and Attach under the text box
+    #fileTools() {
+      return `<ul class="atts" id="atts" hidden></ul>
+        <div class="tools"><button type="button" class="ghost" id="attach" title="${T.attachTaskTip}">${I('clip')}${T.attach}</button><span class="count">${T.filesStay}</span></div>`;
+    }
+
+    #mountTaskFiles() {
+      const ta = document.getElementById('text');
+      const list = document.getElementById('atts');
+      if (!ta || !list) { return; }
+      this.taskAtt.list = list;
+      this.taskAtt.render();
+      list.addEventListener('click', e => this.taskAtt.click(e));
+      const attach = document.getElementById('attach');
+      attach.hidden = !this.taskAtt.available;
+      attach.addEventListener('click', () => this.taskAtt.pick());
+      this.taskAtt.bindDrop(document.getElementById('composer'));
+      this.taskAtt.bindPaste(ta);
     }
 
     #confirm() {
@@ -757,7 +788,9 @@
       const changes = this.info?.git?.changes || 0;
       const baseNote = c.category === 'workflow' && changes
         ? `<p class="hintline${this.#base(c) === 'head' ? ' warn' : ''}">${this.#base(c) === 'head' ? T.fromCommitHint(changes, esc(this.info.git.branch || 'main')) : T.fromFilesHint}</p>` : '';
-      return `<p class="sentence">${this.#sentence(c)}</p>${baseNote}
+      const files = this.taskAtt.items.length
+        ? `<div class="label">${T.rFiles}</div><p class="hintline">${this.taskAtt.items.map(f => `<code title="${esc(f.name)}">${esc(f.name)}</code>${f.secrets?.length ? ' <span title="Sent anyway">⚠</span>' : ''}`).join(' ')} — ${T.filesNote}</p>` : '';
+      return `<p class="sentence">${this.#sentence(c)}</p>${baseNote}${files}
         <div class="diagram" role="img" aria-label="Stages: ${esc(stages.map(s => s.title).join(', '))}">${diagram}</div>
         <div class="label">${T.gatesCap}</div><ul class="glist">${this.#gates(c).map(g => `<li><span class="gate"></span>${esc(g)}</li>`).join('')}</ul>
         <div class="label">${T.load}</div>${loads}`;
@@ -907,7 +940,9 @@
           if (file && input) { input.value = file; return this.#addSource(); }
           return;
         }
-        if (d.unattach) { return this.att.remove(Number(d.unattach)); }
+        if ((d.unattach || d.secretok || d.preview) !== undefined && b.closest('#atts')) {
+          return c.category === 'single' ? this.att.click(e) : undefined; // a task's chips handle their own clicks
+        }
         if (d.unsource) { c.analysis.logSources.splice(Number(d.unsource), 1); return this.#changed(); }
       });
       body.addEventListener('input', e => {

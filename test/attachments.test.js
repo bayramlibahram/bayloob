@@ -401,3 +401,48 @@ test("converters: used only when installed; without one the agent gets the origi
     path.join(dir, "report.txt"),
   ]);
 });
+
+test("preview: only Bayloob's uploads are read; text with lines, CSV as rows, images inline, the rest a note", async () => {
+  const { inspect, preview, inside, csvRow } = require("../src/main/modules/attachments/preview");
+  const root = tmp();
+  assert.equal(inside(root, path.join(root, "a/b.txt")), true);
+  assert.equal(inside(root, path.join(root, "../etc/passwd")), false);
+  assert.equal(inside(root, `${root}-other/x`), false);
+  assert.equal(inside(root, root), false);
+  assert.deepEqual(csvRow('1,"a, b","say ""hi""",', ","), ["1", "a, b", 'say "hi"', ""]);
+
+  const log = write(root, "app.log", "one\ntwo\nthree");
+  assert.deepEqual(await preview(log), {
+    kind: "text",
+    size: "13 B",
+    lines: ["one", "two", "three"],
+    more: false,
+  });
+  const csv = write(root, "t.csv", "a,b\n1,2\n");
+  assert.deepEqual((await preview(csv)).rows, [
+    ["a", "b"],
+    ["1", "2"],
+  ]);
+  const png = write(root, "x.png", Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  assert.match((await preview(png)).dataUrl, /^data:image\/png;base64,/);
+  assert.match((await preview(write(root, "r.pdf", "%PDF"))).note, /Install pdftotext/);
+  assert.equal(
+    (await preview(write(root, "r2.pdf", "%PDF"), { pdfText: async () => "Page one" })).lines[0],
+    "Page one"
+  );
+  assert.match((await preview(write(root, "a.zip", "PK"))).note, /only extracted when you ask/);
+
+  const env = inspect({
+    path: write(root, ".env", "TOKEN=abcdefghijkl\n"),
+    name: ".env",
+    size: 19,
+  });
+  assert.deepEqual(
+    env.secrets.map(s => s.label),
+    [".env file", "password in config"]
+  );
+  assert.equal(
+    inspect({ path: write(root, "x.exe", "MZ"), name: "x.exe" }).typeError.startsWith(".exe files"),
+    true
+  );
+});

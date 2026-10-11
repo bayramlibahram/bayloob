@@ -338,6 +338,7 @@
       if (this.busy) { return; }
       if (this.step === 'prompt') {
         if (this.att.busy) { return this.#message(T.attaching, true); }
+        if (this.att.unconfirmed.length) { return this.#message(`${this.att.unconfirmed.map(f => f.name).join(', ')} looks like it holds a secret — remove it, or press Send anyway`, true); }
         if (!this.isNew && !this.prompt) { this.#message(T.writeFirst, true); return this.el.prompt.focus(); }
         if (this.isNew && !this.el.cwd.value.trim()) { this.#message(T.pickProject, true); return this.el.cwd.focus(); }
       }

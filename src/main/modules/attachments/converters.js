@@ -44,6 +44,16 @@ class Converters {
     };
   }
 
+  /** A PDF's first page as text (for a preview), or null without pdftotext. */
+  async pdfText(file) {
+    const bin = await this.#which("pdftotext");
+    if (!bin) {
+      return null;
+    }
+    const r = await this.exec(bin, ["-layout", "-l", "1", file, "-"]);
+    return r.ok ? r.stdout : null;
+  }
+
   /**
    * A text version of `file` (kind from policy.classify) next to it: { derived: path, note } or { note } when it
    * can't be made. Kinds that are text already, images and archives need none (→ null).

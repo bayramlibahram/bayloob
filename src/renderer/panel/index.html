@@ -603,6 +603,7 @@
       applications: 'Terminals, Files and other apps appear here', system: 'Docker shows up here when it is installed and running',
     },
     windows: 'Windows', projects: 'Projects', containers: 'Containers', recent: 'Recent activity', nothingYet: 'Nothing yet',
+    secretWait: files => `${files.map(f => f.name).join(', ')} looks like it holds a secret — remove it, or press Send anyway`,
     expandDetail: 'Expand: use the whole width (Ctrl+Shift+E)', collapseDetail: 'Back to the list (Ctrl+Shift+E)',
     sideNarrow: 'The window is too narrow for the full sidebar',
     focus: 'Focus window', newTab: 'New tab', newWindow: 'New window', openTerminal: 'Open terminal', more: 'More actions', open: 'Open',
@@ -1624,6 +1625,7 @@
       const text = this.el.sayText.value.trim();
       if (this.#sayEmpty || !this.sayFor) { return; }
       if (this.sayAtt.busy) { return this.#sayHint(T.attaching, 'err'); }
+      if (this.sayAtt.unconfirmed.length) { return this.#sayHint(T.secretWait(this.sayAtt.unconfirmed), 'err'); }
       if (!this.#sayConfirming) { return this.#confirmSay(true); }
       this.#confirmSay(false);
       this.el.saySend.disabled = true;
@@ -1708,6 +1710,7 @@
     async #askNext() {
       if (!this.el.askText.value.trim() && !this.askAtt.count) { return; }
       if (this.askAtt.busy) { return this.#askHint(T.attaching, 'err'); }
+      if (this.askAtt.unconfirmed.length) { return this.#askHint(T.secretWait(this.askAtt.unconfirmed), 'err'); }
       if (!this.el.askConfirm.hidden) { return this.#askStart(); }
       if (!this.el.askPick.hidden) { return this.#confirmAsk(true); }
       const opts = await this.api?.launchOptions();

@@ -53,6 +53,7 @@ const { SpeechEngine } = require("../modules/voice/speech-engine");
 const { UploadStore } = require("../modules/uploads/upload-store");
 const { AttachmentStore } = require("../modules/attachments/attachment-store");
 const { Converters } = require("../modules/attachments/converters");
+const { inspect, preview, inside } = require("../modules/attachments/preview");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
@@ -1554,18 +1555,49 @@ class BayloobApp {
     // Files attached to a prompt (launcher and panel): copied into the cache, the agent gets their paths
     const popupOf = sender =>
       [this.launcherWindow, this.newTask, this.panel].find(p => p.win?.webContents === sender);
+    // Every upload comes back with its type and any secret it seems to hold (the chips warn before sending)
+    const inspected = r => ({ ...r, items: r.items.map(inspect) });
     ipcMain.handle("uploads:pick", async e => {
       const paths = await popupOf(e.sender)?.pickFiles();
-      return this.uploads.addFiles(paths || []);
+      return inspected(this.uploads.addFiles(paths || []));
     });
     ipcMain.handle("uploads:add-paths", (_e, paths) =>
-      this.uploads.addFiles(Array.isArray(paths) ? paths : [])
+      inspected(this.uploads.addFiles(Array.isArray(paths) ? paths : []))
     );
     ipcMain.handle("uploads:add-bytes", (_e, name, bytes) => {
       try {
-        return { items: [this.uploads.addBytes(String(name || "file"), bytes)], errors: [] };
+        return inspected({
+          items: [this.uploads.addBytes(String(name || "file"), bytes)],
+          errors: [],
+        });
       } catch (err) {
         return { items: [], errors: [`${name}: ${err.message}`] };
+      }
+    });
+    // A draft's files again (the dialog reopened): only Bayloob's own uploads that still exist
+    ipcMain.handle("uploads:inspect", (_e, items) =>
+      (Array.isArray(items) ? items : [])
+        .filter(i => inside(this.uploads.dir, i?.path) && fs.existsSync(i.path))
+        .map(i =>
+          inspect({
+            path: i.path,
+            name: String(i.name || path.basename(i.path)),
+            size: fs.statSync(i.path).size,
+            secretsOk: i.secretsOk === true,
+          })
+        )
+    );
+    ipcMain.handle("uploads:preview", async (_e, file, name) => {
+      if (!inside(this.uploads.dir, file) || !fs.existsSync(file)) {
+        return { kind: "none", note: "This file isn't available any more" };
+      }
+      try {
+        return await preview(file, {
+          name: String(name || path.basename(file)),
+          pdfText: f => this.converters.pdfText(f),
+        });
+      } catch (err) {
+        return { kind: "none", note: `It can't be previewed: ${err.message}` };
       }
     });
     ipcMain.handle("launcher:clipboard", () => {

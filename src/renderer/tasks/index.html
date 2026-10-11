@@ -375,7 +375,8 @@
     overLimit: 'over the limit · no new starts',
     stopped: 'Stopped. Worktrees and branches are kept until you delete them.',
     queuedN: n => `${n} queued`, runningN: n => `${n} running`, of: (a, b) => `${a} of ${b}`,
-    the: { task: 'Task', project: 'Project', base: 'Started from', ro: 'Read-only worktree', tests: 'Test command', noTests: 'none found — tests are skipped' },
+    the: { task: 'Task', project: 'Project', base: 'Started from', ro: 'Read-only worktree', tests: 'Test command', noTests: 'none found — tests are skipped',
+      files: 'Attached files', filesWhere: 'In .bayloob/attachments/ where each agent works · read-only', sentAnyway: 'flagged as a possible secret, sent anyway' },
     instances: 'Agents', inst: { agent: 'Agent', role: 'Role', mode: 'Mode', status: 'Status', time: 'Time' },
     terminal: 'Terminal', terminalTip: 'Open a terminal attached to this agent',
     istatus: { queued: 'queued', starting: 'starting', running: 'working', done: 'done', failed: 'failed', stopped: 'stopped', interrupted: 'interrupted' },
@@ -786,6 +787,7 @@
           ${t.review ? `<div><span class="label">${T.reviews}</span><b class="mono" title="${esc(`${t.review.from}..${t.review.to}`)}">${esc(t.review.label)}</b></div>` : ''}
           <div><span class="label">${T.the.ro}</span><b title="${esc(t.roDir)}">${esc(tilde(t.roDir, home))}</b></div>
           <div><span class="label">${T.the.tests}</span><b class="mono">${esc(t.testCommand || T.the.noTests)}</b></div>
+          ${t.attachments?.length ? `<div><span class="label">${T.the.files}</span><b>${t.attachments.map(f => `<span class="mono" title="${esc([f.name, f.note, f.secrets ? T.the.sentAnyway : ''].filter(Boolean).join(' · '))}">${esc(f.file)}${f.secrets ? ' ⚠' : ''}</span>`).join(', ')}</b><small style="color:var(--muted)">${T.the.filesWhere}</small></div>` : ''}
         </div>
         <div><div class="label" style="margin-bottom:6px">${T.instances}</div>
           ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows}</tbody></table>` : stateBlock({ line: T.noInstances })}</div>

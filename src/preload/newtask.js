@@ -26,5 +26,7 @@ contextBridge.exposeInMainWorld("newTaskAPI", {
     pick: () => ipcRenderer.invoke("uploads:pick"),
     addPaths: paths => ipcRenderer.invoke("uploads:add-paths", paths),
     addBytes: (name, bytes) => ipcRenderer.invoke("uploads:add-bytes", name, bytes),
+    inspect: items => ipcRenderer.invoke("uploads:inspect", items),
+    preview: (file, name) => ipcRenderer.invoke("uploads:preview", file, name),
   },
 });

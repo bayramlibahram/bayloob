@@ -338,9 +338,12 @@
     enabledTip: name => `Use ${name} in tasks`, launch: 'Starts', readOnly: 'Read-only', noReadOnly: 'no read-only flag — Bayloob denies writes',
     notesPh: 'Notes, e.g. subscription plan — rate limits apply',
     total: 'Max parallel agents', totalSub: 'all tasks together', perProject: 'Per project', perProjectSub: 'at the same time',
+    attachFile: 'Attached file', attachFileSub: 'MB at most, each', attachTask: 'Attachments per task', attachTaskSub: 'MB at most, together',
     memory: 'Hold launches below', memorySub: (gb) => `GB of free memory${gb ? ` · now ${gb} GB free` : ''}`,
   };
   const LIMIT_RANGE = { total: [1, 32], perProject: [1, 32], minFreeGB: [0, 64] };
+  // Files attached to a task: [min, max, step] in MB
+  const ATTACH_RANGE = { fileMB: [10, 500, 10], taskMB: [50, 2000, 50] };
 
   /** The settings form. `state` = { values, locked, detectedTerminal, hooks, extension } from the main process. */
   class SettingsView {
@@ -381,6 +384,7 @@
         this.#renderHosts();
       });
       this.limits = { ...(values.limits || {}) };
+      this.attachLimits = { fileMB: 50, taskMB: 200, ...(values.attachLimits || {}) };
       this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
       this.el.shortcut.value = values.shortcut;
       this.el.workspaceShortcut.value = values.workspaceShortcut ?? '';
@@ -464,7 +468,9 @@
       this.el.agentGrid.innerHTML = `${rows}<div class="limits">
           <span>${T.total}<small>${T.totalSub}</small></span>${stepper('limit.total', l.total, ...LIMIT_RANGE.total, T.total)}
           <span>${T.perProject}<small>${T.perProjectSub}</small></span>${stepper('limit.perProject', l.perProject, ...LIMIT_RANGE.perProject, T.perProject)}
-          <span>${T.memory}<small>${T.memorySub(freeGB)}</small></span>${stepper('limit.minFreeGB', l.minFreeGB, ...LIMIT_RANGE.minFreeGB, T.memory)}</div>`;
+          <span>${T.memory}<small>${T.memorySub(freeGB)}</small></span>${stepper('limit.minFreeGB', l.minFreeGB, ...LIMIT_RANGE.minFreeGB, T.memory)}
+          <span>${T.attachFile}<small>${T.attachFileSub}</small></span>${stepper('attach.fileMB', this.attachLimits.fileMB, ATTACH_RANGE.fileMB[0], ATTACH_RANGE.fileMB[1], T.attachFile)}
+          <span>${T.attachTask}<small>${T.attachTaskSub}</small></span>${stepper('attach.taskMB', this.attachLimits.taskMB, ATTACH_RANGE.taskMB[0], ATTACH_RANGE.taskMB[1], T.attachTask)}</div>`;
     }
 
     #renderHosts() {
@@ -592,7 +598,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
-        agents: this.agents, limits: this.limits, hosts: this.hosts,
+        agents: this.agents, limits: this.limits, attachLimits: this.attachLimits, hosts: this.hosts,
         mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, workspaceShortcut: this.el.workspaceShortcut.value, onClose: this.onClose, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
@@ -654,6 +660,7 @@
           const [key, delta] = b.dataset.step.split(':');
           const [kind, name] = key.split('.');
           if (kind === 'agent') { const a = this.agents[name]; a.max = Math.max(1, Math.min(16, a.max + Number(delta))); }
+          else if (kind === 'attach') { const [lo, hi, step] = ATTACH_RANGE[name]; this.attachLimits[name] = Math.max(lo, Math.min(hi, this.attachLimits[name] + Number(delta) * step)); }
           else { const [lo, hi] = LIMIT_RANGE[name]; this.limits[name] = Math.max(lo, Math.min(hi, this.limits[name] + Number(delta))); }
           this.#renderAgents();
         }
