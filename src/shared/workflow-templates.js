@@ -747,7 +747,9 @@
    * them under that stage. `capacity`: { adapter: max } of the agents that can run here; counts above an
    * agent's max are allowed (they queue) but not above it × 4.
    */
-  function templateIssues(t, { capacity = { claude: 4, codex: 2, gemini: 2 } } = {}) {
+  // A text-only agent (a local model through Ollama) has no tools: only the Arbiter or a discussion's voice
+  const TEXT_AGENTS = ["ollama"];
+  function templateIssues(t, { capacity = { claude: 4, codex: 2, gemini: 2, ollama: 1 } } = {}) {
     const issues = []; // { stage: index | null, text }
     if (!t || typeof t !== "object") {
       return [{ stage: null, text: "The template is empty" }];
@@ -890,6 +892,13 @@
         const agents = Array.isArray(s.agents) ? s.agents : [];
         if (!agents.length) {
           add(`${name}: add at least one agent`);
+        }
+        for (const a of agents.filter(x => TEXT_AGENTS.includes(x?.adapter))) {
+          if (s.role !== "arbiter") {
+            add(
+              `${name}: ${a.adapter} only answers text (no tools, no files) — it can be the Arbiter or take part in a discussion`
+            );
+          }
         }
         for (const a of agents) {
           const max = capacity[a?.adapter];

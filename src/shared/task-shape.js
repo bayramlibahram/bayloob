@@ -4,7 +4,10 @@
 // Plain script: `require()` in main and tests, a <script> (global `TaskShape`) in the page.
 (root => {
   // Default parallel instances per agent until Settings → Agents exists (command 03)
-  const CAPACITY = { claude: 4, codex: 2, gemini: 2, grok: 1 };
+  const CAPACITY = { claude: 4, codex: 2, gemini: 2, grok: 1, ollama: 1 };
+  // Agents that only answer text (a local model through Ollama's API): no tools, no files — they can be the
+  // Arbiter or take part in a discussion, never plan, build, review or analyse
+  const TEXT_AGENTS = ["ollama"];
   const CATEGORIES = ["single", "workflow", "analysis"];
   const PATTERNS = {
     pipeline: { name: "Pipeline", hint: "plan → build → test → review" },
@@ -39,9 +42,11 @@
     );
 
   /** A clean configuration from whatever the page sent: unknown keys dropped, numbers clamped. */
-  function normalize(raw = {}, agents = Object.keys(CAPACITY)) {
+  function normalize(raw = {}, all = Object.keys(CAPACITY)) {
+    const agents = all.filter(x => !TEXT_AGENTS.includes(x)); // the ones that can work in the code
     const first = agents[0] || "claude";
     const agentOr = (v, fb = first) => pick(v, agents, fb);
+    const arbiterOr = v => pick(v, all, first);
     const w = raw.workflow || {};
     const a = raw.analysis || {};
     const s = raw.single || {};
@@ -79,12 +84,12 @@
         planner: agentOr(w.planner),
         agents: counts(w.agents, agents),
         reviewer: agentOr(w.reviewer),
-        arbiter: agentOr(w.arbiter),
+        arbiter: arbiterOr(w.arbiter),
       },
       analysis: {
         preset: pick(a.preset, Object.keys(PRESETS), "audit"),
         agents: counts(a.agents, agents),
-        arbiter: agentOr(a.arbiter),
+        arbiter: arbiterOr(a.arbiter),
         logSources: (Array.isArray(a.logSources) ? a.logSources : [])
           .map(x => String(x).trim().slice(0, 300))
           .filter(Boolean)
@@ -366,6 +371,7 @@
 
   const api = {
     CAPACITY,
+    TEXT_AGENTS,
     CATEGORIES,
     PATTERNS,
     PRESETS,

@@ -208,3 +208,61 @@ test("An agent on its login screen is reported once (from the login question on)
   assert.match(seen[0][2], /authenticate[\s\S]*Failed to sign in/);
   assert.deepEqual(calls.keys, []);
 });
+
+test("A text agent (Ollama): no tmux; its answer ends the turn, the next prompt continues the conversation, an error loses it", async () => {
+  const calls = [];
+  let fail = false;
+  const answers = [];
+  const lost = [];
+  const runner = new TaskRunner({
+    launcher: {
+      launch: () => assert.fail("no tmux for a text agent"),
+      hasPane: () => assert.fail("no pane"),
+    },
+    sessions: { trackLaunch: () => {}, changed: () => {} },
+    capture: () => Promise.resolve(""),
+    sendKey: () => Promise.resolve(),
+    wait: () => Promise.resolve(),
+    ollama: {
+      chat: (model, messages) => {
+        calls.push([model, messages.map(m => `${m.role}:${m.content}`)]);
+        return fail
+          ? Promise.reject(new Error("Ollama: model 'x' not found"))
+          : Promise.resolve(`answer ${calls.length}`);
+      },
+    },
+    model: () => "qwen3:8b",
+    onAnswer: (pane, text) => answers.push([pane, text]),
+    onLost: pane => lost.push(pane),
+  });
+  const h = await runner.launch({
+    adapter: "ollama",
+    cwd: "/w/ro",
+    prompt: "Decide",
+    mode: "read-only",
+    role: "arbiter",
+    taskId: "t1",
+  });
+  await settle();
+  assert.match(h.paneId, /^text:\d+$/);
+  assert.deepEqual(answers, [[h.paneId, "answer 1"]]);
+  assert.equal(calls[0][0], "qwen3:8b");
+  assert.match(calls[0][1][0], /^system:.*no tools/);
+  assert.equal(calls[0][1][1], "user:Decide");
+  assert.equal(await runner.alive(h), true);
+  await runner.prompt(h, "Round 2");
+  await settle();
+  assert.deepEqual(calls[1][1].slice(1), ["user:Decide", "assistant:answer 1", "user:Round 2"]);
+  fail = true;
+  await runner.prompt(h, "Round 3");
+  await settle();
+  assert.deepEqual(lost, [h.paneId]);
+  assert.match(runner.lastScreen(h), /not found/);
+  assert.equal(await runner.alive(h), false);
+  // no model picked: it can't start
+  runner.model = () => "";
+  await assert.rejects(
+    runner.launch({ adapter: "ollama", prompt: "x", mode: "read-only" }),
+    /Pick a model for Ollama/
+  );
+});

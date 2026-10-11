@@ -128,6 +128,9 @@
   .arow .nm small { color: var(--muted); font-size: 11.5px; }
   .arow .cmds { grid-column: 2 / -1; display: flex; flex-direction: column; gap: 2px; font: 11px/1.45 ui-monospace, "Ubuntu Mono", monospace; color: var(--muted); overflow-wrap: anywhere; }
   .arow .cmds b { font-family: -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; font-weight: 600; margin-right: 4px; }
+  .arow .cmds select, .arow .cmds input { font: inherit; color: var(--fg); max-width: 100%; }
+  .arow .cmds input[data-ollama="url"] { width: 26ch; }
+  .arow .cmds .hint { font-family: -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
   .arow input.notes { grid-column: 2 / -1; padding: 5px 8px; font: 12px -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
   .stepper { display: inline-flex; align-items: center; border-radius: 9px; border: 1px solid var(--line); background: rgb(var(--ink) / .05); }
   .stepper button { width: 26px; height: 26px; color: var(--soft); border-radius: 8px; }
@@ -367,6 +370,8 @@
     saved: 'Saved', hint: 'Ctrl+Enter to save',
     agentOff: 'off', notInstalled: 'Not installed — install the CLI, then restart Bayloob', running: (n, max) => `${n} of ${max} running`,
     enabledTip: name => `Use ${name} in tasks`, launch: 'Starts', readOnly: 'Read-only', noReadOnly: 'no read-only flag — Bayloob denies writes',
+    model: 'Model', url: 'URL', pickModel: 'Pick a model…', textOnly: 'Answers only — no tools, no files: it can be the Arbiter or take part in a discussion',
+    noModels: url => `No models at ${url} — start Ollama (ollama serve) and pull one (ollama pull qwen3:8b)`,
     notesPh: 'Notes, e.g. subscription plan — rate limits apply', format: 'Response format',
     total: 'Max parallel agents', totalSub: 'all tasks together', perProject: 'Per project', perProjectSub: 'at the same time',
     attachFile: 'Attached file', attachFileSub: 'MB at most, each', attachTask: 'Attachments per task', attachTaskSub: 'MB at most, together',
@@ -408,6 +413,7 @@
       this.sounds = values.sounds;
       this.soundToggles = { ...(values.soundToggles || {}) };
       this.agents = JSON.parse(JSON.stringify(values.agents || {}));
+      this.ollama = { url: 'http://127.0.0.1:11434', model: '', ...(values.ollama || {}) };
       this.hosts = JSON.parse(JSON.stringify(values.hosts || []));
       this.hostStatus = {};
       this.#renderHosts();
@@ -494,9 +500,10 @@
           <span class="nm"><b>${esc(name(k))}</b><small>${i.installed ? T.running(usage[k]?.running || 0, a.max) : T.notInstalled}</small></span>
           <button type="button" class="switch" role="switch" aria-checked="${!!a.enabled && !!i.installed}" data-enable="${k}" ${i.installed ? '' : 'disabled'} title="${esc(T.enabledTip(name(k)))}" aria-label="${esc(T.enabledTip(name(k)))}"></button>
           ${stepper(`agent.${k}`, a.max, 1, 16, `${name(k)} max parallel`, !i.installed)}
-          ${i.launch ? `<span class="cmds"><span><b>${T.launch}</b>${esc(i.launch)}</span><span><b>${T.readOnly}</b>${esc(i.readOnly || T.noReadOnly)}</span></span>
+          ${i.text && i.installed ? this.#textAgentHtml(i) : ''}
+          ${i.launch && !i.text ? `<span class="cmds"><span><b>${T.launch}</b>${esc(i.launch)}</span><span><b>${T.readOnly}</b>${esc(i.readOnly || T.noReadOnly)}</span></span>
           <input type="text" class="notes" data-notes="${k}" value="${esc(a.notes)}" placeholder="${esc(T.notesPh)}" aria-label="${esc(name(k))} notes">` : ''}
-          ${i.installed ? `<label class="fmt">${T.format}<select data-format="${k}" aria-label="${esc(name(k))} response format">${this.#formatOptions(this.promptFormat.agents[k] ?? '', true)}</select></label>` : ''}</div>`;
+          ${i.installed && !i.text ? `<label class="fmt">${T.format}<select data-format="${k}" aria-label="${esc(name(k))} response format">${this.#formatOptions(this.promptFormat.agents[k] ?? '', true)}</select></label>` : ''}</div>`;
       }).join('');
       const freeGB = this.state.freeGB;
       const l = this.limits;
@@ -506,6 +513,18 @@
           <span>${T.memory}<small>${T.memorySub(freeGB)}</small></span>${stepper('limit.minFreeGB', l.minFreeGB, ...LIMIT_RANGE.minFreeGB, T.memory)}
           <span>${T.attachFile}<small>${T.attachFileSub}</small></span>${stepper('attach.fileMB', this.attachLimits.fileMB, ATTACH_RANGE.fileMB[0], ATTACH_RANGE.fileMB[1], T.attachFile)}
           <span>${T.attachTask}<small>${T.attachTaskSub}</small></span>${stepper('attach.taskMB', this.attachLimits.taskMB, ATTACH_RANGE.taskMB[0], ATTACH_RANGE.taskMB[1], T.attachTask)}</div>`;
+    }
+
+    // A local model through Ollama: which model, at which (local) URL; what it can do
+    #textAgentHtml(i) {
+      const models = i.ollama?.models || [];
+      const has = models.some(m => m.name === this.ollama.model);
+      const options = [`<option value="">${T.pickModel}</option>`,
+        ...(this.ollama.model && !has ? [`<option value="${esc(this.ollama.model)}" selected>${esc(this.ollama.model)}</option>`] : []),
+        ...models.map(m => `<option value="${esc(m.name)}"${m.name === this.ollama.model ? ' selected' : ''}>${esc(m.name)}${m.params ? ` · ${esc(m.params)}` : ''}</option>`)].join('');
+      return `<span class="cmds"><span><b>${T.model}</b><select data-ollama="model" aria-label="Ollama model">${options}</select></span>
+          <span><b>${T.url}</b><input type="text" data-ollama="url" value="${esc(this.ollama.url)}" spellcheck="false" aria-label="Ollama URL"></span>
+          <span class="hint">${esc(models.length ? T.textOnly : T.noModels(this.ollama.url))}</span></span>`;
     }
 
     #renderHosts() {
@@ -659,7 +678,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
-        agents: this.agents, limits: this.limits, attachLimits: this.attachLimits, hosts: this.hosts,
+        agents: this.agents, ollama: this.ollama, limits: this.limits, attachLimits: this.attachLimits, hosts: this.hosts,
         mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, promptFormat: this.promptFormat, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, workspaceShortcut: this.el.workspaceShortcut.value, onClose: this.onClose, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
@@ -763,6 +782,7 @@
         }
       });
       this.el.agentGrid.addEventListener('change', e => {
+        if (e.target.dataset.ollama) { this.ollama[e.target.dataset.ollama] = e.target.value.trim(); return; }
         const k = e.target.dataset.format;
         if (!k) { return; }
         if (e.target.value) { this.promptFormat.agents[k] = e.target.value; } else { delete this.promptFormat.agents[k]; }

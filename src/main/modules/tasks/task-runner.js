@@ -5,6 +5,12 @@
 // runs in a worktree Bayloob has just created from the project the owner picked for the task. That question
 // is answered here, for these folders only, and logged; nothing else on a task's screen is answered.
 const { parseMenu, menuKeys } = require("../agents/terminal-menu");
+const { AGENTS } = require("../agents/agents");
+
+// A text-only agent (a local model through Ollama) gets this first: it has nothing but the message
+const TEXT_SYSTEM =
+  "You answer as one of the agents in a Bayloob task. You have no tools: you can't read files, run commands or " +
+  "change anything. Everything you need is in the message — answer from it, in the format it asks for.";
 
 const TRUST = /\btrust\b/i;
 // An agent that isn't signed in waits on its login screen forever: Gemini's "How would you like to authenticate",
@@ -24,7 +30,12 @@ class TaskRunner {
    * sendKey   (pane, key) → Promise
    * onTrust   (taskId, pane, question) → void — for the audit trail
    * onSignIn  (taskId, pane, screen) → void — the agent waits on its login screen
+   * ollama    OllamaClient, model () → the model from Settings — text agents' turns go through its API
+   * onAnswer  (pane, text) → void — a text agent's turn ended (as a hook's Stop would say)
+   * onLost    (pane) → void — a text agent's turn failed (its error is its last screen)
    */
+  #texts = new Map(); // "text:n" → { messages, abort, name } — a text agent's conversation (no tmux)
+  #textNo = 0;
   #screens = new Map(); // pane → its screen's last lines while it was watched (gone with the pane otherwise)
 
   constructor({
@@ -34,13 +45,31 @@ class TaskRunner {
     sendKey,
     onTrust = () => {},
     onSignIn = () => {},
+    ollama = null,
+    model = () => "",
+    onAnswer = () => {},
+    onLost = () => {},
     wait = null,
   }) {
-    Object.assign(this, { launcher, sessions, capture, sendKey, onTrust, onSignIn });
+    Object.assign(this, {
+      launcher,
+      sessions,
+      capture,
+      sendKey,
+      onTrust,
+      onSignIn,
+      ollama,
+      model,
+      onAnswer,
+      onLost,
+    });
     this.wait = wait || (ms => new Promise(r => setTimeout(r, ms)));
   }
 
   async launch({ adapter, cwd, prompt, mode, role, taskId, label }) {
+    if (AGENTS[adapter]?.kind === "text") {
+      return this.#textLaunch(adapter, prompt);
+    }
     const readOnly = mode !== "writes";
     const launch = await this.launcher.launch({
       agent: adapter,
@@ -58,11 +87,64 @@ class TaskRunner {
   }
 
   prompt(handle, text) {
+    if (this.#texts.has(handle.paneId)) {
+      return this.#textTurn(handle.paneId, text);
+    }
     return this.launcher.sendPrompt(handle.paneId, text);
   }
 
   alive(handle) {
+    if (String(handle?.paneId).startsWith("text:")) {
+      return Promise.resolve(this.#texts.has(handle.paneId));
+    }
     return this.launcher.hasPane(handle.paneId);
+  }
+
+  // ---------- text agents: a conversation with a local model, kept here (gone with a restart) ----------
+
+  async #textLaunch(adapter, prompt) {
+    if (!this.ollama) {
+      throw new Error(`${AGENTS[adapter].name} isn't set up`);
+    }
+    const model = this.model();
+    if (!model) {
+      throw new Error("Pick a model for Ollama in Settings → Agents");
+    }
+    this.#textNo += 1;
+    const handle = { name: `${adapter}-${this.#textNo}`, paneId: `text:${this.#textNo}` };
+    this.#texts.set(handle.paneId, {
+      name: handle.name,
+      model,
+      messages: [{ role: "system", content: TEXT_SYSTEM }],
+      abort: null,
+    });
+    this.#textTurn(handle.paneId, prompt);
+    return handle;
+  }
+
+  // One turn, in the background: the answer goes where a hook's Stop would (onAnswer); an error ends it (onLost)
+  #textTurn(paneId, text) {
+    const c = this.#texts.get(paneId);
+    c.messages.push({ role: "user", content: String(text) });
+    c.abort = new AbortController();
+    this.ollama
+      .chat(c.model, c.messages, { signal: c.abort.signal })
+      .then(answer => {
+        if (this.#texts.get(paneId) !== c) {
+          return; // stopped meanwhile
+        }
+        c.messages.push({ role: "assistant", content: answer });
+        this.onAnswer(paneId, answer);
+      })
+      .catch(e => {
+        if (this.#texts.get(paneId) !== c) {
+          return;
+        }
+        this.#screens.set(paneId, e.message);
+        this.#texts.delete(paneId);
+        this.onLost(paneId);
+      });
+    return Promise.resolve();
   }
 
   /** The last lines a fresh session showed (its pane may be gone: e.g. the agent crashed at start). */
@@ -72,6 +154,12 @@ class TaskRunner {
 
   async stop(handle) {
     this.#screens.delete(handle.paneId);
+    const text = this.#texts.get(handle.paneId);
+    if (text) {
+      this.#texts.delete(handle.paneId);
+      text.abort?.abort();
+      return;
+    }
     await this.launcher.stop(handle.name).catch(() => {}); // already gone is fine
     this.sessions.untrackLaunch(handle.name);
     this.sessions.changed();

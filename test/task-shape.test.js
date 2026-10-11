@@ -215,3 +215,63 @@ test("Design debate: the reviewer gets the design the discussion settled on", ()
   const review = builtin("debate").stages.find(s => s.id === "review");
   assert.match(review.prompt, /Try to break it[\s\S]*settled on[\s\S]*\{\{artifact:design\.md\}\}/);
 });
+
+test("Ollama answers only: it can be the Arbiter, never plan, build, review or analyse", () => {
+  const { templateIssues } = require("../src/shared/workflow-templates");
+  const all = ["claude", "codex", "ollama"];
+  const c = T.normalize(
+    {
+      category: "workflow",
+      workflow: {
+        planner: "ollama",
+        reviewer: "ollama",
+        arbiter: "ollama",
+        agents: { ollama: 1, claude: 1 },
+      },
+      analysis: { arbiter: "ollama", agents: { ollama: 1 } },
+      single: { agent: "ollama" },
+    },
+    all
+  );
+  assert.deepEqual(
+    [
+      c.workflow.planner,
+      c.workflow.reviewer,
+      c.workflow.arbiter,
+      c.analysis.arbiter,
+      c.single.agent,
+    ],
+    ["claude", "claude", "ollama", "ollama", "claude"]
+  );
+  assert.equal(c.workflow.agents.ollama, undefined);
+  assert.equal(c.analysis.agents.ollama, undefined);
+  const issues = templateIssues({
+    id: "x",
+    name: "x",
+    stages: [
+      {
+        id: "b",
+        title: "Build",
+        role: "builder",
+        mode: "writes",
+        agents: [{ adapter: "ollama", count: 1 }],
+        prompt: "{{task}}",
+        gate: "always",
+      },
+      {
+        id: "a",
+        title: "Arbiter",
+        role: "arbiter",
+        mode: "read-only",
+        agents: [{ adapter: "ollama", count: 1 }],
+        prompt: "{{task}}",
+        gate: "always",
+      },
+    ],
+  }).map(i => i.text);
+  assert.equal(issues.filter(t => /only answers text/.test(t)).length, 1);
+  assert.match(
+    issues.find(t => /only answers text/.test(t)),
+    /"Build"/
+  );
+});

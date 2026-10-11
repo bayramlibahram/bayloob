@@ -7,6 +7,7 @@ const { CAPACITY } = require("../../shared/task-shape");
 const { clampScale } = require("../windows/ui-scale");
 const { normalizeHost } = require("../modules/tasks/runbook");
 const PromptFormat = require("../../shared/prompt-format");
+const { localUrl, DEFAULT_URL } = require("../modules/agents/ollama-client");
 
 // Settings → Agents: per agent on/off, how many may run at once, and a note. Limits for all of them together.
 const AGENT_DEFAULTS = Object.fromEntries(
@@ -36,6 +37,7 @@ const DEFAULTS = {
   attachLimits: { fileMB: 50, taskMB: 200 }, // files attached to a task: per file, and all of a task's together
   hosts: [], // operations: { id, name, alias (~/.ssh/config), env dev|staging|prod, allow: [patterns], notes }
   agents: AGENT_DEFAULTS, // per agent: { enabled, max (parallel instances), notes }
+  ollama: { url: DEFAULT_URL, model: "" }, // the local model a text agent answers with (localhost only)
   limits: LIMIT_DEFAULTS, // { total, perProject, minFreeGB } for task instances (see tasks/scheduler.js)
 };
 
@@ -57,6 +59,7 @@ const ENV = {
   soundToggles: () => undefined,
   watchClipboard: () => undefined,
   agents: () => undefined,
+  ollama: () => undefined,
   limits: () => undefined,
   hosts: () => undefined,
   attachLimits: () => undefined,
@@ -113,6 +116,10 @@ const VALIDATE = {
       })
     ),
   promptFormat: v => PromptFormat.normalize(v),
+  ollama: v => ({
+    url: localUrl(v?.url) || DEFAULT_URL,
+    model: /^[\w.:/-]{1,120}$/.test(String(v?.model || "")) ? String(v.model) : "",
+  }),
   attachLimits: v => {
     const l = v && typeof v === "object" ? v : {};
     return { fileMB: clampInt(l.fileMB, 1, 500, 50), taskMB: clampInt(l.taskMB, 1, 2000, 200) };

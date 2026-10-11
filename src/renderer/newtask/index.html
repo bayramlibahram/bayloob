@@ -348,6 +348,8 @@
     }
 
     get agents() { return this.state.agents; }
+    // The agents that work in the code: a text agent (a local model) can only be the Arbiter
+    get coders() { return Object.fromEntries(Object.entries(this.agents).filter(([, a]) => !a.text)); }
     // Installed and not turned off in Settings → Agents
     get installed() { return Object.keys(this.agents).filter(a => this.usable(a)); }
     usable(a) { return !!this.agents[a]?.installed && !(this.state.disabled || []).includes(a); }
@@ -614,7 +616,7 @@
       const s = this.cfg.single;
       const terms = this.state.terminals || [];
       return `<div class="label">${T.agent}</div>
-        <div class="arows" role="radiogroup" aria-label="${T.agent}">${Object.entries(this.agents).map(([k, a]) => `
+        <div class="arows" role="radiogroup" aria-label="${T.agent}">${Object.entries(this.coders).map(([k, a]) => `
           <button type="button" class="arow pick${this.usable(k) ? '' : ' off'}" role="radio" aria-checked="${k === s.agent}" data-agent="${k}" ${this.usable(k) ? '' : `disabled title="${this.whyNot(k)}"`}>
             <span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${this.usable(k) ? T.free(this.free(k), this.state.capacity[k]) : this.whyNot(k)}</small></span><span class="tick">${k === s.agent ? I('check') : ''}</span></button>`).join('')}</div>
         <div class="label">${T.prompt}</div>
@@ -630,7 +632,7 @@
 
     // Builder / reviewer / analyst rows: Novi, name, mode, free of max (or "will queue"), count stepper
     #agentRows(bag, mode, word) {
-      return `<div class="arows">${Object.entries(this.agents).map(([k, a]) => {
+      return `<div class="arows">${Object.entries(this.coders).map(([k, a]) => {
         const n = bag[k] || 0;
         const max = this.state.capacity[k] || 1;
         if (!this.usable(k)) {
@@ -646,7 +648,8 @@
     }
 
     #select(key, value, label, avoid = []) {
-      const opts = this.installed.map(a => `<option value="${a}"${a === value ? ' selected' : ''}>${esc(this.agents[a].name)}</option>`).join('');
+      const list = key.endsWith('arbiter') ? this.installed : this.installed.filter(a => !this.agents[a].text);
+      const opts = list.map(a => `<option value="${a}"${a === value ? ' selected' : ''}>${esc(this.agents[a].name)}</option>`).join('');
       const same = avoid.includes(value);
       return `<div class="row"><span class="label" style="width:76px">${label}</span><select class="sel" data-select="${key}" aria-label="${label}">${opts}</select>${badge(key.endsWith('planner') ? 'plan' : 'read-only')}
         ${key.endsWith('arbiter') && avoid.length ? `<span class="hintline grow${same ? ' warn' : ''}">${same ? T.arbiterSame : T.arbiterOk}</span>` : ''}</div>`;

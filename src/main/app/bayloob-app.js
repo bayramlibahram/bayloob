@@ -16,6 +16,7 @@ const path = require("node:path");
 const { HOOKS_DIR, TOOLS_DIR, EXTENSION_DIR, ASSETS_DIR } = require("./paths");
 const { Settings } = require("../config/settings");
 const { AGENTS, agentCommand } = require("../modules/agents/agents");
+const { OllamaClient } = require("../modules/agents/ollama-client");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
 const { pickChallenger, challengePrompt } = require("../modules/agents/challenge");
@@ -116,7 +117,9 @@ const onPath = bin =>
 
 function detectAgents() {
   const sh = process.env.SHELL || "/bin/bash";
-  const bins = Object.values(AGENTS).map(a => a.bin);
+  const bins = Object.values(AGENTS)
+    .map(a => a.bin)
+    .filter(Boolean);
   return new Promise(resolve => {
     execFile(
       sh,
@@ -142,6 +145,7 @@ class BayloobApp {
   panel = new PanelWindow();
   uploads = new UploadStore();
   converters = new Converters(); // pdftotext / LibreOffice for attachments, when installed
+  ollama = new OllamaClient({ url: () => this.settings.get("ollama").url }); // a local model as a text agent
   settingsWindow = new SettingsWindow();
   server = new EventServer();
   // The pill shows its own card (and sound) for done / waiting: no second, desktop copy over it
@@ -342,6 +346,11 @@ class BayloobApp {
             question,
           }),
         onSignIn: (_taskId, pane, screen) => this.engine.sessionNeedsSignIn(pane, screen),
+        // A local model through Ollama: its answer ends the turn as a hook's Stop would; an error loses it
+        ollama: this.ollama,
+        model: () => this.settings.get("ollama").model,
+        onAnswer: (pane, text) => this.engine.turnEnded(pane, text),
+        onLost: pane => this.engine.sessionGone(pane),
       }),
     });
     this.engine.on("change", task => {
@@ -863,36 +872,59 @@ class BayloobApp {
     return Object.fromEntries(
       Object.entries(agents).map(([k, a]) => [
         k,
-        { enabled: a.enabled && !!AGENTS[k] && this.#installedSet.has(AGENTS[k].bin), max: a.max },
+        {
+          enabled: a.enabled && !!AGENTS[k] && this.#ready(k),
+          max: a.max,
+        },
       ])
     );
   }
 
+  // Installed, and (a text agent) with a model picked in Settings → Agents
+  #ready(k) {
+    const def = AGENTS[k];
+    if (!def || !this.#installedSet.has(def.bin)) {
+      return false;
+    }
+    return def.kind !== "text" || !!this.settings.get("ollama").model;
+  }
+
   async #agentSettingsInfo() {
     const choices = await this.#agentChoices();
+    const models = await this.ollama.models(); // [] when Ollama isn't running
     const cmd = argv => argv.map(a => (a === "{prompt}" || /\s/.test(a) ? `"${a}"` : a)).join(" ");
     return Object.fromEntries(
       Object.keys(this.settings.get("agents")).map(k => {
         const def = AGENTS[k];
         return [
           k,
-          def
+          def?.kind === "text"
             ? {
                 name: def.name,
-                installed: choices[k].installed,
+                text: true,
+                installed: this.#installedSet.has(def.bin),
                 color: choices[k].color,
-                launch: cmd(agentCommand(k, "{prompt}")),
-                readOnly: def.readOnly.length
-                  ? cmd(agentCommand(k, "{prompt}", { readOnly: true }))
-                  : null,
-              }
-            : {
-                name: k === "grok" ? "Grok" : k,
-                installed: false,
-                color: null,
-                launch: null,
+                launch: `POST ${this.settings.get("ollama").url}/api/chat · no tools, answers only`,
                 readOnly: null,
-              },
+                ollama: { ...this.settings.get("ollama"), models },
+              }
+            : def
+              ? {
+                  name: def.name,
+                  installed: choices[k].installed,
+                  color: choices[k].color,
+                  launch: cmd(agentCommand(k, "{prompt}")),
+                  readOnly: def.readOnly.length
+                    ? cmd(agentCommand(k, "{prompt}", { readOnly: true }))
+                    : null,
+                }
+              : {
+                  name: k === "grok" ? "Grok" : k,
+                  installed: false,
+                  color: null,
+                  launch: null,
+                  readOnly: null,
+                },
         ];
       })
     );
@@ -916,8 +948,14 @@ class BayloobApp {
       Object.entries(AGENTS).map(([k, a]) => [
         k,
         {
-          name: a.name,
-          installed: installed.has(a.bin),
+          name:
+            a.kind === "text"
+              ? `${a.name} · ${this.settings.get("ollama").model || "no model"}`
+              : a.name,
+          installed:
+            installed.has(a.bin) && (a.kind !== "text" || !!this.settings.get("ollama").model),
+          // text: answers only (a local model) — it can be the Arbiter or take part in a discussion
+          ...(a.kind === "text" ? { text: true } : {}),
           color: this.mascot === "svg" ? a.svgColor : a.color,
         },
       ])

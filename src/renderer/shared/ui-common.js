@@ -51,6 +51,15 @@ const AGENTS = {
     top: ["#a9cbff", "#6a9ef8", "#3f72e6"],
     bot: ["#5b8ff5", "#3461d6", "#1c3a9c"],
   },
+  // A local model through Ollama (answers only): the silver Novi, like other agents without a pack of their own
+  ollama: {
+    name: "Ollama",
+    pack: "silver",
+    color: "#cfd3dc",
+    light: "#6b7180",
+    top: ["#ffffff", "#dde2ea", "#b6bdca"],
+    bot: ["#c3c9d4", "#9099aa", "#5d6577"],
+  },
   cursor: {
     name: "Cursor",
     pack: "silver",

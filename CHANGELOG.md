@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- **Ollama: a local model as the Arbiter** (or a voice in a discussion). Settings → Agents → Ollama: pick a model
+  pulled on this computer (the URL must be localhost). It answers only — no tools, no files, so it can't plan,
+  build, review or analyse; Bayloob sends it everything in the message (the decider gets the whole thread).
+  If Ollama isn't running or the model is missing, the stage says so, with how to fix it.
 - **Lead + team** (#28), a new workflow pattern in New task: the agent you pick as the **lead** plans and splits the
   work; the team builds one part each in its own worktree; the lead reviews every part (read-only) and changes go
   back to that part's builder; the parts are integrated — that branch is the lead's, so it fixes what fails the

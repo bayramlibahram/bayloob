@@ -58,6 +58,10 @@ const STARTUP_MS = 60_000; // a session that ends this soon after its start cras
 // Known start-up crashes and what fixes them (shown at the 'interrupted' gate with the session's last lines)
 const STARTUP_HINTS = [
   {
+    match: /^Ollama/,
+    hint: "Check that Ollama runs (`ollama serve`) and that the model in Settings → Agents is pulled (`ollama list`), then Run again.",
+  },
+  {
     match: /authenticate|sign in|log ?in/i,
     hint: "This agent isn't signed in: open it in a terminal, log in, then Run again — or stop the task and pick another agent.",
   },
@@ -402,8 +406,10 @@ class TaskEngine extends EventEmitter {
         return;
       }
       this.scheduler.release(inst.schedId, "crashed");
-      // Gone right after it started: a crash at start — keep what its screen said (the pane is gone)
-      const atStart = this.now() - (inst.startedAt || 0) < STARTUP_MS;
+      // Gone right after it started: a crash at start — keep what its screen said (the pane is gone). A text
+      // agent's turn ends this way only on an error, whenever it comes: its "screen" is that error
+      const text = String(paneId).startsWith("text:");
+      const atStart = text || this.now() - (inst.startedAt || 0) < STARTUP_MS;
       const screen = atStart ? this.runner.lastScreen?.(inst.handle) || "" : "";
       Object.assign(inst, {
         status: "interrupted",
@@ -454,6 +460,7 @@ class TaskEngine extends EventEmitter {
         const lost =
           inst.status === "running" &&
           inst.handle &&
+          !String(inst.handle.paneId).startsWith("text:") && // a text agent has no pane: its API says when it ends
           !panes.has(inst.handle.paneId) &&
           this.now() - inst.startedAt > graceMs;
         if (lost) {
@@ -1125,7 +1132,9 @@ class TaskEngine extends EventEmitter {
     }
     const pid = d.queue.shift();
     if (pid) {
-      const files = task.attachments?.length ? this.attachments(task.id).manifest() : "";
+      // A text agent (a local model) reads nothing: no thread file, no attached files to open
+      const text = AGENTS[d.participants.find(p => p.id === pid)?.adapter]?.kind === "text";
+      const files = task.attachments?.length && !text ? this.attachments(task.id).manifest() : "";
       const prompt = Discussion.turnPrompt({
         topic: d.topic,
         format: d.format,
@@ -1134,7 +1143,7 @@ class TaskEngine extends EventEmitter {
         round: d.round,
         rounds: this.#discussRounds(task, st),
         messages: d.messages,
-        threadPath: THREAD_PATH,
+        threadPath: text ? null : THREAD_PATH,
         files,
       });
       await this.#discussTurn(task, st, pid, prompt);
@@ -1363,9 +1372,15 @@ class TaskEngine extends EventEmitter {
     this.#discussWrite(task);
     this.#log(task, "engine", "discussion-ended", { why, round: d.round, tokens: d.tokens });
     if (st.decider?.adapter) {
-      const prompt = DECIDE_PROMPT.replace("{{thread}}", THREAD_PATH)
+      // A text agent can't read the thread file: it gets the thread in the message
+      const text = AGENTS[st.decider.adapter]?.kind === "text";
+      const prompt = DECIDE_PROMPT.replace(
+        "{{thread}}",
+        text ? "the thread at the end of this message" : THREAD_PATH
+      )
         .replace("{{topic}}", () => d.topic)
-        .replace("{{summary}}", () => JSON.stringify(summary, null, 2));
+        .replace("{{summary}}", () => JSON.stringify(summary, null, 2))
+        .concat(text ? `\n\nThe thread:\n\n${this.#discussThread(task)}` : "");
       await this.#discussTurn(task, st, "decider", prompt, "decide");
       return;
     }
@@ -1497,8 +1512,11 @@ class TaskEngine extends EventEmitter {
       ...inst.vars,
     };
     const text = renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
-    // Attached files: their paths in the agent's folder, never their content
-    const files = task.attachments?.length ? this.attachments(task.id).manifest() : "";
+    // Attached files: their paths in the agent's folder, never their content (a text agent opens nothing)
+    const files =
+      task.attachments?.length && AGENTS[inst.adapter]?.kind !== "text"
+        ? this.attachments(task.id).manifest()
+        : "";
     return files ? `${text}\n\n${files}` : text;
   }
 

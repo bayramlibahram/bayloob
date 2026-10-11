@@ -47,6 +47,18 @@ const AGENTS = {
     color: "#22b8cf",
     svgColor: "#3fd3b6",
   },
+  // A local model through Ollama's API (kind "text"): no CLI, no tmux, no tools — Bayloob sends the prompt and
+  // reads the answer (see tasks/task-runner.js). bin: only to tell whether Ollama is installed.
+  ollama: {
+    name: "Ollama",
+    kind: "text",
+    bin: "ollama",
+    withPrompt: null,
+    readOnly: [],
+    resume: null,
+    color: "#e6e6e6",
+    svgColor: "#cfd3dc",
+  },
   gemini: {
     name: "Gemini CLI",
     bin: "gemini",
@@ -63,6 +75,9 @@ function agentCommand(agent, prompt, { readOnly = false, strict = false, resume 
   const def = AGENTS[agent];
   if (!def) {
     throw new Error(`Unknown agent: ${agent}`);
+  }
+  if (def.kind === "text") {
+    throw new Error(`${def.name} answers through its API, not in a terminal`);
   }
   if (resume) {
     if (!def.resume) {

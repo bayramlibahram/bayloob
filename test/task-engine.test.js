@@ -21,7 +21,12 @@ class FakeRunner {
   }
   launch(opts) {
     const n = this.sessions.length + 1;
-    const s = { name: `bl-t-${n}`, paneId: `%${n}`, ...opts };
+    // a text agent (a local model) has no tmux pane
+    const s = {
+      name: `bl-t-${n}`,
+      paneId: opts.adapter === "ollama" ? `text:${n}` : `%${n}`,
+      ...opts,
+    };
     this.sessions.push(s);
     return Promise.resolve({ name: s.name, paneId: s.paneId });
   }
@@ -114,6 +119,7 @@ function setup({ caps } = {}) {
       claude: { enabled: true, max: 4 },
       codex: { enabled: true, max: 2 },
       gemini: { enabled: true, max: 2 },
+      ollama: { enabled: true, max: 1 },
     };
   const scheduler = new Scheduler({
     capacity,
@@ -1791,4 +1797,48 @@ test("Discussion: ended by you mid-round, the agreement counts the replies since
     env.store.readArtifact(task.id, "decision.md"),
     /Codex · Skeptic's proposal \(2 of 2 agree\)/
   );
+});
+
+// ---------- Text agents (a local model through Ollama) ----------
+
+test("Ollama in a discussion: its turns carry everything (no thread file, no files); as decider it gets the thread", async () => {
+  const env = setup();
+  const task = await startTalk(env, {
+    rounds: 1,
+    participants: [
+      { adapter: "claude", count: 1, role: "Architect" },
+      { adapter: "ollama", count: 1, role: "Skeptic" },
+    ],
+    decider: { adapter: "ollama" },
+  });
+  await speak(env, task, "claude-1", say("propose"));
+  const local = env.runner.by({ adapter: "ollama" })[0];
+  assert.equal(local.role, "discussant");
+  assert.doesNotMatch(local.prompt, /thread so far is in/);
+  assert.match(local.prompt, /everything you have is in this message/);
+  await speak(env, task, "ollama-1", say("support", ["claude-1"]));
+  const dec = env.runner.by({ adapter: "ollama", role: "arbiter" })[0];
+  assert.match(
+    dec.prompt,
+    /Read the whole thread in the thread at the end of this message[\s\S]*The thread:\n\n# Discussion[\s\S]*## Round 1/
+  );
+});
+
+test("Ollama's turn fails (not running, model missing): the gate shows its error and how to fix it", async () => {
+  const env = setup();
+  const task = await startTalk(env, { rounds: 1, decider: { adapter: "ollama" } });
+  await speak(env, task, "claude-1", say("propose"));
+  await speak(env, task, "codex-1", say("support", ["claude-1"]));
+  const dec = env.runner.by({ adapter: "ollama" })[0];
+  env.runner.screens[dec.name] = "Ollama: model 'qwen3:8b' not found";
+  // long after it started: a text agent's error still shows (it has no start-up window)
+  env.now = () => Date.now() + 3_600_000;
+  env.engine.now = env.now;
+  env.engine.sessionGone(dec.paneId);
+  await env.engine.settled(task.id);
+  assert.equal(task.gate.kind, "discussion-end");
+  assert.match(task.gate.screen, /not found/);
+  assert.match(task.gate.hint, /ollama serve[\s\S]*ollama list/);
+  // and a text agent has no pane: the pane check never takes it for lost
+  env.engine.panesAlive(new Set());
 });
