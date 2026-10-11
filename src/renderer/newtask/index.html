@@ -242,7 +242,9 @@
     title: 'New task', steps: ['Project', 'Category', 'Configure', 'Confirm'],
     subProject: 'Where should the agents work?',
     next: 'Next', start: 'Start', back: 'Back', cancel: 'Cancel',
-    startLater: 'Available after step 03/04 — the draft is saved',
+    startLater: c => c.category === 'analysis' ? 'Analysis arrives with step 07 — the draft is saved'
+      : `${TaskShape.PATTERNS[c.workflow.pattern]?.name || 'This pattern'} arrives with a later step (Pipeline and Best-of-N run now) — the draft is saved`,
+    startTask: 'Start the task — the Tasks window opens on it',
     hintNext: '<kbd>⏎</kbd> next · <kbd>⇧⏎</kbd> new line · <kbd>Alt ←</kbd> back',
     hintCat: '<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick · <kbd>⏎</kbd> next',
     hintStart: '<kbd>⏎</kbd> start · <kbd>Esc</kbd> close',
@@ -294,6 +296,8 @@
   const CAT_COLOR = { single: 'var(--cat-single)', workflow: 'var(--cat-workflow)', analysis: 'var(--cat-analysis)' };
   const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
+  // Configurations the workflow engine can run so far (command 04): Pipeline and Best-of-N
+  const runnable = c => c.category === 'workflow' && ['pipeline', 'bestofn'].includes(c.workflow.pattern);
   const list = a => a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
   const badge = mode => mode === 'writes' ? '<span class="badge writes">writes</span>' : mode === 'plan' ? '<span class="badge plan">plan</span>' : mode === 'read-only' ? '<span class="badge ro">read-only</span>' : '';
 
@@ -427,7 +431,7 @@
 
     #next() {
       if (this.busy) { return; }
-      if (this.step === 4) { return this.cfg.category === 'single' ? this.#launch() : undefined; }
+      if (this.step === 4) { return this.cfg.category === 'single' ? this.#launch() : runnable(this.cfg) ? this.#startTask() : undefined; }
       const p = this.#problems();
       if (p.length) { return this.#message(p[0], true); }
       this.#go(this.step + 1);
@@ -457,6 +461,22 @@
     async #startOver() {
       if (this.draftId) { await this.api.discardDraft?.(this.draftId); }
       this.show({ ...this.state, draft: null, preset: null, prefill: '' });
+    }
+
+    // Workflow: the engine starts the task from this draft; the dialog closes and the Tasks window opens on it
+    async #startTask() {
+      this.busy = true;
+      this.el.next.disabled = this.el.back.disabled = true;
+      this.#message(T.starting);
+      clearTimeout(this.#saveTimer);
+      const res = await this.api.start?.({ ...this.cfg, id: this.draftId || undefined });
+      this.busy = false;
+      this.el.next.disabled = this.el.back.disabled = false;
+      if (res?.ok) {
+        this.draftId = null;
+      } else {
+        this.#message(res?.error || T.wrong, true);
+      }
     }
 
     async #launch() {
@@ -489,10 +509,10 @@
       if (this.step === 3 && c.category === 'single') { this.#mountComposer(); }
       this.el.back.textContent = this.step === 1 ? T.cancel : T.back;
       const last = this.step === 4;
-      const later = last && c.category !== 'single';
+      const later = last && c.category !== 'single' && !runnable(c);
       this.el.next.innerHTML = last ? `${I('play')}${T.start}` : `${T.next}${I('next')}`;
       this.el.next.disabled = later || this.busy;
-      this.el.nextWrap.title = later ? T.startLater : '';
+      this.el.nextWrap.title = later ? T.startLater(c) : last && c.category === 'workflow' ? T.startTask : '';
       this.el.next.setAttribute('aria-disabled', String(later));
       const hint = this.step === 2 ? T.hintCat : last ? (later ? `${I('info')} ${T.draftSaved}` : T.hintStart) : T.hintNext;
       this.#message(this.note ? `${this.note} · ${hint}` : hint, false, true);

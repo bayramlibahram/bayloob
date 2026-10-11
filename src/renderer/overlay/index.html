@@ -133,6 +133,8 @@
   .label .ruled code { font: 600 12px ui-monospace, monospace; }
   .immune.warn { margin-top: 8px; font-size: 12.5px; color: var(--waiting); }
   .immune code { font: 500 11.5px ui-monospace, monospace; }
+  .card.gate { border-color: color-mix(in srgb, var(--waiting) 45%, transparent); }
+  .card.gate .summary b { color: var(--text); }
   .card.menu { border-color: color-mix(in srgb, var(--thinking) 45%, transparent); }
   .card.menu .mq { color: var(--text); font-weight: 600; margin-bottom: 10px;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -453,6 +455,7 @@
     replyFailed: 'Could not send',
     filesChanged: n => `${n} file${n === 1 ? '' : 's'}`,
     asksInTerminal: 'asks in the terminal', termDefault: '(terminal default)',
+    taskNeedsYou: 'Task needs you', openTask: 'Open task', later: 'Later', moreTasks: n => `+${n} more`,
     menuHint: 'Bayloob picks the option you click in the terminal for you',
     soundMute: 'Sounds on — click to mute', soundUnmute: 'Sounds off — click to turn on',
     soundLocked: 'Sounds are turned off by BAYLOOB_SOUNDS=0',
@@ -687,6 +690,9 @@
     sounds = new SoundPlayer();
     #soundPrev = null;      // sessions at the previous update (null until the first one: no sounds on start)
     #permSince = new Map(); // permId -> when it appeared or was last reminded about
+    #gatesSeen = new Set(); // task gate ids already announced (one sound each)
+    #gatesLater = new Set(); // gate ids the user put off in the pill (still in the Inbox and on the board)
+    taskGates = null;       // null until the first update: no sound for gates that were already open
     #ruleTimer = null;
     #hoverTimer = null;
     #pressing = false;     // a mouse button is down on the pill: hold re-renders until it's released
@@ -775,6 +781,26 @@
       }
     }
 
+    // A workflow task reached a gate: a card like a permission's, and the same sound (never only a toast)
+    setTaskGates(gates) {
+      const fresh = (gates || []).filter(g => !this.#gatesSeen.has(g.gate.id));
+      for (const g of fresh) { this.#gatesSeen.add(g.gate.id); }
+      if (fresh.length && this.taskGates) { this.sounds.play('permission'); }
+      this.taskGates = gates || [];
+      this.render();
+    }
+
+    #gateCard(gates) {
+      const g = gates[0];
+      return { kind: 'gate', html: `
+        <div class="head"><span>⏸</span><b>${T.taskNeedsYou}</b> · ${esc(g.project)}${gates.length > 1 ? ` · ${T.moreTasks(gates.length - 1)}` : ''}</div>
+        <div class="summary"><b>${esc(g.title)}</b><br>${esc(g.gate.title)}</div>
+        <div class="actions">
+          <button class="btn" data-act="gate-later" data-gate="${esc(g.gate.id)}">${T.later}</button>
+          <button class="btn primary" data-act="open-task" data-task="${esc(g.id)}">${T.openTask}</button>
+        </div>` };
+    }
+
     setOutput(lines) { this.output = lines || {}; this.render(); }
 
     setDiffs(diffs) { this.diffs = diffs || {}; this.render(); }
@@ -830,7 +856,9 @@
       if (this.errorNote && Date.now() > this.errorNote.until && !this.hovering) { this.errorNote = null; }
       const menus = this.sessions.filter(s => s.menu);
       const handoffs = this.sessions.filter(s => s.handoff);
+      const gates = (this.taskGates || []).filter(g => !this.#gatesLater.has(g.gate.id));
       const card = perms.length ? this.#permCard(perms[0], perms.length - 1)
+        : gates.length ? this.#gateCard(gates)
         : menus.length ? this.#menuCard(menus[0])
         : handoffs.length ? this.#handoffCard(handoffs[0])
         : this.toast ? this.#doneCard() : this.errorNote ? this.#errorCard() : null;
@@ -1505,6 +1533,11 @@
       } else if (act === 'dismiss') {
         this.toast = null;
         this.render();
+      } else if (act === 'open-task') {
+        this.api?.openTasks(b.dataset.task);
+      } else if (act === 'gate-later') {
+        this.#gatesLater.add(b.dataset.gate); // it stays in the Inbox and on the board
+        this.render();
       } else if (act === 'focus') {
         this.sounds.play('open-terminal');
         const r = this.api ? await this.api.focus(b.dataset.sid) : { ok: false };
@@ -1665,6 +1698,7 @@
     window.bayloobAPI.onSoundConfig?.(c => view.setSoundConfig(c));
     window.bayloobAPI.onRuleAllowed?.(r => view.setRuleAllowed(r));
     window.bayloobAPI.onErrorCopied?.(e => view.setErrorCopied(e));
+    window.bayloobAPI.onTaskGates?.(g => view.setTaskGates(g));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
     window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open() };

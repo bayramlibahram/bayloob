@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("newTaskAPI", {
   discardDraft: id => ipcRenderer.invoke("newtask:discard-draft", id),
   // Single agent: the same launch as Ask Bayloob; the draft is dropped once the session starts
   launch: (opts, draftId) => ipcRenderer.invoke("newtask:launch", opts, draftId),
+  // Workflow: the draft becomes a task the engine runs (the Tasks window opens on it)
+  start: config => ipcRenderer.invoke("newtask:start", config),
   pickFolder: current => ipcRenderer.invoke("newtask:pick-folder", current),
   clipboard: () => ipcRenderer.invoke("launcher:clipboard"),
   close: () => ipcRenderer.send("newtask:close"),

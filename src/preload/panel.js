@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld("panelAPI", {
   onBlocked: cb => ipcRenderer.on("panel:blocked", (_e, info) => cb(info)),
   onCollisions: cb => ipcRenderer.on("panel:collisions", (_e, map) => cb(map)),
   onUsage: cb => ipcRenderer.on("panel:usage", (_e, usage) => cb(usage)),
+  onTask: cb => ipcRenderer.on("panel:task", (_e, task) => cb(task)),
+  // The Tasks window: the board, or one task's detail
+  openTasks: taskId => ipcRenderer.send("open-tasks", taskId || null),
   appMenu: appId => ipcRenderer.send("panel:app-menu", appId),
   focusApp: (appId, windowId) => ipcRenderer.invoke("panel:focus-app", appId, windowId),
   launchApp: appId => ipcRenderer.invoke("panel:launch-app", appId),

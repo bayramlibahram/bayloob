@@ -56,6 +56,7 @@ const { NewTaskWindow } = require("../windows/new-task-window");
 const { OverlayWindow } = require("../windows/overlay-window");
 const { PanelWindow } = require("../windows/panel-window");
 const { SettingsWindow } = require("../windows/settings-window");
+const { TasksWindow } = require("../windows/tasks-window");
 const { TrayMenu } = require("../windows/tray");
 
 const IS_LINUX = process.platform === "linux";
@@ -224,6 +225,7 @@ class BayloobApp {
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.uploads.prune();
     this.tasks = new TaskStore(path.join(data, "tasks"));
+    this.tasksWindow = new TasksWindow({ file: path.join(data, "tasks-window.json") });
     this.projects = new ProjectInfo({ git: this.git });
     // Which task instances may start: Settings → Agents limits, sessions already running, free memory
     this.scheduler = new Scheduler({
@@ -258,7 +260,9 @@ class BayloobApp {
       }),
     });
     this.engine.on("change", task => {
+      this.overlay.send("task-gates", this.#taskGates());
       this.panel.send("panel:task", task);
+      this.tasksWindow.send("tasks:task", task);
       this.#sendUsage();
     });
     this.engine.on("error", e => console.error(`Bayloob task engine: ${e.message}`));
@@ -296,6 +300,7 @@ class BayloobApp {
           this.overlay.send("music", this.music?.current ?? null);
           this.overlay.send("sessions", this.server.store.list());
           this.overlay.send("health", this.#lastHealth);
+          this.overlay.send("task-gates", this.#taskGates());
           this.#sendSoundConfig();
         });
         if (open === "launcher") {
@@ -508,6 +513,7 @@ class BayloobApp {
       sessions: this.server.store.list(),
       status: this.#status(),
       collisions: this.#collisions,
+      tasks: this.engine.list(),
     });
     this.#sendUsage();
     this.#startPanelUpdates();
@@ -711,6 +717,7 @@ class BayloobApp {
     const usage = this.scheduler.usage();
     this.overlay.send("usage", usage);
     this.panel.send("panel:usage", usage);
+    this.tasksWindow?.send("tasks:usage", usage);
   }
 
   // Agents to offer when starting a session: name, whether it's installed, mascot colour
@@ -726,6 +733,29 @@ class BayloobApp {
         },
       ])
     );
+  }
+
+  // Tasks waiting at a gate, for the pill's card (the decision itself is made in the Tasks window)
+  #taskGates() {
+    return (this.engine?.list() || [])
+      .filter(t => t.gate)
+      .map(t => ({
+        id: t.id,
+        title: t.title,
+        project: t.project.name,
+        gate: { id: t.gate.id, kind: t.gate.kind, title: t.gate.title },
+      }));
+  }
+
+  /** The Tasks window: the board, or one task's detail when `focus` is its id. */
+  async openTasks(focus = null) {
+    await this.tasksWindow.show({
+      tasks: this.engine.list(),
+      usage: this.scheduler.usage(),
+      agents: await this.#agentChoices(),
+      focus,
+      home: os.homedir(),
+    });
   }
 
   // The New task dialog (Ask Bayloob): Single agent starts a session as before; Workflow / Analysis are
@@ -1284,6 +1314,8 @@ class BayloobApp {
           throw new Error("Only workflows can start as tasks so far");
         }
         const task = await this.engine.start(saved, templateFor(saved));
+        this.newTask.hide();
+        this.openTasks(task.id);
         return { ok: true, taskId: task.id };
       } catch (e) {
         return { ok: false, error: e.message };
@@ -1307,6 +1339,17 @@ class BayloobApp {
       })
     );
     ipcMain.handle("tasks:stop", (_e, id) => this.engine.stop(String(id)));
+    // Open terminal on one instance: attach to its tmux session (it runs in the background)
+    ipcMain.handle("tasks:terminal", async (_e, id, instanceId) => {
+      const inst = this.engine.get(String(id))?.instances.find(i => i.id === String(instanceId));
+      if (!inst?.handle || !(await this.launcher.hasPane(inst.handle.paneId))) {
+        return { ok: false, error: "That agent's session has ended" };
+      }
+      this.launcher.attach(inst.handle.name);
+      return { ok: true };
+    });
+    ipcMain.on("open-tasks", (_e, id) => this.openTasks(id ? String(id) : null));
+    ipcMain.on("tasks:window", (_e, action) => this.tasksWindow.control(String(action)));
     ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
       const cwd = expandHome(String(opts?.cwd || "").trim());
       const res = await result(() => this.launch({ ...opts, cwd }));

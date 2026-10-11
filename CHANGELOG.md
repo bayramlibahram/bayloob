@@ -3,6 +3,18 @@
 ## Unreleased
 
 ### Added
+- **Tasks window** (command 04b): its own resizable window (1280×800, min 960×600, remembers size and
+  position) with the task board — Queued · Running · Needs you · Review · Done · Failed/stopped, filter,
+  project, density — and each task's detail: stage stepper, Overview (task, base, worktrees, every agent with
+  Terminal), Plan (Markdown), Candidates side by side (tests, diff, review, the builder's answer, Choose this
+  one), Tests (output per candidate), Log (audit trail). The decisions sit in one bar at the bottom right:
+  Approve / Request changes (note → same agent), Pick, Merge into <base> / Keep branch, Retry with note, Abort
+  (asks first); `Alt+A` takes the primary one. Stop task asks first.
+- Gates reach you like permission requests: a card in the pill (Open task · Later) with the permission sound,
+  and an Inbox row in the panel. The panel's Tasks section lists tasks (Open in Tasks); `Ctrl+K` → Open the
+  task board.
+- New task → Agentic workflow → **Start** runs Pipeline and Best-of-N (other patterns and Analysis say which
+  step brings them).
 - **Workflow engine** (`src/main/modules/tasks/task-engine.js`, command 04a): runs a task's template stage by
   stage as a state machine saved after every change (`tasks/<id>/state.json`, audit trail `log.jsonl`,
   `artifacts/`); picks up after a restart (a session that's gone → "interrupted", ask the owner). Agents go

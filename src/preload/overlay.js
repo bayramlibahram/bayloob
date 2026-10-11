@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   onSoundConfig: cb => ipcRenderer.on("sound-config", (_e, config) => cb(config)),
   onRuleAllowed: cb => ipcRenderer.on("rule-allowed", (_e, info) => cb(info)),
   onErrorCopied: cb => ipcRenderer.on("error-copied", (_e, info) => cb(info)),
+  // Workflow tasks waiting at a gate: [{ id, title, project, gate: { id, kind, title } }]
+  onTaskGates: cb => ipcRenderer.on("task-gates", (_e, gates) => cb(gates)),
+  openTasks: taskId => ipcRenderer.send("open-tasks", taskId || null),
   fixError: sessionId => ipcRenderer.send("fix-error", sessionId),
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
   challenge: sessionId => ipcRenderer.invoke("challenge", sessionId),

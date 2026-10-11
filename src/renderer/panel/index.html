@@ -464,7 +464,8 @@
     listTitle: { inbox: 'Needs you', agents: 'Agents', tasks: 'Tasks', overview: 'Running apps', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
     settingsNav: 'Settings',
     // Why an agent is in the Inbox (shown under its name)
-    why: { perm: 'Approve a command', question: 'Has a question', menu: 'Asks in terminal', conflict: 'File clash', finished: 'Finished' },
+    why: { perm: 'Approve a command', question: 'Has a question', menu: 'Asks in terminal', conflict: 'File clash', finished: 'Finished', gate: 'Task needs you' },
+    openTasks: 'Open in Tasks', allTasks: 'Open the task board', taskStage: (stage, n, total) => `Stage ${n} of ${total} · ${stage}`, palTasks: 'Open the task board',
     permAsks: (agent, project) => `<b>${agent}</b> wants to run · ${project}`, asksYou: (agent, project) => `<b>${agent}</b> asks you · ${project}`,
     asksTerminal: (agent, project) => `<b>${agent}</b> asks in its terminal · ${project}`,
     allow: 'Allow', deny: 'Deny', inTerminal: 'Terminal', inTerminalTip: 'Answer it in the agent’s terminal instead', always: 'Always allow',
@@ -478,8 +479,8 @@
     palTerminal: name => `Open ${name}’s terminal`, palWorkspace: name => `Open ${name}’s folder`,
     launchTitle: 'Launch app', searchApps: 'Search apps…', searchInstalled: 'Search installed apps…',
     status: { active: 'Active', running: 'Running', healthy: 'Healthy', unhealthy: 'Unhealthy', stopped: 'Stopped',
-      idle: 'Idle', thinking: 'Thinking', working: 'Working', waiting: 'Needs approval', done: 'Done' },
-    kind: { browser: 'Browser', ide: 'IDE', terminal: 'Terminal', files: 'Files', app: 'Application', system: 'System tool', agent: 'AI agent' },
+      idle: 'Idle', thinking: 'Thinking', working: 'Working', waiting: 'Needs approval', done: 'Done', 'needs-you': 'Needs you' },
+    kind: { browser: 'Browser', ide: 'IDE', terminal: 'Terminal', files: 'Files', app: 'Application', system: 'System tool', agent: 'AI agent', task: 'Workflow task' },
     empty: 'Nothing here right now.', noMatch: q => `No apps match “${q}”.`,
     loading: 'Looking at what’s running…',
     wsPickAgent: 'Select an AI agent to open its folder', wsNoFolder: "This agent's folder isn't known", wsOpen: "Open the selected agent's folder",
@@ -516,7 +517,7 @@
     cpu: 'CPU', memory: 'Memory',
   };
   const STATUS_COLOR = { active: 'var(--done)', running: 'var(--thinking)', healthy: 'var(--done)', unhealthy: 'var(--waiting)', stopped: 'var(--idle)',
-    idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)' };
+    idle: 'var(--idle)', thinking: 'var(--thinking)', working: 'var(--working)', waiting: 'var(--waiting)', done: 'var(--done)', 'needs-you': 'var(--waiting)' };
   const HEALTH_COLOR = { healthy: 'var(--done)', running: 'var(--thinking)', starting: 'var(--working)', unhealthy: 'var(--waiting)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const FINISHED_RECENT_MS = 10 * 60 * 1000;
@@ -571,8 +572,8 @@
   const I = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24"${extra}>${d}</svg>`;
   // The side navigation: what needs you and your agents first, then the machine
   const NAV = [['inbox', 'agents', 'tasks'], ['overview', 'browsers', 'ides', 'applications', 'system']];
-  const INBOX_RANK = { perm: 5, question: 5, menu: 4, conflict: 3, finished: 2 }; // most urgent first
-  const WHY_COLOR = { perm: 'var(--waiting)', question: 'var(--thinking)', menu: 'var(--thinking)', conflict: 'var(--waiting)', finished: 'var(--done)' };
+  const INBOX_RANK = { perm: 5, question: 5, gate: 5, menu: 4, conflict: 3, finished: 2 }; // most urgent first
+  const WHY_COLOR = { perm: 'var(--waiting)', question: 'var(--thinking)', menu: 'var(--thinking)', conflict: 'var(--waiting)', finished: 'var(--done)', gate: 'var(--waiting)' };
   const ICONS = {
     inbox: I('<path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>'),
     tasks: I('<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>'),
@@ -618,7 +619,15 @@
     return { key: `agent:${s.id}`, kind: 'agent', id: s.id, name: Agent.displayName(s.agent), subtitle: projectPath(s),
       status: s.state, category: 'agent', data: s };
   }
+  // A workflow task (engine state) as a list row
+  function taskItem(t) {
+    const st = t.template.stages[t.stage];
+    const stage = t.status === 'running' || t.status === 'needs-you' ? ` · ${st?.title || ''}` : '';
+    return { key: `task:${t.id}`, kind: 'task', id: t.id, name: t.title, subtitle: `${t.project.name}${stage}`,
+      status: t.status === 'stopped' ? 'stopped' : t.status, category: 'task', data: t };
+  }
   function iconHtml(item, size = '') {
+    if (item.kind === 'task') { return `<div class="ic glyph ${size}">${ICONS.tasks}</div>`; }
     if (item.kind === 'agent') { return `<div class="ic agent ${size}">${Agent.thumb(item.data.agent)}</div>`; }
     if (item.data?.icon) { return `<div class="ic ${size}"><img src="${item.data.icon}" alt=""></div>`; }
     return `<div class="ic glyph ${size}">${item.kind === 'docker' ? ICONS.box : ICONS.app}</div>`;
@@ -627,6 +636,7 @@
   /** The workspace control panel: sections on the left, the section's list, and the selected item's details. */
   class PanelView {
     sessions = [];
+    tasks = new Map();     // workflow tasks (engine state) by id
     apps = null;           // null until the first workspace snapshot arrives
     extension = false;
     stats = null;
@@ -682,6 +692,7 @@
 
     show(state) {
       this.sessions = state.sessions || [];
+      this.tasks = new Map((state.tasks || []).map(t => [t.id, t]));
       this.#prevStates = new Map(this.sessions.map(s => [s.id, s.state]));
       // Opened after an agent finished: still offer the reply for turns that ended in the last few minutes
       this.finished = this.sessions
@@ -747,6 +758,7 @@
     setStatus(status) { this.status = status; this.#renderStatus(); }
 
     // Claude ●●●○ 3/4 · Codex ●○ 1/2 — enabled, installed agents only; "+n" when instances wait in the queue
+    setTask(task) { this.tasks.set(task.id, task); this.render(); }
     setUsage(usage) {
       const box = document.getElementById('usage');
       const rows = Object.entries(usage?.agents || {}).filter(([, u]) => u.enabled);
@@ -765,7 +777,10 @@
       const agents = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt).map(agentItem);
       const apps = (this.apps || []).map(appItem);
       if (section === 'inbox') { return this.#inbox(); }
-      if (section === 'tasks') { return []; } // the workflow engine fills this in
+      if (section === 'tasks') {
+        const rank = { 'needs-you': 3, running: 2 };
+        return [...this.tasks.values()].sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0) || b.updatedAt - a.updatedAt).map(taskItem);
+      }
       if (section === 'agents') { return this.#byProject(agents); }
       if (section === 'overview') { return [...apps, ...agents]; }
       return apps.filter(i => SECTION_OF[i.category] === section);
@@ -781,9 +796,12 @@
 
     // The Inbox: agents that wait on you, most urgent first; the reason replaces the subtitle
     #inbox() {
-      return this.sessions.map(s => ({ s, why: this.#why(s) })).filter(x => x.why)
-        .sort((a, b) => INBOX_RANK[b.why] - INBOX_RANK[a.why] || b.s.updatedAt - a.s.updatedAt)
-        .map(({ s, why }) => ({ ...agentItem(s), why, subtitle: `${T.why[why]} · ${projectPath(s)}` }));
+      // A task at a gate waits for a decision, like a permission card
+      const gates = [...this.tasks.values()].filter(t => t.gate)
+        .map(t => ({ ...taskItem(t), why: 'gate', subtitle: `${t.gate.title} · ${t.project.name}`, at: t.gate.at }));
+      const agents = this.sessions.map(s => ({ s, why: this.#why(s) })).filter(x => x.why)
+        .map(({ s, why }) => ({ ...agentItem(s), why, subtitle: `${T.why[why]} · ${projectPath(s)}`, at: s.updatedAt }));
+      return [...gates, ...agents].sort((a, b) => INBOX_RANK[b.why] - INBOX_RANK[a.why] || b.at - a.at);
     }
 
     // Agents one project after another (the project with the most urgent agent first), urgency inside each
@@ -868,8 +886,8 @@
           <div class="who"><b>${esc(i.name)}</b><span title="${esc(i.subtitle || '')}"${i.why ? ` class="why" style="--c:${WHY_COLOR[i.why]}"` : ''}>${esc(i.subtitle || '')}</span></div>
           ${i.kind === 'agent' ? this.#clashBadge(i.data) : ''}
           ${stateHtml(i.status)}
-          <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
-          <button class="kebab" data-act="menu" title="${T.more}"${i.kind === 'docker' ? ' style="visibility:hidden"' : ''}>${ICONS.dots}</button>
+          <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
+          <button class="kebab" data-act="menu" title="${T.more}"${i.kind === 'docker' || i.kind === 'task' ? ' style="visibility:hidden"' : ''}>${ICONS.dots}</button>
         </div>`).join('');
     }
 
@@ -909,7 +927,8 @@
       if (!item) { this.el.detail.innerHTML = ''; return; }
       const term = item.kind === 'agent' ? `<button type="button" class="square" data-act="terminal" title="${T.openTerminal}" aria-label="${T.openTerminal}">${ICON_TERM}</button>` : '';
       const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span>${T.kind[item.category] || ''}</span></div>${stateHtml(item.status)}${term}</div>`;
-      const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
+      const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'task' ? this.#taskDetail(item.data)
+        : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
       // Keep the console's scroll: stuck to the newest step while at the bottom, left alone when scrolled up
       const old = this.el.detail.querySelector('[data-console]');
       const atBottom = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 8;
@@ -1122,6 +1141,21 @@
         <h3>${T.recent}</h3>${this.#history(a.history)}`;
     }
 
+    // A task in the panel: where it is and what waits; the decisions are made in the Tasks window
+    #taskDetail(t) {
+      const total = t.template.stages.length;
+      const st = t.template.stages[t.stage];
+      const stages = t.template.stages.map((s, i) => {
+        const state = t.stages[i].status;
+        return `<li class="${i === t.stage && (t.status === 'running' || t.status === 'needs-you') ? 'now' : ''}"><span class="t">${esc(s.title)}</span><span class="ago">${esc(state)}</span></li>`;
+      }).join('');
+      return `
+        ${t.gate ? `<div class="note">⚠ ${esc(t.gate.title)}</div>` : ''}
+        <div class="doing"><b title="${esc(t.title)}">${esc(t.title)}</b><span>${esc(T.taskStage(st?.title || '', Math.min(t.stage + 1, total), total))} · ${esc(t.project.name)}</span></div>
+        <ul class="timeline">${stages}</ul>
+        <div class="buttons"><button class="wide" data-act="open-task">${ICONS.tasks}${T.openTasks}</button></div>`;
+    }
+
     #agentDetail(s) {
       const doing = s.activity || { title: T.nothingYet, detail: '' };
       const live = ACTIVE.has(s.state);
@@ -1230,6 +1264,7 @@
     }
 
     #primary(item) {
+      if (item.kind === 'task') { return this.api?.openTasks(item.id); }
       if (item.kind === 'agent') { return this.api?.focus(item.id); }
       if (item.kind === 'app') { return this.#run(this.api?.focusApp(item.id)); }
     }
@@ -1536,6 +1571,7 @@
         })),
         { icon: ICONS.spark, label: T.palAsk, meta: T.palAction, run: () => this.el.askText.focus() },
         { icon: ICONS.plus, label: T.palNewTask, meta: T.palAction, run: () => this.api?.newSession() },
+        { icon: ICONS.tasks, label: T.palTasks, meta: T.palAction, run: () => this.api?.openTasks() },
         { icon: ICONS.plus, label: T.palLaunch, meta: T.palAction, run: () => { if (!this.launchMode) { this.#toggleLaunch(); } } },
         ...(cur ? [{ icon: ICON_TERM, label: T.palTerminal(curName), meta: T.palAction, run: () => this.api?.focus(cur.id) }] : []),
         ...(cur?.cwd ? [{ icon: FOLDER, label: T.palWorkspace(curName), meta: T.palAction, run: () => this.api?.openWorkspace(cur.id) }] : []),
@@ -1649,6 +1685,7 @@
         if (act === 'newtab') { this.#run(this.api?.newTab(item.id)); }
         if (act === 'newwindow') { this.#run(this.api?.launchApp(item.id)); }
         if (act === 'terminal') { this.api?.focus(item.id); }
+        if (act === 'open-task') { this.api?.openTasks(item.id); }
       });
       this.el.search.addEventListener('input', () => { this.query = this.el.search.value; this.selected = null; this.render(); });
       this.el.launch.addEventListener('click', () => this.#toggleLaunch());
@@ -1768,6 +1805,7 @@
     panelAPI.onBlocked?.(info => view.setBlocked(info));
     panelAPI.onCollisions?.(map => view.setCollisions(map));
     panelAPI.onUsage?.(usage => view.setUsage(usage));
+    panelAPI.onTask?.(task => view.setTask(task));
   } else {
     window.__demo = view; // opened in a plain browser: drive it from the console
   }

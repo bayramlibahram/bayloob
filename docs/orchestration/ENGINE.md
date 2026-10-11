@@ -1,7 +1,7 @@
 # Workflow engine (command 04a)
 
-One engine for the Workspace and Orchestration specs. It runs in the main process. The UI comes with 04b
-(task board, task detail and gate cards) and 04c (workflow builder).
+One engine for the Workspace and Orchestration specs. It runs in the main process. Its UI is the Tasks
+window (04b); the workflow builder comes with 04c.
 
 ## Parts
 | File | Role |
@@ -44,9 +44,11 @@ Every transition goes to `log.jsonl` with actor `you`, `engine` or `agent`.
 - Claude asks "trust this folder?" for every new folder, including a fresh worktree. Codex's trust applies to
   the repository root, so a trusted project's worktrees are trusted.
 
+## UI (04b)
+The Tasks window (`src/renderer/tasks/`, screenshots in `tasks/`), gate cards in the pill and the Inbox, and
+Start in the New task dialog for Pipeline and Best-of-N. The workflow builder comes with 04c.
+
 ## Not yet / limitations
-- **No UI yet.** Start stays disabled in the New task dialog until 04b brings the board, the detail and the
-  gate cards. `newtask:start` and `tasks:*` IPC exist already.
 - Codex `-s read-only` does not hold with this machine's config (#34). The post-turn `git status` check catches
   it and stops the task at a `violation` gate.
 - After a restart, a turn that ended while Bayloob was down stays "running" until the session is gone. The Stop

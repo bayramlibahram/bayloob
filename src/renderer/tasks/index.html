@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Bayloob · Tasks</title>
+<link rel="stylesheet" href="../shared/theme.css">
+<style>
+  /* Tokens follow the approved prototype (docs/orchestration/prototype); theme.css switches light/dark */
+  :root {
+    --backdrop: #121118;
+    --surface: #17161e;
+    --raised: rgb(var(--ink) / 0.04);
+    --raised-2: rgb(var(--ink) / 0.07);
+    --hover: rgb(var(--ink) / 0.09);
+    --line: rgb(var(--ink) / 0.08);
+    --line-strong: rgb(var(--ink) / 0.16);
+    --text: #f2f2f5;
+    --muted: #9a99a6;
+    --brand: #8b5cff;
+    --primary-bg: #7444f2;
+    --primary-fg: #ffffff;
+    --focus: rgba(139, 92, 255, 0.7);
+    --idle: #9a99a6;
+    --thinking: #6aa8ff;
+    --working: #ffb547;
+    --waiting: #ff6b78;
+    --done: #4fd59a;
+    --cat-workflow: #b28bff;
+    --code-bg: rgb(var(--ink) / 0.05);
+  }
+  :root[data-theme="light"] {
+    --backdrop: #ffffff;
+    --surface: #faf9fd;
+    --muted: #625f78;
+    --brand: #6a3fe0;
+    --primary-bg: #6a3fe0;
+    --focus: rgba(106, 63, 224, 0.6);
+    --cat-workflow: #5a32d0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--backdrop); color: var(--text); font: 500 13px/1.45 -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; border: 0; background: none; outline: none; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  svg:not(.i) { width: 15px; height: 15px; fill: currentColor; flex: none; } /* ICON_TERM */
+  code, pre, .mono { font-family: ui-monospace, "Ubuntu Mono", monospace; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-6px); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .app { height: 100%; display: grid; grid-template-rows: 52px 1fr; }
+  /* header: the window's own title bar (frameless window) */
+  .whead { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); -webkit-app-region: drag; user-select: none; }
+  .whead button, .whead .usage { -webkit-app-region: no-drag; }
+  .whead .logo { width: 28px; height: 28px; }
+  .whead b { font-size: 15px; font-weight: 700; }
+  .whead .sep { width: 1px; height: 18px; background: var(--line-strong); }
+  .whead .sub { color: var(--muted); }
+  .whead .sp { flex: 1; }
+  .usage { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
+  .usage span { display: inline-flex; align-items: center; gap: 6px; }
+  .usage b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .usage em { font-style: normal; color: var(--working); }
+  .dots { display: inline-flex; gap: 2px; }
+  .dots i { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--c); }
+  .dots i.on { background: var(--c); }
+  .wctl { display: flex; gap: 2px; }
+  .iconbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); }
+  .iconbtn:hover { background: var(--hover); color: var(--text); }
+  .iconbtn.close:hover { background: var(--waiting); color: #fff; }
+  .thumb { position: relative; width: 100%; height: 100%; }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .novi { width: 22px; height: 22px; flex: none; display: inline-block; }
+  .novi.l { width: 34px; height: 34px; }
+  .main { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* components */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 32px; padding: 0 13px; border-radius: 9px;
+    background: var(--raised-2); border: 1px solid var(--line); font-weight: 600; white-space: nowrap; }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--primary-bg); color: var(--primary-fg); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger { color: var(--waiting); }
+  .btn.sm { height: 26px; padding: 0 9px; font-size: 12px; border-radius: 7px; }
+  .btn:disabled { opacity: 0.45; filter: none; }
+  .btn kbd { font: 600 10.5px/16px ui-monospace, monospace; padding: 0 5px; border-radius: 5px; border: 1px solid var(--line-strong); color: var(--muted); }
+  .btn.primary kbd { color: var(--primary-fg); border-color: rgb(255 255 255 / 0.4); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+    background: var(--raised-2); color: var(--soft); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .chip.c { color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); }
+  .chip.out { background: none; border: 1px solid var(--line-strong); }
+  .chip .d { width: 7px; height: 7px; border-radius: 50%; background: var(--c, currentColor); flex: none; }
+  .chip .d.live { animation: pulse 1.2s ease-in-out infinite; }
+  .badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 5px; font: 700 10px/1 ui-monospace, monospace;
+    letter-spacing: 0.03em; text-transform: uppercase; color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); }
+  .badge.writes { --c: var(--working); } .badge.ro { --c: var(--thinking); } .badge.plan { --c: var(--cat-workflow); }
+  .field { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 9px; background: var(--raised-2); border: 1px solid var(--line); }
+  .field:focus-within { border-color: var(--focus); }
+  .field input { flex: 1; min-width: 0; }
+  .field input::placeholder, textarea::placeholder { color: var(--muted); }
+  select.sel { height: 32px; padding: 0 28px 0 10px; border-radius: 9px; background: var(--raised-2); border: 1px solid var(--line); appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 13px) 14px, calc(100% - 9px) 14px; background-size: 4px 4px; background-repeat: no-repeat; }
+  select.sel option { background: var(--surface); color: var(--text); }
+  .seg { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--raised-2); border: 1px solid var(--line); }
+  .seg button { height: 26px; padding: 0 10px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--backdrop); color: var(--text); box-shadow: 0 1px 3px rgb(var(--shade) / calc(0.3 * var(--shade-k))); }
+  .empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 10px; color: var(--muted); font-size: 12px; text-align: center; }
+  .empty .novi { width: 44px; height: 44px; opacity: .85; }
+  .empty b { color: var(--soft); font-size: 13px; }
+  .label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .diff { font: 600 11px ui-monospace, monospace; white-space: nowrap; }
+  .diff .a { color: var(--done); } .diff .r { color: var(--waiting); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* board */
+  .phead { display: flex; align-items: center; gap: 10px; padding: 16px 20px 12px; }
+  .phead h1 { font-size: 18px; font-weight: 700; flex: 1; }
+  .filters { display: flex; align-items: center; gap: 8px; padding: 0 20px 12px; }
+  .filters .field { width: 260px; }
+  .board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(6, minmax(170px, 1fr)); gap: 10px; padding: 0 20px 16px; overflow: auto; }
+  .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; padding: 8px; border-radius: 14px; background: var(--raised); overflow-y: auto; }
+  .col h3 { display: flex; align-items: center; gap: 6px; padding: 2px 4px 4px; font-size: 12px; font-weight: 700; color: var(--soft); }
+  .col h3 em { font-style: normal; color: var(--muted); font-weight: 600; }
+  .col h3 em.hot { color: var(--primary-fg); background: var(--waiting); padding: 0 6px; border-radius: 999px; }
+  .col .none { padding: 10px 6px; color: var(--muted); font-size: 11.5px; }
+  .tcard { display: flex; flex-direction: column; gap: 7px; padding: 10px 11px; border-radius: 12px; background: var(--backdrop); border: 1px solid var(--line);
+    text-align: left; box-shadow: 0 1px 2px rgb(var(--shade) / calc(0.2 * var(--shade-k))); animation: slidein 0.2s ease-out; }
+  .tcard:hover { border-color: var(--line-strong); }
+  .tcard.needs { border-color: color-mix(in srgb, var(--waiting) 55%, transparent); }
+  .tcard .tt { display: flex; gap: 7px; align-items: flex-start; }
+  .tcard .tt b { flex: 1; font-weight: 650; font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
+  .tcard .ci { color: var(--cat-workflow); margin-top: 1px; width: 15px; height: 15px; }
+  .tcard .ln { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+  .tcard .why { color: var(--waiting); font-size: 11.5px; font-weight: 600; display: flex; gap: 5px; }
+  .tcard .agents { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .tcard .agents span { display: inline-flex; align-items: center; gap: 2px; }
+  .compact .tcard { gap: 4px; padding: 7px 9px; }
+  .compact .tcard .agents { display: none; }
+
+  /* detail */
+  .dhead { display: flex; align-items: flex-start; gap: 12px; padding: 14px 20px 8px; }
+  .dhead .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .dhead h1 { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+  .crumb { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; align-self: flex-start; }
+  .crumb:hover { color: var(--text); }
+  .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .stepbar { display: flex; align-items: center; padding: 4px 20px 12px; overflow-x: auto; }
+  .sstep { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; white-space: nowrap; }
+  .sstep .si { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line-strong); color: var(--muted); font-weight: 700; font-size: 11px; }
+  .sstep .si .i { width: 12px; height: 12px; }
+  .sstep.done .si { background: var(--done); border-color: var(--done); color: var(--on-done); }
+  .sstep.run .si { border-color: var(--thinking); border-top-color: transparent; animation: spin 1s linear infinite; }
+  .sstep.wait .si { border-color: var(--waiting); color: var(--waiting); background: color-mix(in srgb, var(--waiting) 14%, transparent); }
+  .sstep.fail .si { background: var(--waiting); border-color: var(--waiting); color: #fff; }
+  .sstep small { color: var(--muted); }
+  .sstep[aria-current="step"] { background: var(--raised-2); }
+  .sline { flex: 1; min-width: 12px; height: 1px; background: var(--line-strong); }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 20px; }
+  .tab { position: relative; height: 38px; padding: 0 12px; color: var(--muted); font-weight: 600; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--text); }
+  .tab[aria-selected="true"]::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--brand); }
+  .tab em { font-style: normal; margin-left: 5px; font-size: 11px; color: var(--muted); }
+  .pane { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px 20px; }
+  .card { background: var(--raised); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .cards { display: flex; flex-direction: column; gap: 12px; max-width: 980px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .facts div { padding: 9px 11px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .facts b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+  .tbl th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .tbl td .who { display: flex; align-items: center; gap: 8px; }
+  .tbl .wait { color: var(--working); font-size: 11.5px; }
+  .cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+  .cand { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: var(--raised); border: 1.5px solid var(--line); }
+  .cand.win { border: 2px solid var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent); }
+  .cand.picked { border-color: var(--brand); }
+  .cand.out { opacity: .7; }
+  .cand .ch { display: flex; align-items: center; gap: 10px; }
+  .cand .ch .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .cand .ch small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cand .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .strip { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px; font-size: 12px; background: color-mix(in srgb, var(--c) 11%, transparent); color: var(--c); font-weight: 600; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; }
+  .kv dt { color: var(--muted); }
+  details.more summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  details.more[open] summary { margin-bottom: 6px; }
+  .md { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; user-select: text; }
+  .md p, .md ul, .md ol, .md pre, .md blockquote, .md .tablewrap { margin: 0 0 8px; }
+  .md p.h { font-weight: 700; margin-top: 10px; }
+  .md ul, .md ol { padding-left: 20px; }
+  .md code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--code-bg); }
+  .md pre { padding: 8px 10px; border-radius: 8px; background: var(--code-bg); overflow-x: auto; }
+  .md pre code { padding: 0; background: none; }
+  .md hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+  .md blockquote { padding-left: 10px; border-left: 2px solid var(--line); color: var(--soft); }
+  .md .tablewrap { overflow-x: auto; }
+  .md table { border-collapse: collapse; font-size: 12.5px; }
+  .md th, .md td { padding: 4px 9px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .output { padding: 10px 12px; border-radius: 10px; background: var(--code-bg); border: 1px solid var(--line); font: 11.5px/1.55 ui-monospace, monospace; color: var(--soft);
+    white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; user-select: text; }
+  .timeline { list-style: none; display: flex; flex-direction: column; max-width: 980px; }
+  .timeline li { display: grid; grid-template-columns: 64px 28px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); align-items: start; }
+  .timeline .tm { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; padding-top: 3px; }
+  .actor { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--raised-2); color: var(--soft); }
+  .actor .i { width: 13px; height: 13px; }
+  .actor.you { background: color-mix(in srgb, var(--brand) 18%, transparent); color: var(--brand-soft); }
+  .actor.agent { background: color-mix(in srgb, var(--thinking) 16%, transparent); color: var(--thinking); }
+  .timeline .tx { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; min-width: 0; }
+  .timeline .tx small { color: var(--muted); overflow-wrap: anywhere; }
+  .banner { display: flex; gap: 8px; align-items: flex-start; padding: 9px 12px; border-radius: 10px; font-size: 12.5px; margin: 0 20px 10px;
+    background: color-mix(in srgb, var(--c) 10%, transparent); border: 1px solid color-mix(in srgb, var(--c) 32%, transparent); color: var(--soft); }
+  /* the decision bar: the human actions, always at the same place (bottom right) */
+  .actions { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+  .actions .msg { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+  .actions .msg b { font-weight: 650; }
+  .actions .msg small { color: var(--muted); white-space: pre-wrap; }
+  .actions .msg .err { color: var(--waiting); }
+  .actions textarea { flex: 1 1 100%; min-height: 60px; resize: vertical; padding: 8px 10px; border-radius: 10px; background: var(--raised-2); border: 1px solid var(--line); line-height: 1.5; }
+  .actions textarea:focus { border-color: var(--focus); }
+  .actions .confirm { color: var(--waiting); font-weight: 600; }
+  .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); padding: 8px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-strong);
+    box-shadow: 0 10px 28px rgb(var(--shade) / calc(0.4 * var(--shade-k))); font-size: 12.5px; animation: slidein .15s ease-out; z-index: 5; }
+  .toast.err { color: var(--waiting); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="whead">
+    <span class="logo" id="logo"></span><b>bayloob</b><span class="sep"></span><span class="sub">Tasks</span>
+    <span class="sp"></span>
+    <div class="usage" id="usage" role="group" aria-label="Agents running"></div>
+    <button type="button" class="btn primary sm" id="newTask"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New task</button>
+    <div class="wctl">
+      <button type="button" class="iconbtn" data-win="minimize" title="Minimize" aria-label="Minimize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+      <button type="button" class="iconbtn" data-win="maximize" title="Maximize" aria-label="Maximize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+      <button type="button" class="iconbtn close" data-win="close" title="Close" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+  </header>
+  <main class="main" id="main"></main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="../shared/ui-common.js"></script>
+<script src="../shared/markdown-lite.js"></script>
+<script>
+  // Every string of the window
+  const T = {
+    tasks: 'Tasks', newTask: 'New task', filter: 'Filter tasks…', allProjects: 'All projects',
+    comfortable: 'Comfortable', compact: 'Compact', back: 'Tasks',
+    cols: { queued: 'Queued', running: 'Running', needs: 'Needs you', review: 'Review', done: 'Done', failed: 'Failed · stopped' },
+    colEmpty: { queued: 'Nothing waiting for a slot', running: 'No agent is working', needs: 'Nothing waiting on you', review: 'Nothing to merge', done: 'No finished tasks yet', failed: 'Nothing failed' },
+    noTasks: 'No tasks yet', noTasksHint: 'Start one with New task → Agentic workflow (Pipeline or Best-of-N).',
+    category: { workflow: 'Agentic workflow', analysis: 'Analysis', single: 'Single agent' },
+    status: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', stopped: 'Stopped', failed: 'Failed' },
+    tabs: { overview: 'Overview', plan: 'Plan', candidates: 'Candidates', tests: 'Tests', log: 'Log' },
+    stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
+    stopped: 'Stopped. Worktrees and branches are kept until you delete them.',
+    queuedN: n => `${n} queued`, runningN: n => `${n} running`, of: (a, b) => `${a} of ${b}`,
+    the: { task: 'Task', project: 'Project', base: 'Started from', ro: 'Read-only worktree', tests: 'Test command', noTests: 'none found — tests are skipped' },
+    instances: 'Agents', inst: { agent: 'Agent', role: 'Role', mode: 'Mode', status: 'Status', time: 'Time' },
+    terminal: 'Terminal', terminalTip: 'Open a terminal attached to this agent',
+    istatus: { queued: 'queued', starting: 'starting', running: 'working', done: 'done', failed: 'failed', stopped: 'stopped', interrupted: 'interrupted' },
+    mode: { writes: 'writes', 'read-only': 'read-only', plan: 'plan' },
+    noPlan: 'No plan yet', noPlanHint: 'The planner is working — its answer appears here.',
+    noCands: 'No candidates yet', noCandsHint: 'Builders start after the plan is approved.',
+    testsPass: 'Tests pass', testsFail: 'Tests fail', testsSkip: 'No test command — skipped', testsNot: 'Not tested yet',
+    diff: 'Diff', review: 'Review', status2: 'Status', findings: n => n ? `${n} finding${n === 1 ? '' : 's'}` : 'no findings', files: n => `${n} file${n === 1 ? '' : 's'}`,
+    out: 'Out', active: 'In the race', winner: 'Chosen', mergedInto: b => `Chosen · merged into ${b}`, choose: 'Choose this one', chosen: 'Picked',
+    answer: 'Builder’s answer', reviewText: 'Review', noOutput: 'No output yet',
+    loading: 'Loading…', noLog: 'Nothing logged yet',
+    gate: {
+      approve: { approve: 'Approve', changes: 'Request changes', abort: 'Abort' },
+      pick: { pick: 'Pick', retry: 'Retry with note', abort: 'Abort' },
+      merge: { merge: 'Merge', keep: 'Keep branch', abort: 'Abort' },
+      'tests-failed': { continue: 'Continue anyway', retry: 'Retry with note', abort: 'Abort' },
+      interrupted: { retry: 'Run again', abort: 'Abort' },
+      violation: { continue: 'Continue anyway', abort: 'Abort' },
+      failed: { retry: 'Try again', abort: 'Abort' },
+    },
+    mergeInto: b => `Merge into ${b}`, pickFirst: 'Pick a candidate first (Candidates tab)',
+    notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
+    send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
+    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'Until the Arbiter (command 06), you pick the candidate', merge: 'Nothing is merged until you click', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
+    ago: at => timeAgo(at),
+    log: {
+      started: e => `Task started from ${String(e.base || '').slice(0, 8)} on ${e.branch || '?'}`,
+      stage: e => `${e.stage[0].toUpperCase()}${e.stage.slice(1)} started${e.round > 1 ? ` · round ${e.round}` : ''}${e.only ? ` · ${e.only.join(', ')}` : ''}`,
+      launched: e => `${Agent.displayName(e.adapter)} ${e.reused ? 'continues' : 'started'} · ${instName(e.instance)}`,
+      worktree: e => `Worktree for ${e.candidate}: ${e.branch}`,
+      'turn-ended': e => `${instName(e.instance)} answered${e.artifact ? ` → ${e.artifact}` : ''}`,
+      candidate: e => `${e.candidate}: +${e.diff?.added ?? 0} −${e.diff?.deleted ?? 0}`,
+      tests: e => `Tests on ${e.candidate}: ${e.ok ? 'pass' : `fail (exit ${e.code})`}`,
+      'tests-skipped': () => 'No test command found — tests skipped',
+      loop: e => `Back to ${e.to} (loop ${e.loop}) for ${(e.candidates || []).join(', ')}`,
+      gate: e => `Waiting for you: ${e.title}`,
+      merged: e => `Merged ${e.branch} into ${e.into}`,
+      'merge-failed': e => `Merge failed: ${e.error}`,
+      finished: e => `Finished: ${e.status} — ${e.why}`,
+      interrupted: e => `${instName(e.instance)} was interrupted`,
+      'launch-failed': e => `${instName(e.instance)} couldn't start: ${e.error}`,
+      'read-only-violation': e => `${instName(e.instance)} changed files in read-only mode`,
+      'trusted-folder': () => 'Answered the folder-trust question (task worktree)',
+      stop: () => 'You stopped the task',
+      error: e => `Engine error: ${e.error}`,
+    },
+  };
+
+  const I = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"${extra}>${d}</svg>`;
+  const ICON = {
+    flow: I('<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 6h7M6 8.5v3a4 4 0 0 0 4 4h5.5"/>', ' class="i ci"'),
+    back: I('<path d="m15 6-6 6 6 6"/>', ' style="width:13px;height:13px"'),
+    check: I('<path d="m5 12 5 5 9-10"/>'),
+    x: I('<path d="M6 6l12 12M18 6 6 18"/>'),
+    clock: I('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', ' style="width:12px;height:12px"'),
+    warn: I('<path d="M12 4 2.5 20h19Z"/><path d="M12 10v4M12 17h.01"/>', ' style="width:13px;height:13px"'),
+    stop: I('<rect x="7" y="7" width="10" height="10" rx="2"/>'),
+    search: I('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+    you: I('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-3.5 4-5 7-5s5.5 1.5 7 5"/>'),
+    engine: I('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'),
+    agent: I('<rect x="4" y="7" width="16" height="11" rx="4"/><path d="M9 12h.01M15 12h.01"/>'),
+  };
+  const COLS = ['queued', 'running', 'needs', 'review', 'done', 'failed'];
+  const PATTERN = { pipeline: 'Pipeline', bestofn: 'Best-of-N', split: 'Split work', board: 'Review board' };
+  const LIVE = new Set(['starting', 'running']);
+  const DENSITY_KEY = 'bayloob.tasks.density';
+  const novi = (agent, size = '') => `<span class="novi ${size}">${Agent.thumb(agent)}</span>`;
+  const elapsed = t => {
+    const s = Math.max(0, Math.round(((t.endedAt || Date.now()) - t.createdAt) / 1000));
+    return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
+  };
+  const clockTime = at => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const tilde = (p, home) => (home && p?.startsWith(home) ? `~${p.slice(home.length)}` : p || '');
+  // "build.2.1.build-1" → "build-1 · round 2"; "plan.1.1" → "plan"
+  const instName = id => {
+    const [stage, round, n, cand] = String(id || '').split('.');
+    return `${cand || (Number(n) > 1 ? `${stage} ${n}` : stage)}${Number(round) > 1 ? ` · round ${round}` : ''}`;
+  };
+  const findingsIn = text => (String(text || '').match(/^\s*[-*]?\s*`?[\w./-]+:\d+/gm) || []).length;
+
+  /** Which board column a task is in. */
+  function columnOf(t) {
+    if (t.status === 'done') { return 'done'; }
+    if (t.status === 'stopped' || t.status === 'failed') { return 'failed'; }
+    if (t.status === 'needs-you') { return t.gate?.kind === 'merge' ? 'review' : 'needs'; }
+    return t.instances.some(i => LIVE.has(i.status)) || t.stages[t.stage]?.status !== 'running' ||
+      !t.instances.some(i => i.status === 'queued') ? 'running' : 'queued';
+  }
+
+  class TasksView {
+    tasks = new Map();
+    usage = null;
+    view = 'board';
+    open = null; // task id in the detail
+    tab = 'overview';
+    query = '';
+    project = '';
+    density = 'comfortable';
+    picked = new Map(); // task id → candidate the owner selected for "Pick"
+    composing = null; // { action } while a note / confirmation is being written
+    #art = new Map(); // `${task}:${name}` → text | null (artifacts and logs, refreshed when the task changes)
+    #toastTimer = null;
+
+    constructor(api) {
+      this.api = api;
+      this.el = { main: document.getElementById('main'), usage: document.getElementById('usage'), toast: document.getElementById('toast') };
+      document.getElementById('logo').innerHTML = Agent.thumb(MANAGER);
+      try { this.density = localStorage.getItem(DENSITY_KEY) || 'comfortable'; } catch { /* storage unavailable */ }
+      this.#bind();
+      setInterval(() => { if (!this.composing) { this.render(); } }, 30_000);
+    }
+
+    show(state) {
+      this.state = state;
+      this.tasks = new Map((state.tasks || []).map(t => [t.id, t]));
+      this.usage = state.usage || null;
+      if (state.focus && this.tasks.has(state.focus)) { this.#openTask(state.focus); } else { this.render(); }
+      this.#renderUsage();
+    }
+
+    setTask(task) {
+      const before = this.tasks.get(task.id);
+      this.tasks.set(task.id, task);
+      // Artifacts may have changed with it: read them again when shown
+      if (before?.updatedAt !== task.updatedAt) {
+        for (const k of [...this.#art.keys()]) { if (k.startsWith(`${task.id}:`)) { this.#art.delete(k); } }
+      }
+      if (this.composing && this.open === task.id && task.gate?.id !== this.composing.gate) { this.composing = null; }
+      if (!this.composing || this.open !== task.id) { this.render(); }
+    }
+
+    setUsage(usage) { this.usage = usage; this.#renderUsage(); }
+
+    // ---------- header ----------
+
+    #renderUsage() {
+      const agents = this.usage?.agents || {};
+      this.el.usage.innerHTML = Object.entries(agents)
+        .filter(([, u]) => u.enabled && (u.running || u.queued || u.max))
+        .map(([a, u]) => `<span title="${esc(Agent.displayName(a))}: ${u.running} of ${u.max} running${u.queued ? `, ${u.queued} queued` : ''}">${esc(Agent.displayName(a).split(' ')[0])}
+          <span class="dots" style="--c:${Agent.color(a)}">${Array.from({ length: u.max }, (_, i) => `<i class="${i < u.running ? 'on' : ''}"></i>`).join('')}</span>
+          <b>${u.running}/${u.max}</b>${u.queued ? `<em>+${u.queued}</em>` : ''}</span>`).join('');
+    }
+
+    // ---------- views ----------
+
+    render() {
+      this.el.main.innerHTML = this.view === 'detail' && this.tasks.has(this.open) ? this.#detail(this.tasks.get(this.open)) : this.#board();
+      const note = this.el.main.querySelector('[data-note]');
+      if (note) { note.focus(); }
+    }
+
+    #board() {
+      const all = [...this.tasks.values()];
+      if (!all.length) {
+        return `<div class="phead"><h1>${T.tasks}</h1></div>
+          <div class="empty" style="flex:1;justify-content:center">${novi(MANAGER, 'l')}<b>${T.noTasks}</b>${T.noTasksHint}
+          <button class="btn primary" type="button" data-act="new">${T.newTask}</button></div>`;
+      }
+      const projects = [...new Set(all.map(t => t.project.name))].sort();
+      const q = this.query.trim().toLowerCase();
+      const shown = all.filter(t => (!this.project || t.project.name === this.project) && (!q || t.title.toLowerCase().includes(q) || t.project.name.toLowerCase().includes(q)));
+      const by = Object.fromEntries(COLS.map(c => [c, []]));
+      for (const t of shown) { by[columnOf(t)].push(t); }
+      const cols = COLS.map(c => `<section class="col" aria-label="${T.cols[c]}">
+          <h3>${T.cols[c]} <em class="${c === 'needs' && by[c].length ? 'hot' : ''}">${by[c].length}</em></h3>
+          ${by[c].length ? by[c].map(t => this.#card(t, c)).join('') : `<div class="none">${T.colEmpty[c]}</div>`}
+        </section>`).join('');
+      return `<div class="phead"><h1>${T.tasks}</h1>
+          <div class="seg" role="group" aria-label="Density">${['comfortable', 'compact'].map(d => `<button type="button" data-density="${d}" aria-pressed="${this.density === d}">${T[d]}</button>`).join('')}</div></div>
+        <div class="filters"><label class="field">${ICON.search}<input id="q" placeholder="${T.filter}" value="${esc(this.query)}" spellcheck="false"></label>
+          <select class="sel" id="proj" aria-label="Project"><option value="">${T.allProjects}</option>${projects.map(p => `<option${p === this.project ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
+        <div class="board${this.density === 'compact' ? ' compact' : ''}">${cols}</div>`;
+    }
+
+    #card(t, col) {
+      const st = t.template.stages[t.stage];
+      const state = t.stages[t.stage];
+      const queued = t.instances.filter(i => i.status === 'queued' && i.stage === st?.id).length;
+      const live = t.instances.filter(i => LIVE.has(i.status)).length;
+      const color = { needs: 'var(--waiting)', failed: t.status === 'stopped' ? 'var(--idle)' : 'var(--waiting)', done: 'var(--done)', review: 'var(--cat-workflow)', running: 'var(--thinking)', queued: 'var(--idle)' }[col];
+      const stageText = t.status === 'done' ? (t.merged ? `Merged into ${t.merged.into}` : 'Done')
+        : t.status === 'stopped' ? 'Stopped' : `${st?.title || ''}${queued && !live ? ` — ${T.queuedN(queued)}` : ''}`;
+      const builders = t.template.stages.find(s => s.role === 'builder')?.agents || [];
+      const best = this.#bestDiff(t);
+      const why = t.gate ? `<div class="why">${ICON.warn}<span>${esc(t.gate.title)}</span></div>` : '';
+      const waiting = t.instances.find(i => i.status === 'queued' && i.waiting);
+      return `<button type="button" class="tcard${col === 'needs' ? ' needs' : ''}" data-open="${esc(t.id)}">
+        <div class="tt">${ICON.flow}<b>${esc(t.title)}</b></div>
+        <div class="ln"><span class="chip out">${esc(t.project.name)}</span>${esc(PATTERN[t.template.id] || t.template.name)}</div>
+        <div class="ln"><span class="chip c" style="--c:${color}"><span class="d${col === 'running' ? ' live' : ''}"></span>${esc(stageText)}</span></div>
+        ${why}${waiting && col === 'queued' ? `<div class="ln" style="color:var(--working)">${esc(waiting.waiting)}</div>` : ''}
+        <div class="agents">${builders.map(a => `<span>${novi(a.adapter)}×${a.count}</span>`).join('')}</div>
+        <div class="ln">${ICON.clock}<span class="num">${elapsed(t)}</span>${best ? `<span class="diff"><span class="a">+${best.added}</span> <span class="r">−${best.deleted}</span></span>` : ''}</div>
+      </button>`;
+    }
+
+    #bestDiff(t) {
+      const c = t.candidates.find(x => x.id === t.winner) || t.candidates.filter(x => x.diff).sort((a, b) => (b.diff.added + b.diff.deleted) - (a.diff.added + a.diff.deleted))[0];
+      return c?.diff || null;
+    }
+
+    #detail(t) {
+      const live = t.status === 'running' || t.status === 'needs-you';
+      const statusColor = { running: 'var(--thinking)', 'needs-you': 'var(--waiting)', done: 'var(--done)', stopped: 'var(--idle)', failed: 'var(--waiting)' }[t.status];
+      const steps = t.template.stages.map((s, i) => {
+        const st = t.stages[i];
+        const cls = { done: 'done', running: 'run', waiting: 'wait', stopped: 'fail', failed: 'fail' }[st.status] || '';
+        const inner = cls === 'done' ? ICON.check : cls === 'wait' ? '!' : cls === 'fail' ? '×' : '';
+        return `${i ? '<span class="sline"></span>' : ''}<div class="sstep ${cls}"${i === t.stage && live ? ' aria-current="step"' : ''}><span class="si">${inner}</span><span>${esc(s.title)} <small>${esc(this.#stageNote(t, s, st))}</small></span></div>`;
+      }).join('');
+      const tabs = [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['tests'], ['log']];
+      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), log: () => this.#log(t) }[this.tab]();
+      return `<div class="dhead"><div class="t">
+          <button class="crumb" type="button" data-act="board">${ICON.back} ${T.back}</button>
+          <h1>${esc(t.title)}</h1>
+          <div class="meta"><span class="chip out">${esc(t.project.name)}</span><span class="chip c" style="--c:var(--cat-workflow)">${esc(T.category[t.category] || t.category)}</span>
+            <span class="chip">${esc(PATTERN[t.template.id] || t.template.name)}</span><span class="chip c" style="--c:${statusColor}"><span class="d"></span>${T.status[t.status]}</span>
+            <span>${ICON.clock} <span class="num">${elapsed(t)}</span></span></div></div>
+          ${live ? (this.composing?.action === 'stop'
+            ? `<span class="confirm" style="color:var(--waiting);font-weight:600;max-width:280px">${T.stopAsk}</span><button class="btn danger" type="button" data-act="stop-yes">${T.yesStop}</button><button class="btn" type="button" data-act="cancel">${T.cancel}</button>`
+            : `<button class="btn danger" type="button" data-act="stop">${ICON.stop} ${T.stop}</button>`) : ''}
+        </div>
+        <nav class="stepbar" aria-label="Stages">${steps}</nav>
+        ${t.status === 'stopped' ? `<div class="banner" style="--c:var(--idle)">${T.stopped}</div>` : ''}
+        <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${T.tabs[k]}${n ? `<em>${n}</em>` : ''}</button>`).join('')}</div>
+        <div class="pane" id="pane">${pane}</div>
+        ${t.gate ? this.#actions(t) : ''}`;
+    }
+
+    #stageNote(t, s, st) {
+      const round = t.instances.filter(i => i.stage === s.id && i.round === st.round);
+      if (s.role === 'builder') { return t.candidates.length ? `×${t.candidates.length}` : ''; }
+      if (s.action === 'run-tests') {
+        const tested = t.candidates.filter(c => c.tests && c.tests.ok !== null);
+        return tested.length ? `${T.of(tested.filter(c => c.tests.ok).length, tested.length)} pass` : '';
+      }
+      if (s.role === 'arbiter') { return t.winner ? t.winner : st.status === 'waiting' ? 'you pick' : ''; }
+      if (s.action === 'merge') { return t.merged ? `into ${t.merged.into}` : ''; }
+      if (s.gate === 'human' && st.status === 'done') { return 'approved'; }
+      return round.length ? Agent.displayName(round[0].adapter) : (s.agents?.[0] ? Agent.displayName(s.agents[0].adapter) : '');
+    }
+
+    // ---------- tabs ----------
+
+    #overview(t) {
+      const home = this.state?.home;
+      const rows = t.instances.map(i => `<tr>
+          <td><span class="who">${novi(i.adapter)}<span>${esc(Agent.displayName(i.adapter))}<br><small class="mono" style="color:var(--muted)">${esc(i.id)}</small></span></span></td>
+          <td>${esc(i.role)}</td><td><span class="badge ${i.mode === 'writes' ? 'writes' : i.mode === 'plan' ? 'plan' : 'ro'}">${T.mode[i.mode] || i.mode}</span></td>
+          <td>${T.istatus[i.status] || i.status}${i.waiting ? `<br><span class="wait">${esc(i.waiting)}</span>` : ''}${i.error ? `<br><span class="wait" style="color:var(--waiting)">${esc(i.error)}</span>` : ''}</td>
+          <td class="num">${i.startedAt ? clockTime(i.startedAt) : '—'}</td>
+          <td>${i.handle && LIVE.has(i.status) || (i.handle && t.status !== 'done' && t.status !== 'stopped') ? `<button class="btn sm" type="button" data-term="${esc(i.id)}" title="${T.terminalTip}">${ICON_TERM} ${T.terminal}</button>` : ''}</td></tr>`).join('');
+      return `<div class="cards">
+        <div class="card md">${renderMarkdown(t.text)}</div>
+        <div class="facts">
+          <div><span class="label">${T.the.project}</span><b title="${esc(t.project.root)}">${esc(tilde(t.project.root, home))}</b></div>
+          <div><span class="label">${T.the.base}</span><b class="mono">${esc(t.base.branch)} @ ${esc(t.base.sha.slice(0, 8))}</b></div>
+          <div><span class="label">${T.the.ro}</span><b title="${esc(t.roDir)}">${esc(tilde(t.roDir, home))}</b></div>
+          <div><span class="label">${T.the.tests}</span><b class="mono">${esc(t.testCommand || T.the.noTests)}</b></div>
+        </div>
+        <div><div class="label" style="margin-bottom:6px">${T.instances}</div>
+          ${rows ? `<table class="tbl"><thead><tr><th>${T.inst.agent}</th><th>${T.inst.role}</th><th>${T.inst.mode}</th><th>${T.inst.status}</th><th>${T.inst.time}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">${T.loading}</div>`}</div>
+      </div>`;
+    }
+
+    #plan(t) {
+      const plan = this.#artifact(t.id, 'plan.md');
+      if (plan === undefined) { return `<div class="empty">${T.loading}</div>`; }
+      return plan ? `<div class="card md" style="max-width:980px">${renderMarkdown(plan)}</div>` : `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noPlan}</b>${T.noPlanHint}</div>`;
+    }
+
+    #candidates(t) {
+      if (!t.candidates.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noCands}</b>${T.noCandsHint}</div>`; }
+      const picking = t.gate?.kind === 'pick';
+      const picked = this.picked.get(t.id);
+      return `<div class="cands">${t.candidates.map(c => {
+        const builder = [...t.instances].reverse().find(i => i.candidate === c.id && i.role === 'builder');
+        const tests = !c.tests ? ['var(--idle)', T.testsNot] : c.tests.skipped ? ['var(--idle)', T.testsSkip] : c.tests.ok ? ['var(--done)', T.testsPass] : ['var(--waiting)', `${T.testsFail} (exit ${c.tests.code})`];
+        const review = this.#artifact(t.id, `review.${c.id}.md`);
+        const answer = builder ? this.#artifact(t.id, `msg.${builder.id}.md`) : null;
+        const n = review ? findingsIn(review) : 0;
+        const win = t.winner === c.id;
+        return `<article class="cand${win ? ' win' : picked === c.id ? ' picked' : ''}${c.status === 'out' ? ' out' : ''}">
+          <div class="ch">${novi(c.adapter, 'l')}<div class="nm"><b>${esc(c.id)}</b><small title="${esc(c.branch || '')}">${esc(Agent.displayName(c.adapter))}${c.branch ? ` · ${esc(c.branch)}` : ''}</small></div>
+            ${win ? `<span class="chip c" style="--c:var(--brand)">${T.winner}</span>` : c.status === 'out' ? `<span class="chip c" style="--c:var(--waiting)">${T.out}</span>` : ''}</div>
+          <div class="strip" style="--c:${tests[0]}">${tests[0] === 'var(--done)' ? ICON.check : tests[0] === 'var(--waiting)' ? ICON.x : ''}${esc(tests[1])}</div>
+          <dl class="kv"><dt>${T.diff}</dt><dd>${c.diff ? `<span class="diff"><span class="a">+${c.diff.added}</span> <span class="r">−${c.diff.deleted}</span></span> · ${T.files(c.diff.files)}` : '—'}</dd>
+            ${review !== null && review !== undefined ? `<dt>${T.review}</dt><dd style="color:${n ? 'var(--working)' : 'var(--done)'}">${T.findings(n)}</dd>` : ''}
+            <dt>${T.status2}</dt><dd>${win ? (t.merged ? T.mergedInto(esc(t.merged.into)) : T.winner) : c.status === 'out' ? esc(c.out || T.out) : T.active}</dd></dl>
+          ${review ? `<details class="more"><summary>${T.reviewText}</summary><div class="md">${renderMarkdown(review)}</div></details>` : ''}
+          ${answer ? `<details class="more"><summary>${T.answer}</summary><div class="md">${renderMarkdown(answer)}</div></details>` : ''}
+          <div class="row">${builder?.handle && t.status !== 'done' && t.status !== 'stopped' ? `<button class="btn sm" type="button" data-term="${esc(builder.id)}" title="${T.terminalTip}">${ICON_TERM} ${T.terminal}</button>` : ''}
+            ${picking ? `<button class="btn sm${picked === c.id ? ' primary' : ''}" type="button" data-pick="${esc(c.id)}">${picked === c.id ? `${ICON.check} ${T.chosen}` : T.choose}</button>` : ''}</div>
+        </article>`;
+      }).join('')}</div>`;
+    }
+
+    #tests(t) {
+      const tested = t.candidates.filter(c => c.tests);
+      if (!tested.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.testsNot}</b>${esc(t.testCommand || T.the.noTests)}</div>`; }
+      return `<div class="cards">${tested.map(c => {
+        const out = this.#artifact(t.id, `test-output.${c.id}.txt`);
+        const ok = c.tests.skipped ? null : c.tests.ok;
+        return `<div><div class="row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${novi(c.adapter)}<b>${esc(c.id)}</b>
+            <span class="chip c" style="--c:${ok === null ? 'var(--idle)' : ok ? 'var(--done)' : 'var(--waiting)'}">${ok === null ? T.testsSkip : ok ? T.testsPass : T.testsFail}</span></div>
+          <pre class="output">${out === undefined ? T.loading : esc(out || T.noOutput)}</pre></div>`;
+      }).join('')}</div>`;
+    }
+
+    #log(t) {
+      const entries = this.#artifact(t.id, '#log');
+      if (entries === undefined) { return `<div class="empty">${T.loading}</div>`; }
+      if (!entries?.length) { return `<div class="empty">${T.noLog}</div>`; }
+      return `<ul class="timeline">${[...entries].reverse().map(e => {
+        const text = (T.log[e.event] || (x => x.event.startsWith('gate:') ? `You: ${x.event.slice(5)}${x.candidate ? ` ${x.candidate}` : ''}${x.note ? ` — “${x.note}”` : ''}` : x.event))(e);
+        const icon = e.actor === 'you' ? ICON.you : e.actor === 'agent' ? ICON.agent : ICON.engine;
+        return `<li><span class="tm">${clockTime(e.at)}</span><span class="actor ${esc(e.actor)}" title="${esc(e.actor)}">${icon}</span>
+          <span class="tx"><span>${esc(text)}</span>${e.cwd || e.dir ? `<small>${esc(tilde(e.cwd || e.dir, this.state?.home))}</small>` : ''}</span></li>`;
+      }).join('')}</ul>`;
+    }
+
+    // ---------- the decision bar ----------
+
+    #actions(t) {
+      const g = t.gate;
+      const labels = T.gate[g.kind] || {};
+      const c = this.composing;
+      if (c?.gate === g.id && (c.action === 'changes' || c.action === 'retry')) {
+        return `<div class="actions"><textarea data-note placeholder="${T.notePh[c.action]}">${esc(c.note || '')}</textarea>
+          <span class="msg"><small>Ctrl+Enter</small></span>
+          <button class="btn" type="button" data-act="cancel">${T.cancel}</button>
+          <button class="btn primary" type="button" data-act="send-note">${T.send}</button></div>`;
+      }
+      if (c?.gate === g.id && c.action === 'abort') {
+        return `<div class="actions"><span class="msg confirm">${T.abortAsk}</span>
+          <button class="btn" type="button" data-act="cancel">${T.cancel}</button>
+          <button class="btn danger" type="button" data-act="abort-yes">${T.yesAbort}</button></div>`;
+      }
+      const picked = this.picked.get(t.id) || (t.candidates.filter(x => x.status === 'active').length === 1 ? t.candidates.find(x => x.status === 'active').id : null);
+      const primary = g.actions.find(a => ['approve', 'pick', 'merge'].includes(a)) || g.actions.find(a => a === 'retry' && g.kind !== 'pick' && g.kind !== 'tests-failed') || null;
+      const btn = a => {
+        if (a === 'pick') {
+          return `<button class="btn primary" type="button" data-decide="pick" ${picked ? '' : `disabled title="${T.pickFirst}"`}>${ICON.check} ${picked ? `${labels.pick} ${esc(picked)}` : labels.pick} <kbd>Alt A</kbd></button>`;
+        }
+        const text = a === 'merge' ? T.mergeInto(esc(t.base.branch)) : labels[a] || a;
+        const cls = a === primary ? 'btn primary' : a === 'abort' ? 'btn danger' : 'btn';
+        return `<button class="${cls}" type="button" data-decide="${a}">${a === primary ? `${ICON.check} ` : ''}${text}${a === primary ? ' <kbd>Alt A</kbd>' : ''}</button>`;
+      };
+      // Primary last (bottom right), abort first
+      const order = [...g.actions].sort((a, b) => (a === 'abort' ? -1 : b === 'abort' ? 1 : 0) || (a === primary ? 1 : b === primary ? -1 : 0));
+      return `<div class="actions"><span class="msg"><b>${esc(g.title)}</b><small>${esc(T.gateHint[g.kind] || '')}</small>
+          ${g.detail ? `<small>${esc(g.detail)}</small>` : ''}${g.error ? `<small class="err">${esc(g.error)}</small>` : ''}</span>
+        ${order.map(btn).join('')}</div>`;
+    }
+
+    async #decide(t, action, opts = {}) {
+      const r = await this.api.decide(t.id, t.gate.id, action, opts);
+      if (!r?.ok) { this.#toast(r?.error || 'Something went wrong', true); return false; }
+      this.composing = null;
+      return true;
+    }
+
+    // ---------- data ----------
+
+    // An artifact's text: undefined while it loads (then a re-render), null when there is none
+    #artifact(id, name) {
+      const key = `${id}:${name}`;
+      if (this.#art.has(key)) { return this.#art.get(key); }
+      this.#art.set(key, undefined);
+      const load = name === '#log' ? this.api.log(id) : this.api.artifact(id, name);
+      Promise.resolve(load).then(v => {
+        this.#art.set(key, v ?? null);
+        if (this.view === 'detail' && this.open === id && !this.composing) { this.render(); }
+      }, () => this.#art.set(key, null));
+      return undefined;
+    }
+
+    #openTask(id) {
+      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'pick' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
+      this.open = id;
+      this.view = 'detail';
+      this.composing = null;
+      this.render();
+    }
+
+    #toast(text, err = false) {
+      clearTimeout(this.#toastTimer);
+      this.el.toast.textContent = text;
+      this.el.toast.className = `toast${err ? ' err' : ''}`;
+      this.el.toast.hidden = false;
+      this.#toastTimer = setTimeout(() => { this.el.toast.hidden = true; }, 4000);
+    }
+
+    // ---------- input ----------
+
+    #bind() {
+      document.getElementById('newTask').addEventListener('click', () => this.api?.newTask());
+      for (const b of document.querySelectorAll('[data-win]')) { b.addEventListener('click', () => this.api?.control(b.dataset.win)); }
+      this.el.main.addEventListener('input', e => {
+        if (e.target.id === 'q') {
+          this.query = e.target.value;
+          const pos = e.target.selectionStart;
+          this.render();
+          const q = document.getElementById('q');
+          q.focus();
+          q.setSelectionRange(pos, pos);
+        }
+        if (e.target.matches('[data-note]') && this.composing) { this.composing.note = e.target.value; }
+      });
+      this.el.main.addEventListener('change', e => {
+        if (e.target.id === 'proj') { this.project = e.target.value; this.render(); }
+      });
+      this.el.main.addEventListener('click', async e => {
+        const t = this.tasks.get(this.open);
+        const open = e.target.closest('[data-open]');
+        if (open) { return this.#openTask(open.dataset.open); }
+        const d = e.target.closest('[data-density]');
+        if (d) {
+          this.density = d.dataset.density;
+          try { localStorage.setItem(DENSITY_KEY, this.density); } catch { /* storage unavailable */ }
+          return this.render();
+        }
+        const tab = e.target.closest('[data-tab]');
+        if (tab) { this.tab = tab.dataset.tab; return this.render(); }
+        const term = e.target.closest('[data-term]');
+        if (term && t) {
+          const r = await this.api.terminal(t.id, term.dataset.term);
+          if (!r?.ok) { this.#toast(r?.error || 'Could not open a terminal', true); }
+          return;
+        }
+        const pick = e.target.closest('[data-pick]');
+        if (pick && t) { this.picked.set(t.id, pick.dataset.pick); return this.render(); }
+        const decide = e.target.closest('[data-decide]');
+        if (decide && t?.gate) {
+          const a = decide.dataset.decide;
+          if (a === 'changes' || a === 'retry') {
+            // An interrupted stage simply runs again; the others need a note
+            if (t.gate.kind === 'interrupted' || t.gate.kind === 'failed') { return this.#decide(t, a); }
+            this.composing = { gate: t.gate.id, action: a, note: '' };
+            return this.render();
+          }
+          if (a === 'abort') { this.composing = { gate: t.gate.id, action: 'abort' }; return this.render(); }
+          if (a === 'pick') { return this.#decide(t, 'pick', { candidate: this.picked.get(t.id) || t.candidates.find(x => x.status === 'active')?.id }); }
+          decide.disabled = true;
+          if (!(await this.#decide(t, a))) { decide.disabled = false; }
+          return;
+        }
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (act === 'board') { this.view = 'board'; this.open = null; this.composing = null; return this.render(); }
+        if (act === 'new') { return this.api?.newTask(); }
+        if (act === 'cancel') { this.composing = null; return this.render(); }
+        if (act === 'send-note' && t?.gate) { return this.#decide(t, this.composing.action, { note: this.composing.note || '' }); }
+        if (act === 'abort-yes' && t?.gate) { return this.#decide(t, 'abort'); }
+        if (act === 'stop' && t) { this.composing = { gate: null, action: 'stop' }; return this.render(); }
+        if (act === 'stop-yes' && t) {
+          const r = await this.api.stop(t.id);
+          this.composing = null;
+          if (!r?.ok) { this.#toast(r?.error || 'Could not stop the task', true); }
+          return this.render();
+        }
+      });
+      document.addEventListener('keydown', e => {
+        const t = this.tasks.get(this.open);
+        if (e.key === 'Enter' && e.ctrlKey && e.target.matches?.('[data-note]')) {
+          e.preventDefault();
+          return this.el.main.querySelector('[data-act="send-note"]')?.click();
+        }
+        if (e.key === 'Escape') {
+          if (this.composing) { this.composing = null; return this.render(); }
+          if (this.view === 'detail') { this.view = 'board'; this.open = null; return this.render(); }
+        }
+        if (e.altKey && (e.key === 'a' || e.key === 'A') && this.view === 'detail' && t?.gate) {
+          e.preventDefault();
+          return this.el.main.querySelector('.actions .btn.primary:not(:disabled)')?.click();
+        }
+        if (this.view === 'detail' && !e.target.matches?.('input, textarea') && (e.key === '[' || e.key === ']')) {
+          const keys = Object.keys(T.tabs);
+          this.tab = keys[(keys.indexOf(this.tab) + (e.key === ']' ? 1 : keys.length - 1)) % keys.length];
+          return this.render();
+        }
+        if (e.key === '/' && this.view === 'board' && !e.target.matches?.('input, textarea')) {
+          e.preventDefault();
+          document.getElementById('q')?.focus();
+        }
+      });
+    }
+  }
+
+  const view = new TasksView(window.tasksAPI);
+  if (window.tasksAPI) {
+    tasksAPI.onShow(state => view.show(state));
+    tasksAPI.onTask(task => view.setTask(task));
+    tasksAPI.onUsage(usage => view.setUsage(usage));
+  } else {
+    window.__demo = view; // opened in a plain browser: drive it from the console
+  }
+</script>
+</body>
+</html>
