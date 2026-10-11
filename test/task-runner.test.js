@@ -25,6 +25,21 @@ const CODEX_TRUST = `> You are in /w/shop-20261011-1200-abcd-ro
 
   Press enter to continue
 `;
+// Codex 0.162.1 (seen in the first real run: the old parser missed it and the builder waited)
+const CODEX_162_TRUST = `  Folder access
+
+  /w/shop-20261011-1200-abcd-build-2
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  /w/shop
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings.
+  trust these files. Your trust decision will be saved.
+
+› 1. Trust and continue
+  2. Back to Agent Command Center
+
+  enter continue · esc back
+`;
 const UPDATE = `  ✨ Update available! 0.154.0 -> 0.162.1
 
 › 1. Update now
@@ -136,4 +151,19 @@ test("any other menu on a task's screen is left for the owner", async () => {
   });
   await settle();
   assert.deepEqual(calls.keys, []);
+});
+
+test("Codex 0.162's new trust screen is answered too", async () => {
+  const { runner, calls } = make([CODEX_162_TRUST]);
+  await runner.launch({
+    adapter: "codex",
+    cwd: "/w/b2",
+    prompt: "x",
+    mode: "writes",
+    role: "builder",
+    taskId: "t1",
+  });
+  await settle();
+  assert.deepEqual(calls.keys, ["%7:Enter"]);
+  assert.deepEqual(calls.trusted, ["t1:%7"]);
 });

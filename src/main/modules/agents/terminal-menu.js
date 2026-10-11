@@ -3,7 +3,8 @@
 // Generic on purpose: a block of options with a cursor (❯ or ›), the question above it, and a
 // "press Enter" hint below it. Without that hint it isn't a menu (so ordinary output never counts).
 const CURSOR = /^(\s*)([❯›])\s+/;
-const HINT = /\b(enter to (confirm|continue|select)|press enter)\b/i;
+// "Enter to confirm" (Claude Code), "Press enter to continue" (Codex 0.154), "enter continue · esc back" (Codex 0.162)
+const HINT = /\b(enter (to )?(confirm|continue|select)|press enter)\b/i;
 const NUMBERED = /^\d+\.\s+/;
 const QUESTION_MAX = 400;
 

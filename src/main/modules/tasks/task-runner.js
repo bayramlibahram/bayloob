@@ -63,7 +63,8 @@ class TaskRunner {
       if (!menu || !TRUST.test(`${menu.question} ${menu.options.join(" ")}`)) {
         continue;
       }
-      const yes = menu.options.findIndex(o => /^yes\b/i.test(o));
+      // "Yes, I trust this folder" (Claude Code), "Yes, continue" (Codex 0.154), "Trust and continue" (0.162)
+      const yes = menu.options.findIndex(o => /^(yes|trust)\b/i.test(o));
       if (yes === -1) {
         return;
       }
