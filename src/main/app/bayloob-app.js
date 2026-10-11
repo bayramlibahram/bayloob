@@ -941,7 +941,8 @@ class BayloobApp {
       prefill,
       draft,
       home: os.homedir(),
-      hosts: this.settings.get("hosts"),
+      // The task dialog needs identity and labels, never SSH connection details.
+      hosts: (this.settings.get("hosts") || []).map(h => ({ id: h.id, name: h.name, env: h.env })),
     });
   }
 

@@ -51,6 +51,14 @@ const OTHER_DIFF_MAX = 8_000;
 const ENDED = new Set(["done", "failed", "stopped", "interrupted"]);
 const OPEN = new Set(["running", "needs-you"]);
 const INTEGRATED = "integrate-1"; // the candidate a split build's parts are merged into
+const STARTUP_MS = 60_000; // a session that ends this soon after its start crashed at start, not mid-turn
+// Known start-up crashes and what fixes them (shown at the 'interrupted' gate with the session's last lines)
+const STARTUP_HINTS = [
+  {
+    match: /account\/read failed|TUI bootstrap|app-server/i,
+    hint: "Codex's background app-server looks stale: run `codex app-server daemon restart`, then Run again.",
+  },
+];
 
 const GATE_ACTIONS = {
   approve: ["approve", "changes", "abort"], // after a stage the owner reviews (the plan)
@@ -279,8 +287,15 @@ class TaskEngine extends EventEmitter {
         return;
       }
       this.scheduler.release(inst.schedId, "crashed");
-      Object.assign(inst, { status: "interrupted", endedAt: this.now() });
-      this.#log(task, "engine", "interrupted", { instance: inst.id });
+      // Gone right after it started: a crash at start — keep what its screen said (the pane is gone)
+      const atStart = this.now() - (inst.startedAt || 0) < STARTUP_MS;
+      const screen = atStart ? this.runner.lastScreen?.(inst.handle) || "" : "";
+      Object.assign(inst, {
+        status: "interrupted",
+        endedAt: this.now(),
+        ...(atStart ? { crashedAtStart: true, screen } : {}),
+      });
+      this.#log(task, "engine", "interrupted", { instance: inst.id, atStart });
       await this.#checkStage(task);
       this.#save(task);
     });
@@ -898,11 +913,33 @@ class TaskEngine extends EventEmitter {
     }
     const interrupted = round.filter(i => i.status === "interrupted");
     if (interrupted.length) {
+      // Crashed at start: say so, show its last lines, and how to fix a known cause; a slot that crashed at
+      // start before (a retry) says how many times — Run again stays yours, never an automatic loop
+      const atStart = interrupted.filter(i => i.crashedAtStart);
+      const screen = atStart.map(i => i.screen).find(Boolean) || "";
+      const hint = STARTUP_HINTS.find(h => h.match.test(screen))?.hint || null;
+      const repeats = Math.max(
+        0,
+        ...atStart.map(
+          i =>
+            task.instances.filter(
+              x =>
+                x.stage === i.stage &&
+                x.n === i.n &&
+                x.candidate === i.candidate &&
+                x.crashedAtStart
+            ).length
+        )
+      );
       this.#openGate(
         task,
         "interrupted",
-        `${interrupted.length} agent session(s) ended before finishing`,
+        atStart.length
+          ? `${atStart.length} agent session(s) crashed right after starting${repeats > 1 ? ` (${repeats} times)` : ""}`
+          : `${interrupted.length} agent session(s) ended before finishing`,
         {
+          ...(screen ? { screen } : {}),
+          ...(hint ? { hint } : {}),
           candidates: [...new Set(interrupted.map(i => i.candidate).filter(Boolean))],
           // Which agent slots (n) to run again: only the ones that were cut off, not the whole stage
           slots: [...new Set(interrupted.map(i => i.n))],

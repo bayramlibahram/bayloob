@@ -7,7 +7,8 @@
 const { parseMenu, menuKeys } = require("../agents/terminal-menu");
 
 const TRUST = /\btrust\b/i;
-const TRUST_WATCH_MS = 30_000;
+const TRUST_WATCH_MS = 30_000; // a fresh session's screen is watched this long (trust question, start-up crash)
+const SCREEN_LINES = 15; // the last lines kept: what a session that died at start had on screen
 const TRUST_POLL_MS = 700;
 const KEY_GAP_MS = 80;
 
@@ -19,6 +20,8 @@ class TaskRunner {
    * sendKey   (pane, key) → Promise
    * onTrust   (taskId, pane, question) → void — for the audit trail
    */
+  #screens = new Map(); // pane → its screen's last lines while it was watched (gone with the pane otherwise)
+
   constructor({ launcher, sessions, capture, sendKey, onTrust = () => {}, wait = null }) {
     Object.assign(this, { launcher, sessions, capture, sendKey, onTrust });
     this.wait = wait || (ms => new Promise(r => setTimeout(r, ms)));
@@ -49,20 +52,37 @@ class TaskRunner {
     return this.launcher.hasPane(handle.paneId);
   }
 
+  /** The last lines a fresh session showed (its pane may be gone: e.g. the agent crashed at start). */
+  lastScreen(handle) {
+    return this.#screens.get(handle?.paneId) || "";
+  }
+
   async stop(handle) {
+    this.#screens.delete(handle.paneId);
     await this.launcher.stop(handle.name).catch(() => {}); // already gone is fine
     this.sessions.untrackLaunch(handle.name);
     this.sessions.changed();
   }
 
-  // Watches a fresh session's screen for the folder-trust question and picks its "Yes" option once
+  // Watches a fresh session's screen: picks the folder-trust question's "Yes" option once, and keeps the
+  // last lines it showed — when an agent crashes at start its pane closes, and that's all that tells why
   async #answerTrust(pane, taskId) {
+    let trusted = false;
     for (let tries = TRUST_WATCH_MS / TRUST_POLL_MS; tries > 0; tries--) {
       await this.wait(TRUST_POLL_MS);
-      const menu = parseMenu(await this.capture(pane).catch(() => ""));
+      const screen = await this.capture(pane).catch(() => ""); // gone: its last screen stays in #screens
+      const lines = screen
+        .split("\n")
+        .map(l => l.trimEnd())
+        .filter(Boolean);
+      if (lines.length) {
+        this.#screens.set(pane, lines.slice(-SCREEN_LINES).join("\n"));
+      }
+      const menu = trusted ? null : parseMenu(screen);
       if (!menu || !TRUST.test(`${menu.question} ${menu.options.join(" ")}`)) {
         continue;
       }
+      trusted = true;
       // "Yes, I trust this folder" (Claude Code), "Yes, continue" (Codex 0.154), "Trust and continue" (0.162)
       const yes = menu.options.findIndex(o => /^(yes|trust)\b/i.test(o));
       if (yes === -1) {
@@ -73,7 +93,6 @@ class TaskRunner {
         await this.wait(KEY_GAP_MS);
       }
       this.onTrust(taskId, pane, menu.question);
-      return;
     }
   }
 }

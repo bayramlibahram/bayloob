@@ -14,6 +14,10 @@ class FakeRunner {
   prompts = []; // [name, text]
   stopped = [];
   dead = new Set();
+  screens = {}; // session name → its last screen (a crash at start)
+  lastScreen(handle) {
+    return this.screens[handle.name] || "";
+  }
   launch(opts) {
     const n = this.sessions.length + 1;
     const s = { name: `bl-t-${n}`, paneId: `%${n}`, ...opts };
@@ -1284,4 +1288,28 @@ test("Stopping refuses what isn't running", async () => {
   assert.equal((await env.engine.stopInstance(task.id, planner.id)).ok, false); // already done
   assert.equal((await env.engine.stopStage(task.id)).ok, false); // waiting on you, nothing runs
   assert.equal((await env.engine.stopInstance("nope", "x")).ok, false);
+});
+
+test("A session that crashes right after starting: the gate shows its last lines and the known fix; Retry stays yours", async () => {
+  const env = setup();
+  const task = await toBuilders(env, { ...BEST, agents: { codex: 1 } });
+  const [b1] = env.runner.by({ role: "builder" });
+  env.runner.screens[b1.name] = "Starting Codex…\nError: account/read failed during TUI bootstrap";
+  env.runner.dead.add(b1.name); // its pane closed with it
+  assert.ok(env.engine.sessionGone(b1.paneId));
+  await env.engine.settled(task.id);
+  assert.equal(task.gate.kind, "interrupted");
+  assert.match(task.gate.title, /crashed right after starting/);
+  assert.match(task.gate.screen, /account\/read failed/);
+  assert.match(task.gate.hint, /codex app-server daemon restart/);
+  assert.deepEqual(task.gate.actions, ["retry", "abort"]);
+
+  // Run again crashes the same way: the gate counts it, nothing retries by itself
+  await decide(env, task, "retry");
+  const [, b2] = env.runner.by({ role: "builder" });
+  env.runner.screens[b2.name] = "Error: account/read failed during TUI bootstrap";
+  env.engine.sessionGone(b2.paneId);
+  await env.engine.settled(task.id);
+  assert.match(task.gate.title, /\(2 times\)/);
+  assert.equal(env.runner.by({ role: "builder" }).length, 2);
 });

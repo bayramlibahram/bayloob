@@ -769,7 +769,7 @@
       if (c.category === 'analysis') {
         const a = c.analysis;
         const n = TaskShape.total(a.agents);
-        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ' The Arbiter also proposes a runbook for the hosts you selected; every command waits for your click.' : ''}`;
+        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ` The Arbiter also proposes a runbook for this machine${a.hosts?.length ? ' and the remote hosts you selected' : ''}; every command waits for your click.` : ''}`;
       }
       const tpl = this.#template(c);
       if (tpl) {

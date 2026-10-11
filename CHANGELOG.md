@@ -9,6 +9,8 @@
   running a step, and uses runbook-specific stop wording.
 - Task details follow new gates and finished reports, show queue reasons on running cards, and refresh the
   scheduler immediately when agent limits change.
+- Tasks whose agent exits immediately now preserve its last terminal output, explain the failure at the gate,
+  and show the known recovery guidance when Bayloob can identify the cause.
 - The full Biome check ignores local agent worktrees and passes on the release tree.
 
 ### Added
