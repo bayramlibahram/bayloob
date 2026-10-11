@@ -105,6 +105,17 @@ test("Claude: turns from typed prompts; steps with commands, files and results; 
   assert.equal(t2.status, "done");
 });
 
+test("Claude: prompts and answers keep their lines (the console renders Markdown)", () => {
+  const a = new ClaudeAdapter("/w/shop");
+  a.feed({ type: "user", uuid: "u1", message: { role: "user", content: "Two things:\r\n- a\r\n- b  " } });
+  a.feed({
+    type: "assistant",
+    message: { content: [{ type: "text", text: "## Done\n\n\n\n| a | b |\n|---|---|\n| 1 | 2 |" }] },
+  });
+  assert.equal(a.turns[0].prompt, "Two things:\n- a\n- b");
+  assert.equal(a.turns[0].summary, "## Done\n\n| a | b |\n|---|---|\n| 1 | 2 |");
+});
+
 const codex = [
   { type: "session_meta", payload: { id: "x-1", cwd: "/w/api" } },
   { type: "event_msg", timestamp: ts(0), payload: { type: "task_started", turn_id: "t1" } },

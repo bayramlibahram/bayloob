@@ -61,6 +61,13 @@
   is its own button: Bayloob moves the terminal's cursor to it and confirms (never a bare Enter, since
   the terminal's default can be the risky choice, e.g. Codex's "Update now" runs a script).
 
+### Changed
+- **Agent console** (panel, right column): wider (440 px); the header stays put and the console is the only part
+  that scrolls; Open terminal is an icon in the header. Prompts and answers render Markdown (bold, code, lists,
+  tables, code blocks) and keep their lines; long ones fold with Show more. Turns have a time divider; each turn's
+  steps sit behind "N steps · failed · time" (the newest open, older ones folded), a long turn shows its last 8,
+  and a step opens to its whole command. A running turn shows "Working…".
+
 ### Fixed
 - Panel footer: CPU is now the whole machine's, as a share of all cores (0–100 %, "2.4 of 16 cores" on
   hover), and memory is used / total — it used to sum per-app percentages ("243 %") or show "—" by section.

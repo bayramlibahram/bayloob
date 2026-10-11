@@ -68,7 +68,7 @@
   .square:hover { color: var(--text); background: rgb(var(--ink) / .09); }
 
   /* layout */
-  .main { display: grid; grid-template-columns: 196px 1fr 360px; height: 470px; }
+  .main { display: grid; grid-template-columns: 196px 1fr 440px; height: 470px; }
   .side { padding: 12px 10px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
   .nav { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; color: var(--soft); text-align: left; transition: background .12s; }
   .nav:hover { background: rgb(var(--ink) / .04); }
@@ -243,6 +243,7 @@
   .dhead b { display: block; font-size: 17px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dhead span { color: var(--muted); font-size: 12.5px; }
   .dhead .state { width: auto; }
+  .dhead .square { width: 32px; height: 32px; }
   .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
   .tile { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--raised); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
   h3 { font-size: 13px; font-weight: 600; color: var(--soft); margin: 16px 0 8px; }
@@ -269,26 +270,72 @@
   .doing { padding: 12px 0; border-bottom: 1px solid var(--line); margin-top: 12px; border-top: 1px solid var(--line); }
   .doing b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .doing span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* agent console: turns, newest at the bottom */
-  .console { display: flex; flex-direction: column; gap: 12px; max-height: 330px; overflow-y: auto; padding: 4px 2px 6px; margin-top: 4px; }
-  .turn { display: flex; flex-direction: column; gap: 5px; }
-  .turn .you { align-self: flex-end; max-width: 92%; padding: 7px 11px; border-radius: 12px 12px 4px 12px; background: rgba(139,92,255,.16);
-    color: var(--text); font-size: 12.5px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-  .turn .you i { color: var(--muted); }
-  .steps { display: flex; flex-direction: column; gap: 1px; }
-  .step { display: flex; align-items: center; gap: 7px; padding: 3px 4px; border-radius: 6px; font-size: 12px; min-width: 0; }
+  /* agent console: turns, newest at the bottom. It fills the column under the header and is the only thing
+     that scrolls (a tall inbox card above it squeezes it down to a minimum, then the column scrolls). */
+  .detail.has-console { display: flex; flex-direction: column; padding-bottom: 6px; }
+  .detail.has-console > * { flex: none; }
+  .detail.has-console > .console { flex: 1 1 auto; min-height: 150px; max-height: none; }
+  .console { display: flex; flex-direction: column; gap: 14px; max-height: 330px; overflow-y: auto; padding: 4px 4px 8px 0;
+    margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; scrollbar-width: thin; }
+  .turn { display: flex; flex-direction: column; gap: 6px; }
+  .tsep { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; margin-top: 6px; }
+  .tsep::before, .tsep::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+  .tsep .live { color: var(--thinking); font-weight: 600; }
+  /* messages: Markdown, folded to a few lines with a fade until opened */
+  .msg { position: relative; padding: 8px 12px; color: var(--text); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; user-select: text; }
+  .msg.you { align-self: flex-end; max-width: 88%; border-radius: 12px 12px 4px 12px; background: rgba(139,92,255,.16); }
+  .msg.said { border-radius: 12px 12px 12px 4px; background: rgb(var(--ink) / .05); border: 1px solid var(--line); }
+  .msg.you i.cont { color: var(--muted); }
+  .msg.long:not(.open) { overflow: hidden; -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
+  .msg.you.long:not(.open) { max-height: 6.2em; }
+  .msg.said.long:not(.open) { max-height: 11em; }
+  .msg > :first-child { margin-top: 0; } .msg > :last-child { margin-bottom: 0; }
+  .msg p, .msg ul, .msg ol, .msg pre, .msg blockquote, .msg .tablewrap { margin: 0 0 6px; }
+  .msg p.h { font-weight: 700; margin-top: 8px; }
+  .msg ul, .msg ol { padding-left: 18px; }
+  .msg li + li { margin-top: 2px; }
+  .msg b { font-weight: 650; }
+  .msg code { font: 11.5px ui-monospace, "Ubuntu Mono", monospace; padding: 1px 4px; border-radius: 4px; background: rgb(var(--ink) / .08); }
+  .msg pre { padding: 8px 10px; border-radius: 8px; background: rgb(var(--ink) / .07); overflow-x: auto; }
+  .msg pre code { padding: 0; background: none; white-space: pre; }
+  .msg hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+  .msg blockquote { padding-left: 10px; border-left: 2px solid var(--line); color: var(--soft); }
+  .msg .tablewrap { overflow-x: auto; }
+  .msg table { border-collapse: collapse; font-size: 12px; }
+  .msg th, .msg td { padding: 3px 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .msg th { font-weight: 650; background: rgb(var(--ink) / .04); }
+  .showmore { align-self: flex-start; font-size: 11.5px; font-weight: 600; color: var(--brand-soft); padding: 0 4px; }
+  .showmore.you { align-self: flex-end; }
+  /* steps: one line each (icon, what, time, result), folded per turn behind a summary row */
+  .fold { align-self: flex-start; display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; border-radius: 7px;
+    color: var(--soft); font-size: 11.5px; font-weight: 600; }
+  .fold:hover { background: rgb(var(--ink) / .06); color: var(--text); }
+  .fold .chev { width: 12px; color: var(--muted); transition: transform .15s; }
+  .fold.open .chev { transform: rotate(90deg); }
+  .fold .err { color: var(--waiting); }
+  .fold .dim { color: var(--muted); font-weight: 500; }
+  .earlier { align-self: flex-start; padding: 3px 6px; font-size: 11.5px; color: var(--brand-soft); font-weight: 600; }
+  .steps { display: flex; flex-direction: column; gap: 1px; margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--line); }
+  .step { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; font-size: 12px; min-width: 0; cursor: pointer; }
   .step:hover { background: rgb(var(--ink) / .05); }
-  .step .si { flex: none; width: 18px; text-align: center; color: var(--muted); font: 600 11px ui-monospace, monospace; }
-  .step .st { flex: none; color: var(--soft); font-weight: 600; }
-  .step code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px ui-monospace, monospace; color: var(--softer); }
+  .step .si { flex: none; width: 22px; height: 18px; display: grid; place-items: center; border-radius: 5px;
+    background: rgb(var(--ink) / .07); color: var(--soft); font: 600 10.5px ui-monospace, monospace; }
+  .step.bash .si { color: var(--brand-soft); } .step.edit .si, .step.write .si { color: var(--working); }
+  .step.read .si, .step.search .si { color: var(--thinking); }
+  .step .st { flex: none; color: var(--muted); font-size: 11.5px; }
+  .step code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px ui-monospace, "Ubuntu Mono", monospace; color: var(--text); }
+  .step.open { align-items: flex-start; background: rgb(var(--ink) / .05); }
+  .step.open code { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
   .step .dur { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-  .step .res { flex: none; width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+  .step .res { flex: none; width: 7px; height: 7px; border-radius: 50%; background: transparent; align-self: center; }
   .step .res.ok { background: var(--done); }
   .step .res.error { background: var(--waiting); }
   .step .res.run { background: var(--working); animation: pulse 1s ease-in-out infinite; }
+  .step.err code { color: var(--waiting); }
   @keyframes pulse { 50% { opacity: .3; } }
-  .turn .said { padding: 7px 11px; border-radius: 12px 12px 12px 4px; background: rgb(var(--ink) / .05); color: var(--softer); font-size: 12.5px;
-    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+  .working { display: flex; align-items: center; gap: 4px; margin-left: 18px; color: var(--muted); font-size: 11.5px; }
+  .working i { width: 5px; height: 5px; border-radius: 50%; background: var(--thinking); animation: pulse 1.2s ease-in-out infinite; }
+  .working i:nth-child(2) { animation-delay: .2s; } .working i:nth-child(3) { animation-delay: .4s; margin-right: 4px; }
   .timeline { list-style: none; padding: 8px 0 0; }
   .timeline li { position: relative; display: flex; align-items: baseline; gap: 10px; padding: 5px 0 5px 22px; font-size: 12.5px; }
   .timeline li::before { content: ''; position: absolute; left: 3px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 6px rgba(139,92,255,.6); }
@@ -383,6 +430,7 @@
 
 <script src="../shared/ui-common.js"></script>
 <script src="../shared/attachments.js"></script>
+<script src="../shared/markdown-lite.js"></script>
 <script>
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
@@ -396,6 +444,8 @@
     finishedIn: (agent, project) => `<span class="fhead"><b>${agent}</b> finished · ${project}</span>`, finishedMore: n => `+${n} more`,
     reply: 'Reply', dismissTip: 'Dismiss',
     continued: 'Continued from earlier', nFiles: n => `${n} files`,
+    nSteps: n => `${n} step${n === 1 ? '' : 's'}`, nFailed: n => `${n} failed`, earlier: n => `+ ${n} earlier step${n === 1 ? '' : 's'}`, showMore: 'Show more', showLess: 'Show less',
+    working: 'Working…',
     queuedN: n => `Waiting for this agent · ${n}`, unqueueTip: 'Remove from the queue',
     sent: 'Sent ✓',
     handoff: '⇄ Continue in Bayloob', handoffTip: 'Move this conversation into tmux, so replies go straight in (you close it in its terminal once)',
@@ -484,6 +534,7 @@
   ];
   const CONSOLE_MS = 2000; // how often the selected agent's console is refreshed
   const CONSOLE_TURNS = 8; // turns shown (the newest)
+  const STEP_TAIL = 8; // a long turn shows its last steps; the earlier ones open on request
   const STEP_ICON = { bash: '›_', read: '◔', edit: '✎', write: '＋', search: '⌕', web: '◍', todo: '☑', agent: '⧉', question: '?', tool: '•' };
   // Consecutive reads / searches fold into one row ("Read · 3 files"); everything else stays a row each
   function groupSteps(steps) {
@@ -500,12 +551,17 @@
     }
     return out;
   }
-  function stepHtml(g, running) {
-    const detail = g.count > 1 ? T.nFiles(g.count) : g.detail;
-    const tip = g.details.filter(Boolean).join('\n');
-    const dur = g.durationMs >= 1000 ? `<span class="dur">${(g.durationMs / 1000).toFixed(g.durationMs < 10000 ? 1 : 0)}s</span>` : '';
+  const secs = ms => !(ms >= 1000) ? '' : ms < 60000 ? `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s` : `${Math.floor(ms / 60000)}m ${Math.round(ms % 60000 / 1000)}s`;
+  const clock = at => at ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  // One step row: the kind's icon, what it ran or touched (the label only where the icon isn't enough), time, result.
+  // Opened (click): the whole command / every file, wrapped.
+  function stepHtml(g, running, open, key) {
+    const detail = g.count > 1 ? (open ? g.details.filter(Boolean).join('\n') : T.nFiles(g.count)) : g.detail;
+    const label = g.kind === 'bash' || !detail ? '' : `<span class="st">${esc(g.title)}</span>`;
+    const dur = secs(g.durationMs) ? `<span class="dur">${secs(g.durationMs)}</span>` : '';
     const res = running ? 'run' : g.result || '';
-    return `<div class="step ${g.kind}" title="${esc(tip)}"><span class="si">${STEP_ICON[g.kind] || '•'}</span><span class="st">${esc(g.title)}</span><code>${esc(detail || '')}</code>${dur}<span class="res ${res}"></span></div>`;
+    return `<div class="step ${g.kind}${open ? ' open' : ''}${res === 'error' ? ' err' : ''}" data-toggle="${key}" title="${esc(g.details.filter(Boolean).join('\n'))}">` +
+      `<span class="si">${STEP_ICON[g.kind] || '•'}</span>${label}<code>${esc(detail || g.title)}</code>${dur}<span class="res ${res}"></span></div>`;
   }
   const BUSY = new Set(['thinking', 'working', 'waiting']); // a prompt sent now is queued for the end of the turn
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
@@ -588,6 +644,7 @@
     #slashAt = 0;
     #queueAt = 0;
     #consoleLoading = new Set();
+    #toggled = new Set(); // console parts the user opened or folded: steps:<turn>, all:<turn>, step:<turn>:<n>, you:<turn>, said:<turn>
     #answers = new Map();   // question perm id -> Map(question -> Set(labels))
     #permRead = new Set();  // perm ids whose command was scrolled to its end
     #permShown = new Map(); // perm id -> when the panel first showed it (the cooling pause counts from there)
@@ -850,7 +907,8 @@
       if (this.#pressing) { this.#renderLater = true; return; }
       const item = this.launchMode ? null : this.current;
       if (!item) { this.el.detail.innerHTML = ''; return; }
-      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span>${T.kind[item.category] || ''}</span></div>${stateHtml(item.status)}</div>`;
+      const term = item.kind === 'agent' ? `<button type="button" class="square" data-act="terminal" title="${T.openTerminal}" aria-label="${T.openTerminal}">${ICON_TERM}</button>` : '';
+      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span>${T.kind[item.category] || ''}</span></div>${stateHtml(item.status)}${term}</div>`;
       const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
       // Keep the console's scroll: stuck to the newest step while at the bottom, left alone when scrolled up
       const old = this.el.detail.querySelector('[data-console]');
@@ -858,6 +916,7 @@
       const top = old?.scrollTop || 0;
       this.el.detail.innerHTML = head + body;
       const con = this.el.detail.querySelector('[data-console]');
+      this.el.detail.classList.toggle('has-console', !!con);
       if (con) { con.scrollTop = atBottom ? con.scrollHeight : top; }
       this.#syncPerm();
     }
@@ -1076,8 +1135,7 @@
       return `
         ${this.#inboxCard(s)}
         ${this.collisions?.[s.id] ? `<div class="clashbox ${this.collisions[s.id].level}">⚠ ${esc(this.#clashText(this.collisions[s.id]))}<small>${T.clashFix}</small></div>` : ''}
-        ${body}
-        <div class="buttons"><button class="wide" data-act="terminal">${ICON_TERM}${T.openTerminal}</button></div>`;
+        ${body}`;
     }
 
     // ---------- agent console ----------
@@ -1101,15 +1159,46 @@
       if (this.current?.id === id && JSON.stringify(r?.turns || null) !== before) { this.#renderDetail(); }
     }
 
+    // Turns, newest last. The newest turn's steps are open, older ones fold behind "N steps"; long messages fold
+    // to a few lines. What the user opened or folded is kept in #toggled across the frequent re-renders.
+    #stepsHtml(id, groups, running) {
+      const all = this.#toggled.has(`all:${id}`);
+      const from = all ? 0 : Math.max(0, groups.length - STEP_TAIL);
+      const rows = groups.slice(from).map((g, i) => {
+        const gi = from + i;
+        return stepHtml(g, running && gi === groups.length - 1, this.#toggled.has(`step:${id}:${gi}`), `step:${id}:${gi}`);
+      });
+      const earlier = groups.length > STEP_TAIL
+        ? `<button type="button" class="earlier" data-toggle="all:${id}">${all ? T.showLess : T.earlier(from)}</button>` : '';
+      return `<div class="steps">${earlier}${rows.join('')}</div>`;
+    }
+
     #consoleHtml(turns, live) {
       const shown = turns.slice(-CONSOLE_TURNS);
+      const isOn = k => this.#toggled.has(k);
+      const long = (text, lines, chars) => text.length > chars || text.split('\n').length > lines;
+      const message = (who, text, key, html) => {
+        const big = long(text, who === 'you' ? 4 : 8, who === 'you' ? 260 : 600);
+        const open = big && isOn(key);
+        return `<div class="msg ${who}${big ? ' long' : ''}${open ? ' open' : ''}">${html}</div>` +
+          (big ? `<button type="button" class="showmore ${who}" data-toggle="${key}">${open ? T.showLess : T.showMore}</button>` : '');
+      };
       return `<div class="console" data-console>${shown.map((t, ti) => {
         const last = ti === shown.length - 1;
         const running = last && live && t.status === 'running';
-        return `<div class="turn ${running ? 'running' : ''}">
-          <div class="you" title="${esc(t.prompt)}">${t.prompt ? esc(t.prompt) : `<i>${T.continued}</i>`}</div>
-          <div class="steps">${groupSteps(t.steps).map((g, gi, all) => stepHtml(g, running && gi === all.length - 1)).join('')}</div>
-          ${t.summary ? `<div class="said" title="${esc(t.summary)}">${esc(t.summary)}</div>` : ''}
+        const id = esc(t.id);
+        const groups = groupSteps(t.steps);
+        const open = last !== isOn(`steps:${id}`); // the newest is open unless folded; older ones the other way round
+        const failed = t.steps.filter(s => s.result === 'error').length;
+        const took = t.startedAt && t.endedAt ? secs(t.endedAt - t.startedAt) : '';
+        const time = clock(t.startedAt);
+        return `<div class="turn">
+          ${time || running ? `<div class="tsep">${running ? `<span class="live">● ${T.now}</span>${time ? ` · ${time}` : ''}` : time}</div>` : ''}
+          ${message('you', t.prompt || '', `you:${id}`, t.prompt ? renderMarkdown(t.prompt) : `<i class="cont">${T.continued}</i>`)}
+          ${groups.length ? `<button type="button" class="fold${open ? ' open' : ''}" data-toggle="steps:${id}"><span class="chev">›</span>${T.nSteps(t.steps.length)}${failed ? ` · <span class="err">${T.nFailed(failed)}</span>` : ''}${took ? ` <span class="dim">· ${took}</span>` : ''}</button>` : ''}
+          ${groups.length && open ? this.#stepsHtml(id, groups, running) : ''}
+          ${running ? `<div class="working"><i></i><i></i><i></i>${T.working}</div>` : ''}
+          ${t.summary ? message('said', t.summary, `said:${id}`, renderMarkdown(t.summary)) : ''}
         </div>`;
       }).join('')}</div>`;
     }
@@ -1531,6 +1620,13 @@
         const item = this.current;
         if (!item) { return; }
         if (item.kind === 'agent' && await this.#inboxAct(item.data, e.target)) { return; }
+        const toggle = e.target.closest('[data-toggle]');
+        // Selecting text in a step or message isn't a click to fold it
+        if (toggle && !String(getSelection()).trim()) {
+          const k = toggle.dataset.toggle;
+          this.#toggled.has(k) ? this.#toggled.delete(k) : this.#toggled.add(k);
+          return this.#renderDetail();
+        }
         const win = e.target.closest('[data-window]');
         if (win) { return this.#run(this.api?.focusApp(item.id, win.dataset.window)); }
         if (e.target.closest('[data-docker-cancel]')) { this.dockerAsk = null; return this.#renderDetail(); }

@@ -11,6 +11,17 @@ const clip = s => {
     .trim();
   return t.length > DETAIL_MAX ? `${t.slice(0, DETAIL_MAX - 1)}…` : t;
 };
+// Prompts and answers keep their lines: the console renders them as Markdown
+const PROMPT_MAX = 2000;
+const SUMMARY_MAX = 6000;
+const clipText = (s, max) => {
+  const t = String(s ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+};
 const rel = (file, cwd) => {
   if (!file) {
     return "";
@@ -25,7 +36,7 @@ class TurnLog {
   start(prompt, at, id = null) {
     this.turns.push({
       id: id || `t${this.turns.length}-${at || 0}`,
-      prompt: clip(prompt),
+      prompt: clipText(prompt, PROMPT_MAX),
       startedAt: at || null,
       endedAt: null,
       status: "running",
@@ -158,7 +169,7 @@ class ClaudeAdapter {
           turn.steps.push(step);
           this.#steps.set(p.id, step);
         } else if (p?.type === "text" && p.text?.trim()) {
-          turn.summary = clip(p.text);
+          turn.summary = clipText(p.text, SUMMARY_MAX);
         }
       }
     }
@@ -199,7 +210,7 @@ class CodexAdapter {
       t.status = "done";
       t.endedAt = at;
       if (p.last_agent_message) {
-        t.summary = clip(p.last_agent_message);
+        t.summary = clipText(p.last_agent_message, SUMMARY_MAX);
       }
     } else if (p.type === "item_completed") {
       this.#item(p.item || {}, p.started_at_ms || at, p.completed_at_ms);
@@ -213,12 +224,12 @@ class CodexAdapter {
     switch (it.type) {
       case "UserMessage":
         if (!turn.prompt) {
-          turn.prompt = clip(text);
+          turn.prompt = clipText(text, PROMPT_MAX);
         }
         break;
       case "AgentMessage":
         if (text.trim()) {
-          turn.summary = clip(text);
+          turn.summary = clipText(text, SUMMARY_MAX);
         }
         break;
       case "CommandExecution": {
