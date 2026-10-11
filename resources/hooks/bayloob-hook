@@ -27,6 +27,9 @@ q+="&wez=$(enc "${WEZTERM_PANE:-}")&tmux=$(enc "${TMUX_PANE:-}")"
 path="/ev"
 # Permission request: wait for the user's answer in Bayloob and hand the decision back to the agent
 if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PermissionRequest\" ]]; then path="/perm"; fi
+# A prompt (Claude Code): Bayloob may answer with the owner's response format as hidden context
+wait=""
+if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"UserPromptSubmit\" ]]; then wait=1; fi
 # A question from the agent: wait for the answer picked in Bayloob (PreToolUse can carry the answers)
 if [[ $body =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" && $body =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"AskUserQuestion\" ]]; then path="/perm"; fi
 
@@ -38,6 +41,10 @@ if [ "$path" = "/perm" ]; then
   resp="$(cat <&3)"                     # blocks until the server replies and closes
   out="${resp#*$'\r\n\r\n'}"
   [ -n "$out" ] && printf '%s' "$out"   # empty → the agent shows its normal terminal prompt
+elif [ -n "$wait" ]; then
+  resp="$(timeout 2 cat <&3 2>/dev/null)"
+  out="${resp#*$'\r\n\r\n'}"
+  [[ $out == "{"* ]] && printf '%s' "$out"   # only JSON (an older Bayloob answers "ok")
 else
   read -r -t 1 -u 3 _ 2>/dev/null
 fi

@@ -152,6 +152,18 @@
     return template.split(PLACEHOLDER).join(body);
   }
 
+  /**
+   * A format's rules on their own (no prompt, no "---" rule): what Claude Code gets as hidden context from its
+   * UserPromptSubmit hook, so the chat shows only what the owner typed.
+   */
+  function instructions(text) {
+    return String(text || "")
+      .split(PLACEHOLDER)
+      .join("")
+      .replace(/^\s*-{3,}\s*$/m, "")
+      .trim();
+  }
+
   /** The prompt as the agent gets it (see resolve). */
   function apply(prompt, v, ctx = {}) {
     return wrap(prompt, resolve(v, ctx)?.text);
@@ -161,6 +173,7 @@
     apply,
     wrap,
     resolve,
+    instructions,
     formats,
     normalize,
     BUILTIN,

@@ -345,6 +345,7 @@ class BayloobApp {
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
     this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
     // A rule allowed something without a card: say so briefly, so nothing passes unseen
+    this.server.promptContext = info => this.#formatContext(info);
     this.server.onRuleAllow = info =>
       this.overlay.send("rule-allowed", {
         ...info,
@@ -1046,8 +1047,44 @@ class BayloobApp {
    * The owner's prompt in its response format: `choice` picked in the prompt box, else the agent's, else the
    * default (Settings). Never for a workflow's or a challenger's prompt.
    */
-  #formatted(text, agent = null, choice = undefined) {
+  #formatted(text, agent = null, choice = undefined, pane = null) {
+    // Claude Code: the prompt goes as typed; its UserPromptSubmit hook gets the format as hidden context
+    // (#formatContext), so the chat shows only what you wrote. A format picked for this one prompt waits there.
+    if (agent === "claude") {
+      if (choice !== undefined && pane) {
+        this.#formatChoice.set(pane, choice);
+      }
+      return text;
+    }
     return PromptFormat.apply(text, this.settings.get("promptFormat"), { agent, choice });
+  }
+
+  #formatChoice = new Map(); // tmux pane → the format picked for the next prompt there ('none' or an id)
+
+  // A Claude prompt is being submitted: the format's rules as hidden context — the owner's prompts only (never a
+  // task's agents or a challenger, whose answers Bayloob reads)
+  #formatContext({ tmux, role, task }) {
+    if (role || task) {
+      return null;
+    }
+    const choice = tmux && this.#formatChoice.has(tmux) ? this.#formatChoice.get(tmux) : undefined;
+    if (tmux) {
+      this.#formatChoice.delete(tmux);
+    }
+    const f = PromptFormat.resolve(this.settings.get("promptFormat"), { agent: "claude", choice });
+    return f ? PromptFormat.instructions(f.text) : null;
+  }
+
+  /** A session the owner starts (launcher, Ask Bayloob, New task): its first prompt in its response format. */
+  async #launchOwn(opts) {
+    const launch = await this.launch({
+      ...opts,
+      prompt: this.#formatted(opts?.prompt, opts?.agent, opts?.format),
+    });
+    if (opts?.agent === "claude" && opts.format !== undefined && launch.paneId) {
+      this.#formatChoice.set(launch.paneId, opts.format);
+    }
+    return launch;
   }
 
   /** Types (tmux), queues (busy) or copies (other terminals) a prompt for a session — see PromptDelivery. */
@@ -1535,11 +1572,7 @@ class BayloobApp {
 
     // Launcher
     // The owner's prompts (a new session, the prompt box, the queue) go out in the response format, if one is on
-    ipcMain.handle("launcher:launch", (_e, opts) =>
-      result(() =>
-        this.launch({ ...opts, prompt: this.#formatted(opts?.prompt, opts?.agent, opts?.format) })
-      )
-    );
+    ipcMain.handle("launcher:launch", (_e, opts) => result(() => this.#launchOwn(opts)));
     // The formats a prompt box offers: [{ id, name }], and which one each agent gets by default
     ipcMain.handle("prompt-formats", () => {
       const f = this.settings.get("promptFormat");
@@ -1562,7 +1595,10 @@ class BayloobApp {
         if (!s) {
           throw new Error("This session has ended");
         }
-        return await this.deliverPrompt(s, this.#formatted(String(text), s.agent, format));
+        return await this.deliverPrompt(
+          s,
+          this.#formatted(String(text), s.agent, format, s.term?.tmux || null)
+        );
       } catch (e) {
         return { ok: false, error: e.message };
       }
@@ -1831,13 +1867,7 @@ class BayloobApp {
     });
     ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
       const cwd = expandHome(String(opts?.cwd || "").trim());
-      const res = await result(() =>
-        this.launch({
-          ...opts,
-          cwd,
-          prompt: this.#formatted(opts?.prompt, opts?.agent, opts?.format),
-        })
-      );
+      const res = await result(() => this.#launchOwn({ ...opts, cwd }));
       if (res.ok) {
         this.tasks.rememberCategory(cwd, "single");
         if (draftId) {

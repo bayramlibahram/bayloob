@@ -62,3 +62,15 @@ test("response format: the first version's { on, text } becomes a default format
     custom: [{ id: "c-mine", name: "My format", text: "Short.\n{{prompt}}" }],
   });
 });
+
+test("response format: a format's rules on their own, for Claude Code's hidden context", () => {
+  assert.equal(
+    F.instructions(F.ADHD),
+    "How to answer (ADHD-friendly):\n- Short. The most important thing first.\n- Bullets, not paragraphs; 3–5 per group at most.\n- Bold the key words.\n- Steps as a numbered list.\n- End with one line: what's next."
+  );
+  assert.equal(
+    F.instructions("Answer briefly:\n{{prompt}}\n(bullets)"),
+    "Answer briefly:\n\n(bullets)"
+  );
+  assert.equal(F.instructions(""), "");
+});

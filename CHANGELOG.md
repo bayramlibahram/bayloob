@@ -41,6 +41,8 @@
     agent's (Settings → Agents → Response format), else the default (none until you choose one).
   - Workflow, Arbiter and Challenge prompts never get one (Bayloob reads their answers), slash commands go as they
     are, and nothing is wrapped twice.
+  - **Claude Code gets it as hidden context** through its UserPromptSubmit hook, so its chat shows only what you
+    typed (checked on Claude Code 2.1.296). Codex and Gemini CLI have no such hook: their prompt carries the format.
 - **Expand** in the Workspace window (the button in the detail's header, or Ctrl+Shift+E): the detail or an
   agent's console takes the list's place too.
 

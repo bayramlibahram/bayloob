@@ -170,6 +170,26 @@ class EventServer {
   onRuleAllow = null; // ({ sessionId, key, command }) => void: a standing rule allowed a request without a card
 
   // token: the shared secret every request must carry (X-Bayloob-Token header or ?t=); without one, nothing is accepted
+  /** ({ id, tmux, role, task }) → the response format's rules for this Claude prompt, or null (set by the app) */
+  promptContext = null;
+
+  #promptContext(id, query) {
+    try {
+      const tmux = query.get("tmux") || null;
+      const s = this.store.get(id);
+      return (
+        this.promptContext?.({
+          id,
+          tmux,
+          role: this.store.roleOf(id, tmux),
+          task: s?.task || null,
+        }) || null
+      );
+    } catch {
+      return null;
+    }
+  }
+
   constructor({ port = PORT, store = new SessionStore(), token = null } = {}) {
     this.port = port;
     this.store = store;
@@ -297,6 +317,17 @@ class EventServer {
 
       if (isPerm) {
         this.#onPermission(id, agent, ev, query, res);
+      } else if (ev.hook_event_name === "UserPromptSubmit") {
+        // Claude Code takes the owner's response format as hidden context (the chat shows only the prompt)
+        const ctx = agent === "claude" ? this.#promptContext(id, query) : null;
+        res.end(
+          ctx
+            ? JSON.stringify({
+                hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: ctx },
+              })
+            : ""
+        );
+        this.#onEvent(id, agent, ev, query);
       } else {
         res.end("ok");
         this.#onEvent(id, agent, ev, query);
