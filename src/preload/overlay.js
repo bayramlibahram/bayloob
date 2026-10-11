@@ -13,7 +13,8 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   openLauncher: () => ipcRenderer.send("open-launcher"),
   openPrompt: (sessionId, text) => ipcRenderer.send("open-prompt", sessionId, text),
   sendPrompt: (sessionId, text) => ipcRenderer.invoke("launcher:send-prompt", sessionId, text),
-  keyboard: on => ipcRenderer.send("overlay-keyboard", on),
+  // Wait until the native window is focusable before the renderer focuses a text field.
+  keyboard: on => ipcRenderer.invoke("overlay-keyboard", on),
   setFull: on => ipcRenderer.send("overlay-full", on),
   voiceStatus: () => ipcRenderer.invoke("voice-status"),
   transcribe: audio => ipcRenderer.invoke("voice-transcribe", audio),

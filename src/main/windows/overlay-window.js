@@ -1,5 +1,6 @@
 const { app, BrowserWindow, screen } = require("electron");
 const paths = require("../app/paths");
+const { overlayFocusOptions } = require("./overlay-focus");
 const { overlayPosition, rememberTopBar } = require("./overlay-position");
 
 const IS_LINUX = process.platform === "linux";
@@ -35,6 +36,7 @@ class OverlayWindow {
       height: HEIGHT,
       x,
       y,
+      ...overlayFocusOptions(),
       frame: false,
       transparent: true,
       backgroundColor: "#00000000",
@@ -42,7 +44,6 @@ class OverlayWindow {
       movable: false,
       skipTaskbar: true,
       hasShadow: false,
-      focusable: false,
       alwaysOnTop: true,
       type: IS_LINUX ? "dock" : undefined, // above every window, not managed (moved, tiled) by the WM
       webPreferences: { preload: paths.preload("overlay") },
@@ -71,6 +72,9 @@ class OverlayWindow {
       const audioOnly = (details.mediaTypes || []).every(t => t === "audio");
       grant(wc === this.win?.webContents && audioOnly);
     });
+    if (IS_LINUX) {
+      this.win.once("ready-to-show", () => this.win?.showInactive());
+    }
     this.win.loadFile(paths.page("overlay"), { query: { mascot: this.mascot } });
     // The exact top bar comes from the GNOME extension (async); screens and scaling can change any time
     this.place();
@@ -144,12 +148,14 @@ class OverlayWindow {
   }
 
   // The overlay normally never takes keyboard focus (it would steal it from the user's work); typing a reply
-  // into a card turns that on until the reply is sent or abandoned
+  // into a card turns that on until the reply is sent or abandoned. Linux focusability is fixed at creation.
   setKeyboard(on) {
     if (!this.win) {
       return;
     }
-    this.win.setFocusable(on);
+    if (!IS_LINUX) {
+      this.win.setFocusable(on);
+    }
     if (on) {
       this.win.focus();
       this.win.webContents.focus();

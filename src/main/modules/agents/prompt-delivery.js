@@ -7,24 +7,34 @@ class PromptDelivery {
   /**
    * @param queue    PromptQueue
    * @param typeInto (tmuxPane, text) => Promise — types the text and presses Enter
+   * @param hasPane  tmuxPane => Promise<boolean> — the pane still exists (a gone one falls back to the clipboard)
    * @param copy     text => void — clipboard
    * @param focus    session => Promise<{ ok }> — brings the session's terminal forward
    * @param onQueued () => void — the queue changed
    */
-  constructor({ queue, typeInto, copy, focus, onQueued = () => {} }) {
-    Object.assign(this, { queue, typeInto, copy, focus, onQueued });
+  constructor({ queue, typeInto, copy, focus, hasPane = async () => true, onQueued = () => {} }) {
+    Object.assign(this, { queue, typeInto, copy, focus, hasPane, onQueued });
   }
 
   /** → { ok, via: 'tmux' | 'clipboard', queued?, focused? } */
   async deliver(session, text) {
-    if (session.term?.tmux) {
+    const pane = session.term?.tmux;
+    if (pane && (await this.hasPane(pane))) {
       if (PromptQueue.isBusy(session)) {
         this.queue.add(session.id, text);
         this.onQueued();
         return { ok: true, via: "tmux", queued: true };
       }
-      await this.typeInto(session.term.tmux, text);
-      return { ok: true, via: "tmux" };
+      try {
+        await this.typeInto(pane, text);
+        return { ok: true, via: "tmux" };
+      } catch (error) {
+        // The pane can disappear between the check above and send-keys. Only hide that race;
+        // errors from a pane that is still alive (for example, the agent exited to a shell) matter.
+        if (await this.hasPane(pane)) {
+          throw error;
+        }
+      }
     }
     this.copy(text);
     const focused = await this.focus(session).catch(() => null);

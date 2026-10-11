@@ -20,6 +20,9 @@ const TERM_ENV = {
 // Claude Code's own status for the session (busy / idle / waiting); also how Bayloob notices a turn that
 // ended without a Stop hook (an interrupted turn doesn't send one)
 const CLAUDE_STATES = { busy: "thinking", idle: "idle", waiting: "idle" };
+const CODEX_STATES = { task_started: "thinking", task_complete: "done" };
+const ROLLOUT_CHUNK = 64 * 1024;
+const ROLLOUT_LINE_MAX = 1024 * 1024;
 
 const read = file => {
   try {
@@ -64,7 +67,77 @@ const link = file => {
   }
 };
 
+// Reads backwards, so a large rollout (some exceed 90 MB) doesn't get loaded just to find the newest
+// task_started / task_complete event. Giant output lines are skipped; lifecycle lines are always small.
+function lastCodexState(file, size, from = 0, fallbackAt = Date.now()) {
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    let pos = size;
+    let tail = "";
+    let skipTail = false;
+    const stateOf = line => {
+      if (!line || line.length > ROLLOUT_LINE_MAX) {
+        return null;
+      }
+      try {
+        const ev = JSON.parse(line);
+        const state = ev.type === "event_msg" && CODEX_STATES[ev.payload?.type];
+        if (!state) {
+          return null;
+        }
+        const parsedAt = Date.parse(ev.timestamp);
+        return { state, statusAt: Number.isFinite(parsedAt) ? parsedAt : fallbackAt };
+      } catch {
+        return null;
+      }
+    };
+
+    while (pos > from) {
+      const length = Math.min(ROLLOUT_CHUNK, pos - from);
+      pos -= length;
+      const buffer = Buffer.allocUnsafe(length);
+      fs.readSync(fd, buffer, 0, length, pos);
+      const parts = buffer.toString("utf8").split("\n");
+      if (parts.length === 1) {
+        if (!skipTail && parts[0].length + tail.length <= ROLLOUT_LINE_MAX) {
+          tail = parts[0] + tail;
+        } else {
+          tail = "";
+          skipTail = true;
+        }
+        continue;
+      }
+
+      const end = parts.pop();
+      if (!skipTail) {
+        const found = stateOf(end + tail);
+        if (found) {
+          return found;
+        }
+      }
+      for (let i = parts.length - 1; i > 0; i--) {
+        const found = stateOf(parts[i]);
+        if (found) {
+          return found;
+        }
+      }
+      tail = parts[0];
+      skipTail = tail.length > ROLLOUT_LINE_MAX;
+    }
+    return from === 0 && !skipTail ? stateOf(tail) : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) {
+      fs.closeSync(fd);
+    }
+  }
+}
+
 class AgentDiscovery {
+  #rolloutStates = new Map(); // file -> { size, mtimeMs, state, statusAt }; appended bytes are rescanned
+
   /** @param proc /proc  @param home the user's home (session files) — both replaceable for tests */
   constructor({ proc = "/proc", home = os.homedir() } = {}) {
     this.proc = proc;
@@ -167,12 +240,14 @@ class AgentDiscovery {
       if (!meta?.id) {
         continue;
       }
+      const status = this.#codexStatus(rollout);
       out.push({
         agent: "codex",
         sessionId: meta.id,
         pid: Number(pid),
         cwd: meta.cwd || cwd,
-        state: "idle",
+        state: status?.state || "idle",
+        statusAt: status?.statusAt || null,
         transcript: null,
         term: this.#term(pid),
       });
@@ -181,17 +256,26 @@ class AgentDiscovery {
   }
 
   #openRollout(base) {
+    const files = [];
     try {
       for (const fd of fs.readdirSync(path.join(base, "fd"))) {
         const target = link(path.join(base, "fd", fd));
         if (target && /\/rollout-[^/]+\.jsonl$/.test(target)) {
-          return target;
+          files.push(target);
         }
       }
     } catch {
       // not ours to read
     }
-    return null;
+    // Current Codex keeps its own CLI rollout and internal subagent rollouts (for example guardian)
+    // open in the same process. The first fd is arbitrary; choosing a finished subagent makes an active
+    // CLI look idle. Prefer the terminal conversation, then any rollout that isn't marked as a subagent.
+    return (
+      files.find(file => this.#rolloutMeta(file)?.source === "cli") ||
+      files.find(file => !this.#rolloutMeta(file)?.source?.subagent) ||
+      files[0] ||
+      null
+    );
   }
 
   // The newest rollout whose session was started in `cwd` (looks at the most recent files only)
@@ -231,6 +315,30 @@ class AgentDiscovery {
     } catch {
       return null;
     }
+  }
+
+  #codexStatus(file) {
+    let stat;
+    try {
+      stat = fs.statSync(file);
+    } catch {
+      return null;
+    }
+    const cached = this.#rolloutStates.get(file);
+    if (cached?.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+      return cached;
+    }
+    // Keep one chunk of overlap in case the previous read ended in the middle of an appended line.
+    const appended = cached && stat.size > cached.size && stat.mtimeMs >= cached.mtimeMs;
+    const from = appended ? Math.max(0, cached.size - ROLLOUT_CHUNK) : 0;
+    const found = lastCodexState(file, stat.size, from, stat.mtimeMs);
+    const status = {
+      ...(found || (appended ? cached : null) || {}),
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+    };
+    this.#rolloutStates.set(file, status);
+    return status;
   }
 }
 

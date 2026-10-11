@@ -41,6 +41,25 @@ test("a launched session shows up at once and the real one takes over its tmux p
   assert.equal(store.list().length, 0);
 });
 
+test("Bayloob tmux ownership is recovered after the app restarts", () => {
+  const store = new SessionStore();
+  store.adopt([
+    {
+      agent: "codex",
+      sessionId: "x-1",
+      cwd: "/w/site",
+      state: "done",
+      term: { pid: "501", tmux: "%3" },
+    },
+  ]);
+  const s = store.get("codex:x-1");
+  assert.equal(s.managed, null);
+  assert.equal(s.stoppable, true, "a verified discovered process can be stopped directly");
+  assert.equal(store.recoverLaunches(new Map([["%3", "bl-site-1"]])), true);
+  assert.equal(s.managed, "bl-site-1");
+  assert.deepEqual(store.launchedNames(), ["bl-site-1"]);
+});
+
 test("stale sessions are pruned, but not ones with a pending permission", () => {
   const store = new SessionStore();
   store.upsert("old", "claude", { cwd: "/a" }, q(), {});

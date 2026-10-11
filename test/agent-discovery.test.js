@@ -71,17 +71,21 @@ test("finds Claude by its session file and Codex by its rollout; skips ended, re
       ".claude/sessions/103.json",
       JSON.stringify({ pid: 103, sessionId: "c-3", cwd: "/w/x", procStart: "7" })
     );
-    // Codex on a terminal with its rollout open
+    // Codex on a terminal: an internal subagent rollout may have a lower fd than the main CLI rollout
+    const guardian = fx.write(
+      ".codex/sessions/2026/10/10/rollout-2026-10-10T09-59-59-guardian.jsonl",
+      `${JSON.stringify({ type: "session_meta", payload: { id: "guard", cwd: "/w/api", source: { subagent: { other: "guardian" } } } })}\n`
+    );
     const rollout = fx.write(
       ".codex/sessions/2026/10/10/rollout-2026-10-10T10-00-00-x-1.jsonl",
-      `${JSON.stringify({ type: "session_meta", payload: { id: "x-1", cwd: "/w/api" } })}\n{"type":"event"}\n`
+      `${JSON.stringify({ type: "session_meta", payload: { id: "x-1", cwd: "/w/api", source: "cli" } })}\n{"type":"event"}\n`
     );
     fx.mkproc(201, {
       comm: "codex",
       start: 1,
       cwd: "/w/api",
       env: { KITTY_WINDOW_ID: "3" },
-      fds: { 0: "/dev/pts/1", 9: rollout },
+      fds: { 0: "/dev/pts/1", 8: guardian, 9: rollout },
     });
     // Codex without a terminal (an editor extension's server) → skipped
     fx.mkproc(202, { comm: "codex", start: 1, cwd: "/w/api", fds: { 0: "socket:[1]" } });
@@ -97,6 +101,43 @@ test("finds Claude by its session file and Codex by its rollout; skips ended, re
     assert.equal(found[0].transcript, transcript);
     assert.deepEqual(found[0].term, { pid: "101", tmux: "%4", term: "tmux" });
     assert.deepEqual(found[1].term, { pid: "201", kitty: "3" });
+  } finally {
+    fs.rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("Codex follows task lifecycle events appended to its rollout", () => {
+  const fx = fixture();
+  try {
+    const startedAt = "2026-10-10T10:00:01.000Z";
+    const doneAt = "2026-10-10T10:00:02.000Z";
+    const rollout = fx.write(
+      ".codex/sessions/2026/10/10/rollout-2026-10-10T10-00-00-x-1.jsonl",
+      `${JSON.stringify({ type: "session_meta", payload: { id: "x-1", cwd: "/w/api" } })}\n${JSON.stringify({ timestamp: startedAt, type: "event_msg", payload: { type: "task_started" } })}\n`
+    );
+    fx.mkproc(201, {
+      comm: "codex",
+      start: 1,
+      cwd: "/w/api",
+      fds: { 0: "/dev/pts/1", 9: rollout },
+    });
+    const discovery = new AgentDiscovery({ proc: fx.proc, home: fx.home });
+    const store = new SessionStore();
+
+    const active = discovery.find()[0];
+    assert.equal(active.state, "thinking");
+    assert.equal(active.statusAt, Date.parse(startedAt));
+    assert.equal(store.adopt([active], Date.parse(startedAt) + 10), true);
+    assert.equal(store.get("codex:x-1").state, "thinking");
+
+    fs.appendFileSync(
+      rollout,
+      `${JSON.stringify({ timestamp: doneAt, type: "event_msg", payload: { type: "task_complete" } })}\n`
+    );
+    const done = discovery.find()[0];
+    assert.equal(done.state, "done");
+    assert.equal(store.adopt([done], Date.parse(doneAt) + 10), true);
+    assert.equal(store.get("codex:x-1").state, "done");
   } finally {
     fs.rmSync(fx.root, { recursive: true, force: true });
   }
@@ -163,8 +204,9 @@ test("a busy session whose agent reports idle later is set idle (an interrupted 
     term: { pid: "101" },
   };
   // Agent's status is older than our last event: keep "working"
-  assert.equal(store.adopt([{ ...idle, statusAt: s.updatedAt - 5000 }]), false);
+  assert.equal(store.adopt([{ ...idle, statusAt: s.updatedAt - 5000 }]), true);
   assert.equal(s.state, "working");
+  assert.equal(s.stoppable, true, "discovery also supplies a verified process to stop");
   // Newer: the turn ended
   assert.equal(store.adopt([{ ...idle, statusAt: s.updatedAt + 1000 }]), true);
   assert.equal(s.state, "idle");

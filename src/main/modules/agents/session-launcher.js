@@ -4,7 +4,7 @@ const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { agentCommand } = require("./agents");
+const { AGENTS, agentCommand } = require("./agents");
 const { TerminalLauncher } = require("../../infrastructure/system/terminal-launcher");
 
 const PREFIX = "bl-";
@@ -120,6 +120,18 @@ class SessionLauncher {
     return this.terminal.open(["tmux", "attach-session", "-t", name], { terminal });
   }
 
+  /** Whether tmux still has this pane — an agent can outlive its pane and keep reporting the old id */
+  async hasPane(paneId) {
+    if (!/^%\d+$/.test(String(paneId))) {
+      return false;
+    }
+    // has-session, not display-message: display-message -p exits 0 for a pane that's gone (tmux 3.6)
+    return tmux(["has-session", "-t", paneId]).then(
+      () => true,
+      () => false
+    );
+  }
+
   /**
    * Types `text` into the agent's input and submits it: one bracketed paste (newlines stay newlines),
    * then Enter once, after ENTER_DELAY_MS so the agent doesn't take it as part of the paste.
@@ -156,6 +168,41 @@ class SessionLauncher {
 
   async stop(name) {
     await tmux(["kill-session", "-t", name]);
+  }
+
+  /** Stops a discovered agent that no longer has a tmux session to kill. */
+  stopProcess(pid, agent) {
+    const n = Number(pid);
+    const expected = AGENTS[agent]?.bin;
+    if (!Number.isSafeInteger(n) || n <= 1 || !expected) {
+      throw new Error("No verified agent process for this session");
+    }
+    let comm = "";
+    try {
+      comm = fs.readFileSync(`/proc/${n}/comm`, "utf8").trim();
+    } catch {
+      throw new Error("The agent process has already ended");
+    }
+    if (comm !== path.basename(expected)) {
+      throw new Error("The session PID no longer belongs to that agent");
+    }
+    process.kill(n, "SIGTERM");
+  }
+
+  /** Pane id -> Bayloob tmux session name. Used to recover ownership after Bayloob restarts. */
+  async managedPanes() {
+    try {
+      const lines = (await tmux(["list-panes", "-a", "-F", "#{pane_id}\t#{session_name}"]))
+        .split("\n")
+        .filter(Boolean);
+      return new Map(
+        lines
+          .map(line => line.split("\t"))
+          .filter(([pane, name]) => /^%\d+$/.test(pane) && name?.startsWith(PREFIX))
+      );
+    } catch {
+      return new Map(); // no tmux server running
+    }
   }
 
   /** Names of Bayloob-launched tmux sessions that are still alive. */

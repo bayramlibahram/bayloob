@@ -1197,7 +1197,7 @@
       const armed = this.confirmStop === s.id;
       return [
         !s.perm ? `<button class="icon" data-act="prompt" data-sid="${sid}" title="${T.sendPrompt}">${ICON_PROMPT}</button>` : '',
-        s.managed ? `<button class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
+        s.stoppable ? `<button class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
         `<button class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}">${ICON_TERM}</button>`,
       ].join('');
     }
@@ -1523,7 +1523,12 @@
 
     #bindEvents() {
       const { pill } = this.el;
-      pill.addEventListener('click', e => this.#onClick(e));
+      pill.addEventListener('click', e => {
+        this.#onClick(e);
+        // On Linux the window must stay natively focusable. Hand focus back after ordinary controls;
+        // the reply form keeps it until sending or leaving the field.
+        if (!e.target.closest('.reply')) { this.api?.keyboard(false); }
+      });
       pill.addEventListener('pointerdown', () => { this.#pressing = true; });
       // Released anywhere (or cancelled): let the click fire first, then catch up on held renders
       const release = () => {
@@ -1536,8 +1541,14 @@
       window.addEventListener('blur', release);
       // Done card reply box: the overlay takes keyboard focus only while it's being typed into
       const card = this.el.card;
-      card.addEventListener('pointerdown', e => {
-        if (e.target.closest('.rtext')) { this.#reply.focused = true; this.api?.keyboard(true); }
+      card.addEventListener('pointerdown', async e => {
+        const input = e.target.closest('.rtext');
+        if (!input) { return; }
+        this.#reply.focused = true;
+        // Wait for the native focus handoff, then focus the field: on platforms that toggle
+        // focusability, the original pointer event is otherwise already over.
+        try { await this.api?.keyboard(true); } catch { return; }
+        if (input.isConnected && this.#reply.focused) { input.focus(); }
       });
       card.addEventListener('focusin', e => {
         if (e.target.closest('.rtext')) { this.#reply.focused = true; }

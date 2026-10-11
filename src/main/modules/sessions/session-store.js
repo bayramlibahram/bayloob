@@ -79,6 +79,7 @@ class SessionStore extends EventEmitter {
       perm: old?.perm || null,
       term,
       managed: launch?.name || old?.managed || null,
+      stoppable: !!(launch?.name || term.agentPid || old?.stoppable),
       role: launch?.role || old?.role || null,
       transcript: ev.transcript_path || old?.transcript || null,
       activity: old?.activity || null,
@@ -135,6 +136,23 @@ class SessionStore extends EventEmitter {
       const known = this.#sessions.get(id);
       if (known) {
         known.aliveAt = now;
+        if (!known.stoppable && a.term?.pid) {
+          known.term = { ...(a.term || {}), ...(known.term || {}), agentPid: String(a.term.pid) };
+          known.stoppable = true;
+          changed = true;
+        }
+        // Codex has no start hook, but its rollout records task_started/task_complete. Discovery reads
+        // those events, so an existing row must follow them as well as using them when first adopted.
+        if (
+          a.agent === "codex" &&
+          a.state &&
+          a.state !== known.state &&
+          a.statusAt &&
+          a.statusAt > known.updatedAt
+        ) {
+          Object.assign(known, { state: a.state, tool: null, updatedAt: now });
+          changed = true;
+        }
         // The agent says it's idle, later than our last event, while we think it's busy: its turn ended
         // without a Stop hook (e.g. interrupted with Esc). Without this, prompts would queue forever.
         const busy = known.state === "thinking" || known.state === "working";
@@ -166,6 +184,7 @@ class SessionStore extends EventEmitter {
         perm: null,
         term: a.term || {},
         managed: null,
+        stoppable: !!a.term?.pid,
         role: null,
         transcript: a.transcript || null,
         activity: { title: "Already running", detail: a.cwd, at: now },
@@ -206,6 +225,7 @@ class SessionStore extends EventEmitter {
       perm: null,
       term: { tmux: launch.paneId },
       managed: launch.name,
+      stoppable: true,
       role: launch.role || null,
       activity: { title: "Starting…", detail: launch.cwd, at: Date.now() },
       history: [],
@@ -269,6 +289,23 @@ class SessionStore extends EventEmitter {
 
   launchedNames() {
     return [...new Set([...this.#launched.values()].map(l => l.name))];
+  }
+
+  /** Reconnects discovered rows to Bayloob's still-running tmux sessions after the app restarts. */
+  recoverLaunches(panes) {
+    let changed = false;
+    for (const s of this.#sessions.values()) {
+      const paneId = s.term?.tmux;
+      const name = paneId && panes.get(paneId);
+      if (!name || s.managed === name) {
+        continue;
+      }
+      const launch = { name, paneId, agent: s.agent, cwd: s.cwd, role: s.role || null };
+      this.#launched.set(paneId, launch);
+      Object.assign(s, { managed: name, stoppable: true });
+      changed = true;
+    }
+    return changed;
   }
 
   /** A menu read from the session's terminal (MenuWatcher), or null; returns whether it changed. */

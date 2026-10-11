@@ -157,6 +157,7 @@ class BayloobApp {
   delivery = new PromptDelivery({
     queue: this.queue,
     typeInto: (pane, text) => this.launcher.sendPrompt(pane, text),
+    hasPane: pane => this.launcher.hasPane(pane),
     copy: text => clipboard.writeText(text),
     focus: session => this.focus(session),
     onQueued: () => this.overlay.send("queues", this.queue.counts()),
@@ -277,6 +278,7 @@ class BayloobApp {
         3000
       );
     }
+    this.#reconcile().catch(() => {});
     setInterval(() => this.#reconcile(), RECONCILE_MS).unref();
     this.health = new HookHealth({ installer: this.hooks, store: this.server.store });
     this.#checkHealth();
@@ -529,6 +531,10 @@ class BayloobApp {
     if (!session) {
       return;
     }
+    // Ownership is in memory; after Bayloob restarts, recover it from the still-running bl-* pane.
+    if (session.term?.tmux && !session.managed) {
+      await this.#reconcile();
+    }
     const canPrompt = !session.perm;
     const menu = Menu.buildFromTemplate([
       { label: "Open terminal", click: () => this.focus(session) },
@@ -550,7 +556,11 @@ class BayloobApp {
         click: () => this.challenge(session).catch(() => {}),
       },
       { type: "separator" },
-      { label: "Stop session", enabled: !!session.managed, click: () => this.stopSession(session) },
+      {
+        label: "Stop session",
+        enabled: !!session.stoppable,
+        click: () => this.stopSession(session),
+      },
       {
         label: "Hide from list",
         click: () => {
@@ -602,7 +612,9 @@ class BayloobApp {
   // An error the user just copied (failing test, stack trace…) pre-fills the prompt, ready to send
   // `text`: a draft to continue (e.g. typed into a done card); otherwise a copied error pre-fills it
   // error: a stack trace to wrap in "Fix this error:" (else one on the clipboard is picked up)
-  openPromptBox(session, text = "", { error = null } = {}) {
+  async openPromptBox(session, text = "", { error = null } = {}) {
+    // A pane that's gone (the agent outlived it) can't be typed into: offer the clipboard instead
+    const typable = !!session.term?.tmux && (await this.launcher.hasPane(session.term.tmux));
     const copied = error ?? clipboard.readText();
     this.launcherWindow.show({
       mode: "prompt",
@@ -615,7 +627,7 @@ class BayloobApp {
         project: session.project,
         agentName: AGENTS[session.agent]?.name || session.agent,
         busy: PromptQueue.isBusy(session),
-        paste: !session.term?.tmux, // not in tmux: the prompt is copied for the user to paste
+        paste: !typable, // not in tmux: the prompt is copied for the user to paste
         queue: this.queue.list(session.id),
       },
     });
@@ -762,11 +774,21 @@ class BayloobApp {
   }
 
   async stopSession(session) {
-    if (!session?.managed) {
+    if (!session?.stoppable) {
       return;
     }
-    await this.launcher.stop(session.managed).catch(() => {}); // already gone is fine
-    this.server.store.untrackLaunch(session.managed);
+    if (session.managed) {
+      await this.launcher.stop(session.managed).catch(() => {}); // already gone is fine
+      this.server.store.untrackLaunch(session.managed);
+    } else {
+      const pid = session.term?.agentPid || (session.discovered ? session.term?.pid : null);
+      try {
+        this.launcher.stopProcess(pid, session.agent);
+      } catch {
+        return; // it ended meanwhile, or the PID was reused; never signal an unverified process
+      }
+      this.server.store.remove(session.id);
+    }
     this.server.store.changed();
   }
 
@@ -897,18 +919,21 @@ class BayloobApp {
   }
 
   async #reconcile() {
-    const tracked = this.server.store.launchedNames();
     // The demo's challenger has no real tmux session behind it
-    if (!tracked.length || this.demo) {
+    if (this.demo) {
       return;
     }
-    const alive = new Set(await this.launcher.alive());
+    const store = this.server.store;
+    const panes = await this.launcher.managedPanes();
+    const recovered = store.recoverLaunches(panes);
+    const tracked = store.launchedNames();
+    const alive = new Set(panes.values());
     const gone = tracked.filter(n => !alive.has(n));
     for (const name of gone) {
-      this.server.store.untrackLaunch(name);
+      store.untrackLaunch(name);
     }
-    if (gone.length) {
-      this.server.store.changed();
+    if (recovered || gone.length) {
+      store.changed();
     }
   }
 
@@ -963,7 +988,10 @@ class BayloobApp {
         this.openLauncher(null, errorPrompt(text));
       }
     });
-    ipcMain.on("overlay-keyboard", (_e, on) => this.overlay.setKeyboard(!!on));
+    ipcMain.handle("overlay-keyboard", (_e, on) => {
+      this.overlay.setKeyboard(!!on);
+      return true;
+    });
     ipcMain.on("overlay-full", (_e, on) => this.overlay.setFull(!!on));
     // Voice prompts: the local engine situation, and turning a recording into text (then the usual confirm)
     ipcMain.handle("voice-status", () => this.speech.status());
