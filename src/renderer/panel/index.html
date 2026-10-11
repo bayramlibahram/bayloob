@@ -175,6 +175,14 @@
   .slash button.on, .slash button:hover { background: color-mix(in srgb, var(--brand) 16%, transparent); }
   .slash code { font: 600 12px ui-monospace, monospace; color: var(--brand-soft); }
   .slash span { color: var(--soft); }
+  /* next steps the agent offered: a click puts one in the box, to confirm like any prompt */
+  .sugg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .sugg[hidden] { display: none; }
+  .sugg .cap { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
+  .sugg button { max-width: 100%; padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--softer);
+    border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); background: color-mix(in srgb, var(--brand) 10%, transparent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sugg button:hover, .sugg button:focus-visible { background: color-mix(in srgb, var(--brand) 22%, transparent); color: var(--text); }
   .pqueue { list-style: none; display: flex; flex-direction: column; gap: 3px; }
   .pqueue[hidden] { display: none; }
   .pqueue .cap { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
@@ -433,6 +441,7 @@
         <section class="detail" id="detail"></section>
         <form class="say" id="say" hidden autocomplete="off">
           <div class="slash" id="slash" hidden role="listbox"></div>
+          <div class="sugg" id="saySugg" hidden></div>
           <div class="box"><textarea id="sayText" rows="1" spellcheck="false"></textarea>
             <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg></button>
             <button type="submit" class="send" id="saySend" title="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
@@ -485,6 +494,7 @@
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
     sayTo: (agent, project) => `Prompt to ${agent} · ${project}…`,
+    suggested: 'Suggested', useSuggestion: 'Put it in the box — you confirm before it goes',
     sayHint: 'Enter sends · Shift+Enter new line', sayBusy: 'Busy — Enter adds it to the queue',
     confirmSend: (agent, project) => `Send to <b>${agent}</b> · ${project}`,
     withFiles: n => ` · ${n} file${n === 1 ? '' : 's'}`, attaching: 'Wait — the files are still being attached', now: 'now', toQueue: 'to the queue',
@@ -748,7 +758,7 @@
       this.el = { panel: $('panel'), mascot: $('managerMascot'), status: $('status'), side: $('side'), listTitle: $('listTitle'),
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
-        saySend: $('saySend'), sayHint: $('sayHint'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
+        saySend: $('saySend'), sayHint: $('sayHint'), saySugg: $('saySugg'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
         sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
         pal: $('pal'), palText: $('palText'), palList: $('palList'),
         sayAttach: $('sayAttach'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts') };
@@ -1408,7 +1418,29 @@
         this.el.sayHint.textContent = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
       }
       this.el.saySend.disabled = this.#sayEmpty;
+      this.#renderSugg(s);
       if (this.#sayConfirming) { this.#renderSayConfirm(); } // busy may have changed: now vs queue
+    }
+
+    // The next steps its last answer offered (cleared when a new turn starts)
+    #renderSugg(s) {
+      const list = s.suggestions || [];
+      const key = JSON.stringify(list);
+      this.el.saySugg.hidden = !list.length || this.#sayConfirming;
+      if (this.el.saySugg.dataset.key === key) { return; }
+      this.el.saySugg.dataset.key = key;
+      this.el.saySugg.innerHTML = list.length ? `<span class="cap">${T.suggested}</span>${list.map((x, i) =>
+        `<button type="button" data-sugg="${i}" title="${esc(x.prompt)}\n${T.useSuggestion}">${esc(x.label)}</button>`).join('')}` : '';
+    }
+
+    #useSuggestion(i) {
+      const x = this.sessions.find(v => v.id === this.sayFor)?.suggestions?.[i];
+      if (!x) { return; }
+      this.el.sayText.value = x.prompt;
+      this.#grow(this.el.sayText);
+      this.el.saySend.disabled = false;
+      this.#confirmSay(true); // shows "send now" or "queue" — the second Enter / click sends
+      this.el.saySugg.hidden = true;
     }
 
     #sayHint(text, kind = '') {
@@ -1427,6 +1459,7 @@
       this.el.sayConfirm.hidden = !on;
       this.el.saySend.hidden = on;
       this.el.sayText.readOnly = on;
+      this.el.saySugg.hidden = on || !this.el.saySugg.innerHTML;
       if (on) {
         this.#renderSayConfirm();
         this.#sayHint(T.confirmHint);
@@ -1896,6 +1929,10 @@
         if (reply) { return this.#replyTo(reply.dataset.reply); }
         const x = e.target.closest('[data-dismiss]');
         if (x) { this.finished = this.finished.filter(id => id !== x.dataset.dismiss); this.#renderFinished(); }
+      });
+      this.el.saySugg.addEventListener('click', e => {
+        const b = e.target.closest('[data-sugg]');
+        if (b) { this.#useSuggestion(Number(b.dataset.sugg)); }
       });
       this.el.sayConfirm.addEventListener('click', async e => {
         if (e.target.closest('[data-handoff]')) {

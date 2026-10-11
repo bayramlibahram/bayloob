@@ -1,6 +1,7 @@
 // The state of every agent session Bayloob knows about: what it's doing, its pending permission card,
 // its terminal fingerprints and its activity history. Fed by EventServer; emits 'change' after updates.
 const fs = require("node:fs");
+const { suggestionsFrom } = require("../../../shared/suggestions");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { describeActivity } = require("./activity");
@@ -76,6 +77,7 @@ class SessionStore extends EventEmitter {
       state: "idle",
       tool: null,
       summary: old?.summary || null,
+      suggestions: old?.suggestions || null, // next steps its last answer offered: [{label, prompt}]
       perm: old?.perm || null,
       term,
       managed: launch?.name || old?.managed || null,
@@ -153,6 +155,9 @@ class SessionStore extends EventEmitter {
           a.statusAt > known.updatedAt
         ) {
           Object.assign(known, { state: a.state, tool: null, updatedAt: now });
+          // Its turn ended with an answer (task_complete): the next steps it offers
+          known.suggestions =
+            a.state === "done" && a.message && !known.task ? suggestionsFrom(a.message) : null;
           changed = true;
         }
         // The agent says it's idle, later than our last event, while we think it's busy: its turn ended

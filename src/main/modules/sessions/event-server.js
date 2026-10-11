@@ -6,6 +6,7 @@ const { loadOrCreateToken, tokenMatches } = require("./api-token");
 const { readOnly } = require("../permissions/command-signature");
 const { parseFindings } = require("../agents/challenge-report");
 const { SessionStore } = require("./session-store");
+const { suggestionsFrom } = require("../../../shared/suggestions");
 
 const PORT = Number(process.env.BAYLOOB_PORT || 7777);
 const PERM_TIMEOUT_MS = Number(process.env.BAYLOOB_PERM_TIMEOUT || 280) * 1000; // then hand the decision back to the terminal
@@ -377,6 +378,8 @@ class EventServer {
     if (state === "done") {
       const last = ev.last_assistant_message || ev["last-assistant-message"];
       patch.summary = short(last, SUMMARY_MAX) || null;
+      // The next steps it offers, as one-click replies (not for a task's agents: the engine drives them)
+      patch.suggestions = this.store.get(id)?.task ? null : suggestionsFrom(last);
       // A challenger's whole answer is kept: its findings are parsed from it
       if (this.store.get(id)?.role === "challenger") {
         patch.report = String(last || "").slice(0, REPORT_MAX) || null;
@@ -385,6 +388,10 @@ class EventServer {
     }
     if (ev.hook_event_name === "UserPromptSubmit") {
       patch.summary = null;
+    }
+    // A new turn: last turn's offers are stale
+    if (state === "thinking" || state === "working") {
+      patch.suggestions = null;
     }
     this.store.upsert(id, agent, ev, query, patch);
   }

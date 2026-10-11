@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- **Suggested next steps**: when an agent's turn ends with next steps it offers — a "👉 Next" list or table, a
+  list after a closing question, or a yes-no question ("Commit it?") — they appear as chips above the prompt box
+  (Workspace) and in the pill's done card. A click puts the step in the box and asks for confirmation (sent now,
+  or queued while the agent is busy); nothing is sent on one click. Cleared when the next turn starts; not shown
+  for a workflow task's agents (the engine drives them). Claude (Stop hook) and Codex (notify / rollout).
+
 ### Changed
 - **Agents list**: a workflow task's agents sit under the task's name and pattern ("Add coupon codes to checkout ·
   Best-of-N · 4") instead of one heading per worktree folder; each row says its part ("Builder · build-2",

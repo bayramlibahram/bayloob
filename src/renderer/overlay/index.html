@@ -174,6 +174,11 @@
   .reply .ricon { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
   .reply .ricon:hover { background: rgb(var(--ink) / .08); color: var(--text); }
   .reply .btn.rsend { padding: 6px 12px; background: var(--brand); color: #fff; }
+  .sugg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sugg button { max-width: 100%; padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--softer);
+    border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); background: color-mix(in srgb, var(--brand) 10%, transparent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sugg button:hover { background: color-mix(in srgb, var(--brand) 22%, transparent); color: var(--text); }
   .rhint { margin-top: 6px; font-size: 11.5px; color: var(--muted); }
   .rhint .err { color: var(--waiting); }
   .receipt { margin-top: 8px; font-size: 12.5px; font-weight: 600; }
@@ -1173,6 +1178,7 @@
         <div class="summary">${esc(s.summary || T.taskDone)}</div>
         ${this.#receiptHtml(s)}
         ${this.#findingsHtml(s)}
+        ${this.#suggHtml(s)}
         ${this.#replyHtml(s)}
         ${this.toast.hint ? `<div class="hint">${esc(this.toast.hint)}</div>` : ''}
         <div class="actions">
@@ -1181,6 +1187,15 @@
           <button class="btn" data-act="dismiss">${T.dismiss}</button>
           <button class="btn primary" data-act="focus" data-sid="${esc(s.id)}">${T.openTerminal}</button>
         </div>` };
+    }
+
+    // The next steps its answer offered — hidden while a reply is being written or confirmed
+    #suggHtml(s) {
+      const list = s.suggestions || [];
+      const r = this.#reply.sid === s.id ? this.#reply : null;
+      if (!list.length || r?.confirm || r?.text.trim()) { return ''; }
+      return `<div class="sugg">${list.map((x, i) => `<button type="button" data-act="sugg" data-sid="${esc(s.id)}" data-i="${i}"
+          title="${esc(x.prompt)}">${esc(x.label)}</button>`).join('')}</div>`;
     }
 
     // Reply right in the done card, without the terminal: Enter, then Enter again to confirm
@@ -1564,6 +1579,13 @@
       } else if (act === 'finding') {
         const r = await this.api?.openFinding(b.dataset.sid, b.dataset.file, Number(b.dataset.line));
         if (r?.ok === false && this.toast) { this.toast.hint = r.error; this.render(); }
+      } else if (act === 'sugg') {
+        // One of the next steps it offered: into the reply box, waiting for ✓ Send (never sent on one click)
+        const x = this.sessions.find(v => v.id === b.dataset.sid)?.suggestions?.[Number(b.dataset.i)];
+        if (x) {
+          this.#reply = { sid: b.dataset.sid, text: x.prompt, confirm: true, focused: false, error: '' };
+          this.render();
+        }
       } else if (act === 'reply-dialog') {
         this.api?.keyboard(false);
         this.api?.openPrompt(b.dataset.sid, this.#reply.sid === b.dataset.sid ? this.#reply.text : '');
