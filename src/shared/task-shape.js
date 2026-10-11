@@ -8,6 +8,11 @@
   // Agents that only answer text (a local model through Ollama's API): no tools, no files — they can be the
   // Arbiter or take part in a discussion, never plan, build, review or analyse
   const TEXT_AGENTS = ["ollama"];
+  // A local model can work or judge, not be the orchestrator (docs/orchestration/ORCHESTRATOR.md §9)
+  const LOCAL_AGENTS = ["ollama", "codex-local"];
+  // The orchestrator's budget: [default, min, max]
+  const ORCHESTRATOR = { workers: [6, 1, 20], turns: [8, 1, 30], minutes: [60, 5, 480] };
+  const clamp = (v, [d, lo, hi]) => Math.max(lo, Math.min(hi, Math.trunc(Number(v ?? d)) || d));
   const CATEGORIES = ["single", "workflow", "analysis"];
   const PATTERNS = {
     pipeline: { name: "Pipeline", hint: "plan → build → test → review" },
@@ -16,6 +21,7 @@
     board: { name: "Review board", hint: "reviewers on the current branch" },
     debate: { name: "Design debate", hint: "agents discuss, then one builds" },
     lead: { name: "Lead + team", hint: "one agent leads, the team builds" },
+    orchestrator: { name: "Orchestrator", hint: "it starts workers as it goes" },
   };
   const PRESETS = {
     audit: "Code audit",
@@ -85,6 +91,13 @@
         agents: counts(w.agents, agents),
         reviewer: agentOr(w.reviewer),
         arbiter: arbiterOr(w.arbiter),
+        // Orchestrator: whether its workers may write, and its budget (the agents it may start: `agents`)
+        orchestrator: {
+          writers: w.orchestrator?.writers !== false,
+          workers: clamp(w.orchestrator?.workers, ORCHESTRATOR.workers),
+          turns: clamp(w.orchestrator?.turns, ORCHESTRATOR.turns),
+          minutes: clamp(w.orchestrator?.minutes, ORCHESTRATOR.minutes),
+        },
       },
       analysis: {
         preset: pick(a.preset, Object.keys(PRESETS), "audit"),
@@ -210,6 +223,29 @@
     };
     const merge = { id: "merge", title: "You merge", role: "you", mode: "you", agents: [] };
     switch (w.pattern) {
+      case "orchestrator":
+        return [
+          {
+            id: "lead",
+            title: "Orchestrator",
+            role: "planner",
+            mode: "read-only",
+            agents: [[w.planner, 1]],
+            note: `starts up to ${w.orchestrator.workers} workers`,
+            gate: "human",
+          },
+          {
+            id: "workers",
+            title: "Workers",
+            role: "builder",
+            mode: w.orchestrator.writers ? "writes" : "read-only",
+            agents: used(w.agents).map(([a]) => [a, 1]),
+            note: "as the orchestrator asks",
+          },
+          { id: "integrate", title: "Integrate", role: "action", mode: "action", agents: [] },
+          { ...tests, note: "the orchestrator fixes failures" },
+          merge,
+        ];
       case "lead":
         return [
           { ...plan, title: "Lead plans", note: "and splits the work" },
@@ -304,6 +340,13 @@
     if (c.workflow.pattern === "board") {
       return ["Nothing is changed — you read the consolidated findings"];
     }
+    if (c.workflow.pattern === "orchestrator") {
+      return [
+        "Its first batch of workers — approve it, or say what to change, before anyone starts",
+        "When its budget is used — give it more, or finish with what's done",
+        "Before merge — merge the integrated change",
+      ];
+    }
     if (c.workflow.pattern === "lead") {
       return [
         "After the plan — approve the lead's split, or change it, before anyone writes code",
@@ -348,14 +391,20 @@
       return out;
     }
     const bag = c.category === "workflow" ? c.workflow.agents : c.analysis.agents;
+    const orchestrator = c.category === "workflow" && c.workflow.pattern === "orchestrator";
     if (!total(bag)) {
       out.push(
         c.category === "analysis"
           ? "Add at least one analyst"
           : c.workflow.pattern === "board"
             ? "Add at least one reviewer"
-            : "Add at least one builder"
+            : orchestrator
+              ? "Pick the agents the orchestrator may start"
+              : "Add at least one builder"
       );
+    }
+    if (orchestrator && LOCAL_AGENTS.includes(c.workflow.planner)) {
+      out.push("A local model can't be the orchestrator — it can be a worker");
     }
     if (used(bag).some(([a]) => notInstalled(a))) {
       out.push("An agent you picked isn't installed");

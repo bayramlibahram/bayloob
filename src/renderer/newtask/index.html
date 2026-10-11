@@ -153,6 +153,9 @@
   .toggle[aria-checked="true"] .switch::after { transform: translateX(14px); }
   .toggle:disabled { opacity: .5; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .budget { flex-wrap: wrap; row-gap: 6px; }
+  .budget .mb { display: inline-flex; align-items: center; gap: 6px; }
+  .budget .mb small { color: var(--muted); font-size: 12px; }
   .tchip { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12px; color: var(--soft); }
   .tchip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--text); }
   .sources { display: flex; flex-direction: column; gap: 4px; }
@@ -250,7 +253,10 @@
     chars: n => `${n} chars`, emptyClipboard: 'The clipboard is empty', attaching: 'Wait — the files are still being attached',
     worktree: 'In a new git worktree', worktreeSub: 'its own copy on a bayloob/… branch', openIn: 'Open in', notInstalled: 'Not installed', turnedOff: 'Turned off in Settings',
     builders: 'Builders · each in its own worktree', participants: 'Discussion · read-only, they speak in turn', plannerBuilds: 'Planner · also builds',
-    lead: 'Lead', team: 'Team · one part each, in its own worktree', reviewers: 'Reviewers · read-only, on the current branch', analysts: 'Analysts · read-only, in parallel',
+    lead: 'Lead', team: 'Team · one part each, in its own worktree',
+    orchestrator: 'Orchestrator', orchestratorMay: 'Workers it may start', orchestratorWriters: 'Workers may write',
+    orchestratorWritersSub: 'each in its own worktree, only the files it names; off: they only read',
+    budget: 'Budget', bWorkers: 'workers', bTurns: 'its turns', bMinutes: 'minutes', reviewers: 'Reviewers · read-only, on the current branch', analysts: 'Analysts · read-only, in parallel',
     planner: 'Planner', reviewer: 'Reviewer', arbiter: 'Arbiter', task: 'Task', taskPh: 'Describe the change — what, where, and how to know it works.',
     question: 'Question', questionPh: 'What should the analysts find out?',
     free: (f, m) => `${f} free of ${m}`, queue: n => `${n} will queue`, word: { builder: 'builder', reviewer: 'reviewer', analyst: 'analyst', participant: 'participant' },
@@ -291,7 +297,9 @@
   const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   // Workflow patterns the engine can run; analyses use their own preset-to-template path.
-  const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board', 'debate', 'lead'];
+  const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board', 'debate', 'lead', 'orchestrator'];
+  // The orchestrator's budget steppers: [min, max, step]
+  const ORCHESTRATOR_RANGE = { workers: [1, 20, 1], turns: [1, 30, 1], minutes: [5, 480, 15] };
   const runnable = c => c.category === 'analysis' || (c.category === 'workflow' && (!!c.workflow.template || RUNNABLE.includes(c.workflow.pattern)));
   // One of the owner's templates as the dialog's stage list (the shape TaskShape.stages gives)
   const templateStages = t => t.stages.map(s => ({
@@ -648,10 +656,12 @@
     }
 
     #select(key, value, label, avoid = []) {
-      const list = key.endsWith('arbiter') ? this.installed : this.installed.filter(a => !this.agents[a].text);
+      // the Arbiter may be a text agent; the orchestrator can't be a local model; the rest work in the code
+      const list = key.endsWith('arbiter') ? this.installed
+        : this.installed.filter(a => !this.agents[a].text && !(this.cfg.workflow.pattern === 'orchestrator' && key === 'workflow.planner' && this.agents[a].local));
       const opts = list.map(a => `<option value="${a}"${a === value ? ' selected' : ''}>${esc(this.agents[a].name)}</option>`).join('');
       const same = avoid.includes(value);
-      return `<div class="row"><span class="label" style="width:76px">${label}</span><select class="sel" data-select="${key}" aria-label="${label}">${opts}</select>${badge(key.endsWith('planner') ? 'plan' : 'read-only')}
+      return `<div class="row"><span class="label" style="min-width:76px">${label}</span><select class="sel" data-select="${key}" aria-label="${label}">${opts}</select>${badge(key.endsWith('planner') && this.cfg.workflow.pattern !== 'orchestrator' ? 'plan' : 'read-only')}
         ${key.endsWith('arbiter') && avoid.length ? `<span class="hintline grow${same ? ' warn' : ''}">${same ? T.arbiterSame : T.arbiterOk}</span>` : ''}</div>`;
     }
 
@@ -721,6 +731,9 @@
           ${tpl.issues?.length ? `<p class="hintline warn">${T.tplProblems}</p>` : ''}
           ${this.#baseRow()}${text}${customize}`;
       }
+      if (w.pattern === 'orchestrator') {
+        return `${presets}${this.#configOrchestrator(w)}${this.#baseRow()}${text}${customize}`;
+      }
       const debate = w.pattern === 'debate';
       const lead = w.pattern === 'lead';
       return `${presets}
@@ -730,6 +743,21 @@
         ${['pipeline', 'split', 'debate'].includes(w.pattern) ? this.#select('workflow.reviewer', w.reviewer, T.reviewer) : ''}
         ${lead ? '' : this.#select('workflow.arbiter', w.arbiter, T.arbiter, board ? [] : builders)}
         ${this.#baseRow()}${text}${customize}`;
+    }
+
+    // Orchestrator (28.2): who leads, which agents it may start, whether they may write, its budget
+    #configOrchestrator(w) {
+      const mb = { writers: true, workers: 6, turns: 8, minutes: 60, ...(w.orchestrator || {}) };
+      const step = (k, label) => {
+        const [lo, hi] = ORCHESTRATOR_RANGE[k];
+        return `<span class="mb"><span class="stepper" role="group" aria-label="${label}"><button type="button" data-obudget="${k}:-1" ${mb[k] <= lo ? 'disabled' : ''} aria-label="Fewer ${label}">${I('minus')}</button><output>${mb[k]}</output>
+          <button type="button" data-obudget="${k}:1" ${mb[k] >= hi ? 'disabled' : ''} aria-label="More ${label}">${I('plus')}</button></span><small>${label}</small></span>`;
+      };
+      return `${this.#select('workflow.planner', w.planner, T.orchestrator)}
+        <div class="label">${T.orchestratorMay}</div>
+        <div class="chips">${Object.entries(this.coders).map(([k, a]) => `<button type="button" class="tchip" aria-pressed="${!!w.agents[k]}" data-oallow="${k}" ${this.usable(k) ? '' : `disabled title="${this.whyNot(k)}"`}>${esc(a.name)}</button>`).join('')}</div>
+        <button type="button" class="toggle" role="switch" aria-checked="${mb.writers}" data-owriters><span class="switch"></span><span class="txt">${T.orchestratorWriters} <small>— ${T.orchestratorWritersSub}</small></span></button>
+        <div class="row budget"><span class="label" style="min-width:76px">${T.budget}</span>${step('workers', T.bWorkers)}${step('turns', T.bTurns)}${step('minutes', T.bMinutes)}</div>`;
     }
 
     #configAnalysis() {
@@ -866,6 +894,10 @@
         const what = this.#base(c) === 'worktree' ? 'your uncommitted changes in' : 'the current branch of';
         return `<b>${n} reviewer${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) read ${what} <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is changed.</b> Each review is kept on its own, with its findings.`;
       }
+      if (w.pattern === 'orchestrator') {
+        const mb = w.orchestrator || { writers: true, workers: 6, turns: 8, minutes: 60 };
+        return `<b>${name(w.planner)}</b> <b>leads</b> and starts its own workers as it goes — ${list(TaskShape.used(w.agents).map(([a]) => name(a)))}, ${mb.writers ? 'each writer in its own worktree, only the files it names' : '<b>read-only</b>'}. It reads; it never writes, merges or pushes. Budget: <b>${mb.workers} workers</b>, ${mb.turns} of its turns, ${mb.minutes} minutes. ${mb.writers ? 'Then the parts are <b>integrated</b> and tested (the orchestrator fixes what fails). ' : ''}You’ll be asked: <b>its first batch of workers</b>, <b>when the budget is used</b>${mb.writers ? ' and <b>before merge</b>' : ''}.`;
+      }
       if (w.pattern === 'lead') {
         return `<b>${name(w.planner)}</b> <b>leads</b>: it plans and splits the work into parts that own separate files. <b>${n} builder${n > 1 ? 's' : ''}</b> (${lst(w.agents)}) build one part each, in parallel. The lead reviews every part — changes go back to that part’s builder — then the parts are <b>integrated</b>, tested (the lead fixes what fails), and the lead writes the summary. You’ll be asked: <b>after the plan</b> and <b>before merge</b>.`;
       }
@@ -983,6 +1015,19 @@
         }
         if (d.settings !== undefined) { return this.api.openHosts?.(); }
         if (d.edit !== undefined) { return this.#go(3); }
+        if (d.oallow) { c.workflow.agents[d.oallow] = c.workflow.agents[d.oallow] ? 0 : 1; return this.#changed(); }
+        if (d.owriters !== undefined || d.obudget) {
+          c.workflow.orchestrator = { writers: true, workers: 6, turns: 8, minutes: 60, ...(c.workflow.orchestrator || {}) };
+          const mb = c.workflow.orchestrator;
+          if (d.obudget) {
+            const [k, sign] = d.obudget.split(':');
+            const [lo, hi, by] = ORCHESTRATOR_RANGE[k];
+            mb[k] = Math.max(lo, Math.min(hi, mb[k] + Number(sign) * by));
+          } else {
+            mb.writers = !mb.writers;
+          }
+          return this.#changed();
+        }
         if (d.count) {
           const [a, delta] = d.count.split(':');
           const bag = c.category === 'analysis' ? c.analysis.agents : c.workflow.agents;

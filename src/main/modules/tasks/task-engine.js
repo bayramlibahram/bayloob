@@ -34,7 +34,7 @@ const { parseSubtasks, overlaps, describeSubtask } = require("./subtasks");
 const { arbiterInput, parseDecision, parseReport, needsOwner } = require("./arbiter");
 const { LOCAL, parseRunbook, reclassify, confirmLevel, classifyRisk } = require("./runbook");
 const Discussion = require("./discussion");
-const Mother = require("./mother");
+const Orchestrator = require("./orchestrator");
 const { AGENTS } = require("../agents/agents");
 
 const ARTIFACT_IN_PROMPT = 12_000; // an artifact pasted into a prompt keeps its tail beyond this
@@ -85,10 +85,10 @@ const GATE_ACTIONS = {
   runbook: ["abort"], // an operations plan: each step is run, skipped or edited through runbookAction(); abort stops the plan
   discussion: ["next", "end", "abort"], // a discussion paused between rounds: on, end it (and decide), or stop
   "discussion-end": ["adopt", "another", "abort"], // it ended: adopt the decision (yours or the decider's), or one more round
-  delegation: ["approve", "changes", "abort"], // the mother's first batch of workers waits for you
-  budget: ["more", "done", "abort"], // the mother's budget is used: give it more, or finish with what's done
-  "mother-stuck": ["retry", "abort"], // three of the mother's batches in a row were refused or unreadable
-  "mother-lost": ["retry", "abort"], // the mother's session ended before its turn did
+  delegation: ["approve", "changes", "abort"], // the orchestrator's first batch of workers waits for you
+  budget: ["more", "done", "abort"], // the orchestrator's budget is used: give it more, or finish with what's done
+  "orchestrator-stuck": ["retry", "abort"], // three of the orchestrator's batches in a row were refused or unreadable
+  "orchestrator-lost": ["retry", "abort"], // the orchestrator's session ended before its turn did
 };
 
 // Where a discussion's thread is, for its participants (in their read-only worktree, out of git)
@@ -500,7 +500,7 @@ class TaskEngine extends EventEmitter {
         gate.kind === "interrupted" ||
         gate.kind === "failed" ||
         gate.kind === "stopped" ||
-        !!gate.mother;
+        !!gate.orchestrator;
       if ((action === "changes" || action === "retry") && !plainRetry && !note) {
         return { ok: false, error: "Write what should change" };
       }
@@ -538,9 +538,9 @@ class TaskEngine extends EventEmitter {
       }
       task.gate = null;
       task.status = "running";
-      if (gate.mother) {
+      if (gate.orchestrator) {
         task.stages[task.stage].status = "running";
-        await this.#motherDecide(task, gate, action, note);
+        await this.#orchestratorDecide(task, gate, action, note);
         this.#save(task);
         return { ok: true };
       }
@@ -859,12 +859,12 @@ class TaskEngine extends EventEmitter {
       this.#openGate(task, "approve", st.title);
     } else if (st.role === "discussion") {
       await this.#discussStart(task, st);
-    } else if (st.role === "mother") {
-      // Back from failing tests (onFail): the mother fixes the integrated branch; else it starts (or goes on)
-      if (task.mother && only?.length) {
-        this.#motherFix(task, st, only, prompt);
-      } else if (!task.mother) {
-        this.#motherStart(task, st);
+    } else if (st.role === "orchestrator") {
+      // Back from failing tests (onFail): the orchestrator fixes the integrated branch; else it starts (or goes on)
+      if (task.orchestrator && only?.length) {
+        this.#orchestratorFix(task, st, only, prompt);
+      } else if (!task.orchestrator) {
+        this.#orchestratorStart(task, st);
       }
     } else {
       if (st.role === "arbiter" && !prompt) {
@@ -1447,20 +1447,20 @@ class TaskEngine extends EventEmitter {
     this.#log(task, "you", "discussion-adopted", { by: d.decision.by });
   }
 
-  // ---------- mother (28.2): it asks for workers; every request is checked (mother.js) — it proposes, we decide ----------
+  // ---------- orchestrator (28.2): it asks for workers; every request is checked (orchestrator.js) — it proposes, we decide ----------
 
-  #motherAllowed(st) {
+  #orchestratorAllowed(st) {
     return { agents: st.allow?.agents || [], writers: st.allow?.writers !== false };
   }
 
-  #motherStart(task, st) {
-    const budget = { ...Mother.DEFAULT_BUDGET, ...(st.budget || {}) };
-    task.mother = {
+  #orchestratorStart(task, st) {
+    const budget = { ...Orchestrator.DEFAULT_BUDGET, ...(st.budget || {}) };
+    task.orchestrator = {
       turns: 0,
       startedAt: this.now(),
       budget,
       workers: [], // { id, agent, mode, files, status, candidate, turn }
-      inbox: [], // workers' results not yet told to the mother
+      inbox: [], // workers' results not yet told to the orchestrator
       refusedNow: [], // what its last batch had refused (told in its next turn)
       refusedRun: 0, // batches in a row with nothing accepted
       approved: false, // its first batch of workers waits for you
@@ -1470,37 +1470,37 @@ class TaskEngine extends EventEmitter {
       handle: null,
       done: false,
     };
-    this.#motherTurn(task, st, this.#motherIntro(task, st), { first: true });
+    this.#orchestratorTurn(task, st, this.#orchestratorIntro(task, st), { first: true });
     this.pump();
   }
 
   // The protocol, what it may use, and the task
-  #motherIntro(task, st) {
-    return Mother.firstPrompt({
+  #orchestratorIntro(task, st) {
+    return Orchestrator.firstPrompt({
       task: renderPrompt(st.prompt || "{{task}}", { task: task.text }, () => ""),
-      allowed: this.#motherAllowed(st),
-      budget: task.mother.budget,
+      allowed: this.#orchestratorAllowed(st),
+      budget: task.orchestrator.budget,
     });
   }
 
-  // One turn of the mother: read-only, in the task's read-only worktree, the same session as its last turn
-  #motherTurn(task, st, prompt, { first = false } = {}) {
-    const m = task.mother;
+  // One turn of the orchestrator: read-only, in the task's read-only worktree, the same session as its last turn
+  #orchestratorTurn(task, st, prompt, { first = false } = {}) {
+    const m = task.orchestrator;
     const n = task.instances.filter(i => i.stage === st.id).length + 1;
     const inst = {
-      id: `${st.id}.${m.turns + 1}.mother.${n}`,
+      id: `${st.id}.${m.turns + 1}.orchestrator.${n}`,
       stage: st.id,
       round: task.stages[task.stage].round,
       n,
       candidate: null,
       adapter: st.agents[0].adapter,
-      role: "mother",
+      role: "orchestrator",
       mode: "read-only",
       prompt,
       raw: true,
       vars: {},
       reuse: m.handle,
-      motherTurn: true,
+      orchestratorTurn: true,
       first,
       status: "queued",
       waiting: null,
@@ -1513,10 +1513,10 @@ class TaskEngine extends EventEmitter {
   }
 
   // One turn of a worker: a writer is a builder in its own worktree (its candidate is the part integrate merges)
-  #motherWorker(task, st, w, prompt, reuse) {
+  #orchestratorWorker(task, st, w, prompt, reuse) {
     const n = task.instances.filter(i => i.stage === st.id).length + 1;
     const inst = {
-      id: `${st.id}.${task.mother.turns}.${w.id}.${n}`,
+      id: `${st.id}.${task.orchestrator.turns}.${w.id}.${n}`,
       stage: st.id,
       round: task.stages[task.stage].round,
       n,
@@ -1539,8 +1539,8 @@ class TaskEngine extends EventEmitter {
     w.status = "running";
   }
 
-  async #motherEnded(task, st, inst, message) {
-    const m = task.mother;
+  async #orchestratorEnded(task, st, inst, message) {
+    const m = task.orchestrator;
     if (inst.fix) {
       // it fixed the integrated branch: back to integrate (already done) and the tests
       await this.#advance(task);
@@ -1563,40 +1563,40 @@ class TaskEngine extends EventEmitter {
           ? `${cand.diff.files} files, +${cand.diff.added} −${cand.diff.deleted}`
           : null,
       });
-      await this.#motherCheck(task, st);
+      await this.#orchestratorCheck(task, st);
       return;
     }
-    // the mother's turn
+    // the orchestrator's turn
     m.turns += 1;
-    this.store.writeArtifact(task.id, `mother.${m.turns}.md`, message);
+    this.store.writeArtifact(task.id, `orchestrator.${m.turns}.md`, message);
     if (inst.status === "failed") {
-      this.#openGate(task, "violation", "The mother changed files although it only reads", {
+      this.#openGate(task, "violation", "The orchestrator changed files although it only reads", {
         detail: `${inst.id}: ${inst.cwd}`,
       });
       return;
     }
-    const { actions, next, error } = Mother.parseRequests(message);
+    const { actions, next, error } = Orchestrator.parseRequests(message);
     if (error) {
       m.refusedRun += 1;
-      this.#log(task, "agent", "mother-unreadable", { turn: m.turns, error });
-      if (!this.#motherStuck(task)) {
-        this.#motherNext(task, st, { error });
+      this.#log(task, "agent", "orchestrator-unreadable", { turn: m.turns, error });
+      if (!this.#orchestratorStuck(task)) {
+        this.#orchestratorNext(task, st, { error });
       }
       return;
     }
-    const { accepted, refused } = Mother.checkBatch(actions, {
-      allowed: this.#motherAllowed(st),
+    const { accepted, refused } = Orchestrator.checkBatch(actions, {
+      allowed: this.#orchestratorAllowed(st),
       workers: m.workers,
       budget: m.budget,
     });
-    this.#log(task, "agent", "mother-requests", {
+    this.#log(task, "agent", "orchestrator-requests", {
       turn: m.turns,
       next,
       accepted: accepted.map(a => `${a.do}:${a.id}`),
       refused: refused.map(r => ({ do: r.action.do, id: r.action.id, why: r.why })),
     });
     m.refusedRun = accepted.length || next === "done" || !refused.length ? 0 : m.refusedRun + 1;
-    if (this.#motherStuck(task)) {
+    if (this.#orchestratorStuck(task)) {
       return;
     }
     const batch = { accepted, refused, next };
@@ -1606,36 +1606,36 @@ class TaskEngine extends EventEmitter {
       this.#openGate(
         task,
         "delegation",
-        `The mother wants to start ${starts.length} worker${starts.length > 1 ? "s" : ""} — approve?`,
+        `The orchestrator wants to start ${starts.length} worker${starts.length > 1 ? "s" : ""} — approve?`,
         {
-          mother: true,
+          orchestrator: true,
           batch: accepted.map(a => ({ ...a })),
           refused: refused.map(r => ({ do: r.action.do, id: r.action.id, why: r.why })),
         }
       );
       return;
     }
-    await this.#motherRun(task, st, batch);
+    await this.#orchestratorRun(task, st, batch);
   }
 
   // Three batches in a row with nothing accepted (or unreadable): it stops for you
-  #motherStuck(task) {
-    if (task.mother.refusedRun < 3) {
+  #orchestratorStuck(task) {
+    if (task.orchestrator.refusedRun < 3) {
       return false;
     }
     this.#openGate(
       task,
-      "mother-stuck",
-      "Three of the mother's turns in a row asked for nothing that could run",
+      "orchestrator-stuck",
+      "Three of the orchestrator's turns in a row asked for nothing that could run",
       {
-        mother: true,
+        orchestrator: true,
       }
     );
     return true;
   }
 
-  async #motherRun(task, st, { accepted, refused, next }) {
-    const m = task.mother;
+  async #orchestratorRun(task, st, { accepted, refused, next }) {
+    const m = task.orchestrator;
     m.pending = null;
     m.refusedNow = refused;
     m.next = next;
@@ -1653,7 +1653,7 @@ class TaskEngine extends EventEmitter {
           turn: m.turns,
         };
         if (a.mode === "writes") {
-          // a worktree's id ends with a number (task-workspace): the mother's own id stays on the worker
+          // a worktree's id ends with a number (task-workspace): the orchestrator's own id stays on the worker
           const c = {
             id: `worker-${m.workers.filter(x => x.candidate).length + 1}`,
             adapter: a.agent,
@@ -1673,11 +1673,11 @@ class TaskEngine extends EventEmitter {
           .filter(x => x.mode === "writes" && !ENDED.has(x.status))
           .flatMap(x => x.files);
         m.workers.push(w);
-        this.#motherWorker(
+        this.#orchestratorWorker(
           task,
           st,
           w,
-          Mother.workerPrompt({ prompt: a.prompt, mode: a.mode, files: a.files, others }),
+          Orchestrator.workerPrompt({ prompt: a.prompt, mode: a.mode, files: a.files, others }),
           null
         );
         m.wait.push(a.id);
@@ -1689,7 +1689,7 @@ class TaskEngine extends EventEmitter {
             Object.assign(c, { status: "active", out: null }); // another try in its worktree
           }
         }
-        this.#motherWorker(task, st, known, a.prompt, last?.handle || null);
+        this.#orchestratorWorker(task, st, known, a.prompt, last?.handle || null);
         m.wait.push(a.id);
       } else {
         for (const i of task.instances.filter(x => x.worker === a.id && !ENDED.has(x.status))) {
@@ -1698,26 +1698,26 @@ class TaskEngine extends EventEmitter {
         known.status = "stopped";
       }
     }
-    this.#log(task, "engine", "mother-batch", {
+    this.#log(task, "engine", "orchestrator-batch", {
       turn: m.turns,
       started: accepted.filter(a => a.do === "start").map(a => a.id),
       next,
     });
     this.pump();
-    await this.#motherCheck(task, st);
+    await this.#orchestratorCheck(task, st);
   }
 
-  // After any worker's turn (or a batch): is it the mother's turn again — or done, or out of budget?
-  async #motherCheck(task, st) {
-    const m = task.mother;
-    if (task.gate || task.instances.some(i => i.motherTurn && !ENDED.has(i.status))) {
-      return; // waiting for you, or the mother is speaking (what ends meanwhile waits in its inbox)
+  // After any worker's turn (or a batch): is it the orchestrator's turn again — or done, or out of budget?
+  async #orchestratorCheck(task, st) {
+    const m = task.orchestrator;
+    if (task.gate || task.instances.some(i => i.orchestratorTurn && !ENDED.has(i.status))) {
+      return; // waiting for you, or the orchestrator is speaking (what ends meanwhile waits in its inbox)
     }
     const live = id => task.instances.some(i => i.worker === id && !ENDED.has(i.status));
     const anyLive = m.workers.some(w => live(w.id));
     if (m.next === "done") {
       if (!anyLive) {
-        await this.#motherFinish(task);
+        await this.#orchestratorFinish(task);
       }
       return;
     }
@@ -1728,7 +1728,7 @@ class TaskEngine extends EventEmitter {
     if (!ready) {
       return;
     }
-    const why = Mother.overBudget({
+    const why = Orchestrator.overBudget({
       turns: m.turns,
       startedAt: m.startedAt,
       now: this.now(),
@@ -1738,32 +1738,37 @@ class TaskEngine extends EventEmitter {
       this.#openGate(
         task,
         "budget",
-        `The mother's budget: ${why} — give it more, or finish with what's done`,
+        `The orchestrator's budget: ${why} — give it more, or finish with what's done`,
         {
-          mother: true,
+          orchestrator: true,
         }
       );
       return;
     }
-    this.#motherNext(task, st, {});
+    this.#orchestratorNext(task, st, {});
   }
 
-  #motherNext(task, st, { error = null }) {
-    const m = task.mother;
+  #orchestratorNext(task, st, { error = null }) {
+    const m = task.orchestrator;
     const left = {
       workers: Math.max(0, m.budget.workers - m.workers.length),
       turns: Math.max(0, m.budget.turns - m.turns),
       minutes: Math.max(0, Math.round(m.budget.minutes - (this.now() - m.startedAt) / 60_000)),
     };
-    const prompt = Mother.nextPrompt({ results: m.inbox, refused: m.refusedNow, error, left });
+    const prompt = Orchestrator.nextPrompt({
+      results: m.inbox,
+      refused: m.refusedNow,
+      error,
+      left,
+    });
     m.inbox = [];
     m.refusedNow = [];
-    this.#motherTurn(task, st, prompt);
+    this.#orchestratorTurn(task, st, prompt);
   }
 
-  // The mother is done: its writers' parts go to integrate and the tests; with no changes, the task ends here
-  async #motherFinish(task) {
-    const m = task.mother;
+  // The orchestrator is done: its writers' parts go to integrate and the tests; with no changes, the task ends here
+  async #orchestratorFinish(task) {
+    const m = task.orchestrator;
     m.done = true;
     for (const i of task.instances.filter(x => x.worker && !ENDED.has(x.status))) {
       await this.#endInstance(i);
@@ -1772,20 +1777,20 @@ class TaskEngine extends EventEmitter {
     for (const c of task.candidates.filter(x => x.subtask && x.status === "active" && !x.head)) {
       Object.assign(c, { status: "out", out: "Nothing was built" });
     }
-    this.#log(task, "engine", "mother-done", {
+    this.#log(task, "engine", "orchestrator-done", {
       turns: m.turns,
       workers: m.workers.length,
       parts: parts.length,
     });
     if (!parts.length) {
-      await this.#finish(task, "done", "the mother finished; no files changed");
+      await this.#finish(task, "done", "the orchestrator finished; no files changed");
       return;
     }
     await this.#advance(task);
   }
 
-  // Tests failed on the integrated branch: the mother fixes it there (the one place it writes)
-  #motherFix(task, st, only, prompt) {
+  // Tests failed on the integrated branch: the orchestrator fixes it there (the one place it writes)
+  #orchestratorFix(task, st, only, prompt) {
     const c = task.candidates.find(x => x.id === only[0]);
     const n = task.instances.filter(i => i.stage === st.id).length + 1;
     const inst = {
@@ -1811,10 +1816,10 @@ class TaskEngine extends EventEmitter {
     this.pump();
   }
 
-  // A session in the mother's stage ended before its turn: a worker's is told to the mother; the mother's waits for you
-  async #motherLost(task, st) {
-    const m = task.mother;
-    // interrupted, or failed to start at all (a launch error): either way the mother is told
+  // A session in the orchestrator's stage ended before its turn: a worker's is told to the orchestrator; the orchestrator's waits for you
+  async #orchestratorLost(task, st) {
+    const m = task.orchestrator;
+    // interrupted, or failed to start at all (a launch error): either way the orchestrator is told
     for (const inst of task.instances.filter(
       i => i.stage === st.id && (i.status === "interrupted" || i.status === "failed") && !i.lostSeen
     )) {
@@ -1823,13 +1828,13 @@ class TaskEngine extends EventEmitter {
         const why = inst.error
           ? `(it couldn't start: ${inst.error})`
           : "(its session ended before it answered)";
-        await this.#motherEnded(task, st, inst, inst.screen || why);
-      } else if (inst.motherTurn) {
+        await this.#orchestratorEnded(task, st, inst, inst.screen || why);
+      } else if (inst.orchestratorTurn) {
         const title = inst.error
-          ? `The mother couldn't start: ${inst.error}`
-          : "The mother's session ended before its turn did";
-        this.#openGate(task, "mother-lost", title, {
-          mother: true,
+          ? `The orchestrator couldn't start: ${inst.error}`
+          : "The orchestrator's session ended before its turn did";
+        this.#openGate(task, "orchestrator-lost", title, {
+          orchestrator: true,
           retryPrompt: inst.prompt,
           ...(inst.screen ? { screen: inst.screen } : {}),
         });
@@ -1842,20 +1847,20 @@ class TaskEngine extends EventEmitter {
       }
     }
     if (!m.done) {
-      await this.#motherCheck(task, st);
+      await this.#orchestratorCheck(task, st);
     }
   }
 
-  async #motherDecide(task, gate, action, note) {
+  async #orchestratorDecide(task, gate, action, note) {
     const st = this.#stage(task);
-    const m = task.mother;
+    const m = task.orchestrator;
     if (gate.kind === "delegation") {
       if (action === "approve") {
         m.approved = true;
-        await this.#motherRun(task, st, m.pending);
+        await this.#orchestratorRun(task, st, m.pending);
       } else {
         m.pending = null;
-        this.#motherTurn(
+        this.#orchestratorTurn(
           task,
           st,
           `The owner didn't approve those workers: ${note}\nPropose again — end with the \`\`\`json block.`
@@ -1868,16 +1873,16 @@ class TaskEngine extends EventEmitter {
           turns: m.budget.turns + 4,
           minutes: m.budget.minutes + 30,
         });
-        this.#log(task, "you", "mother-budget", { budget: m.budget });
-        await this.#motherCheck(task, st);
+        this.#log(task, "you", "orchestrator-budget", { budget: m.budget });
+        await this.#orchestratorCheck(task, st);
       } else {
-        await this.#motherFinish(task);
+        await this.#orchestratorFinish(task);
       }
-    } else if (gate.kind === "mother-stuck") {
+    } else if (gate.kind === "orchestrator-stuck") {
       m.refusedRun = 0;
-      this.#motherNext(task, st, {});
-    } else if (gate.kind === "mother-lost") {
-      this.#motherTurn(task, st, gate.retryPrompt);
+      this.#orchestratorNext(task, st, {});
+    } else if (gate.kind === "orchestrator-lost") {
+      this.#orchestratorTurn(task, st, gate.retryPrompt);
     }
   }
 
@@ -1911,10 +1916,10 @@ class TaskEngine extends EventEmitter {
       }
       let prompt = this.#prompt(task, inst, cand);
       const reuse = inst.reuse && (await this.runner.alive(inst.reuse).catch(() => false));
-      if (inst.motherTurn && !inst.first && !reuse) {
-        // a new session for the mother (its old one is gone): it needs the protocol again before the news
+      if (inst.orchestratorTurn && !inst.first && !reuse) {
+        // a new session for the orchestrator (its old one is gone): it needs the protocol again before the news
         const st = task.template.stages.find(s => s.id === inst.stage);
-        prompt = `${this.#motherIntro(task, st)}
+        prompt = `${this.#orchestratorIntro(task, st)}
 
 ---
 
@@ -1939,8 +1944,8 @@ ${prompt}`;
       if (inst.role === "builder") {
         cand.handle = handle;
       }
-      if (inst.motherTurn) {
-        task.mother.handle = handle; // its next turns continue this session
+      if (inst.orchestratorTurn) {
+        task.orchestrator.handle = handle; // its next turns continue this session
       }
       Object.assign(inst, { status: "running", handle, cwd, startedAt: this.now(), waiting: null });
       this.#log(task, "engine", "launched", {
@@ -2080,8 +2085,8 @@ ${prompt}`;
         diff: cand.diff,
       });
     }
-    if (st.role === "mother" && task.mother) {
-      await this.#motherEnded(task, st, inst, message);
+    if (st.role === "orchestrator" && task.orchestrator) {
+      await this.#orchestratorEnded(task, st, inst, message);
       this.#save(task);
       return;
     }
@@ -2097,8 +2102,8 @@ ${prompt}`;
       this.#discussLost(task, st);
       return;
     }
-    if (st?.role === "mother" && task.mother && state.status === "running") {
-      await this.#motherLost(task, st);
+    if (st?.role === "orchestrator" && task.orchestrator && state.status === "running") {
+      await this.#orchestratorLost(task, st);
       return;
     }
     if (!st || state.status !== "running" || st.action || !st.agents) {
@@ -2820,7 +2825,7 @@ ${prompt}`;
     const parts = task.candidates.filter(c => c.subtask && c.status === "active");
     // Lead + team: the integrated branch is the lead's (its agent fixes what fails there)
     const st = this.#stage(task);
-    const by = { lead: s => s.lead, mother: s => s.role === "mother" }[st?.by];
+    const by = { lead: s => s.lead, orchestrator: s => s.role === "orchestrator" }[st?.by];
     const lead = by ? task.template.stages.find(by)?.agents?.[0]?.adapter : null;
     const r = await this.workspace
       .integrate({

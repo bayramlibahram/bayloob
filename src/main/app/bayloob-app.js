@@ -987,6 +987,7 @@ class BayloobApp {
               : !a.local || !!this.settings.get("ollama").coder),
           // text: answers only (a local model) — it can be the Arbiter or take part in a discussion
           ...(a.kind === "text" ? { text: true } : {}),
+          ...(a.local ? { local: true } : {}), // a local model: a worker, never the orchestrator
           color: this.mascot === "svg" ? a.svgColor : a.color,
         },
       ])

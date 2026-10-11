@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const M = require("../src/main/modules/tasks/mother");
+const M = require("../src/main/modules/tasks/orchestrator");
 
 const block = obj => `I'll split it.\n\n\`\`\`json\n${JSON.stringify(obj)}\n\`\`\``;
 const allowed = { agents: ["claude", "codex"], writers: true };
@@ -15,7 +15,7 @@ const start = (id, extra = {}) => ({
 });
 const whys = r => r.refused.map(x => `${x.action.id}: ${x.why}`);
 
-test("mother: requests are read from the last ```json block; a broken one is an error, never guessed", () => {
+test("orchestrator: requests are read from the last ```json block; a broken one is an error, never guessed", () => {
   const r = M.parseRequests(
     `Earlier: \`\`\`json\n{"actions":[]}\n\`\`\`\n${block({ actions: [start("api"), { do: "stop", id: "ui", extra: 1 }], next: "wait-any" })}`
   );
@@ -36,7 +36,7 @@ test("mother: requests are read from the last ```json block; a broken one is an 
   );
 });
 
-test("mother: a start is checked — agent, mode, writers allowed, files, the id", () => {
+test("orchestrator: a start is checked — agent, mode, writers allowed, files, the id", () => {
   const r = M.checkBatch(
     [
       start("api"),
@@ -77,7 +77,7 @@ test("mother: a start is checked — agent, mode, writers allowed, files, the id
   assert.deepEqual(ro.accepted[0].files, []);
 });
 
-test("mother: two writers never own the same file — against live writers and within the batch", () => {
+test("orchestrator: two writers never own the same file — against live writers and within the batch", () => {
   const workers = [
     { id: "api", agent: "codex", mode: "writes", files: ["src/api/"], status: "running" },
     { id: "old", agent: "codex", mode: "writes", files: ["README.md"], status: "done" }, // ended: free again
@@ -101,7 +101,7 @@ test("mother: two writers never own the same file — against live writers and w
   ]);
 });
 
-test("mother: the budget — new workers per turn, workers in all; send and stop only for real workers", () => {
+test("orchestrator: the budget — new workers per turn, workers in all; send and stop only for real workers", () => {
   const four = ["a", "b", "c", "d"].map(id => start(id));
   const r = M.checkBatch(four, { allowed });
   assert.deepEqual(
@@ -147,11 +147,11 @@ test("mother: the budget — new workers per turn, workers in all; send and stop
     'a: unknown action "merge" (use start, send, stop)',
   ]);
   assert.equal(M.overBudget({ turns: 7, startedAt: 0, now: 59 * 60_000 }), null);
-  assert.equal(M.overBudget({ turns: 8, startedAt: 0, now: 0 }), "8 of 8 mother turns used");
+  assert.equal(M.overBudget({ turns: 8, startedAt: 0, now: 0 }), "8 of 8 orchestrator turns used");
   assert.equal(M.overBudget({ turns: 1, startedAt: 0, now: 60 * 60_000 }), "the 60 minutes are up");
 });
 
-test("mother: prompts — the protocol and limits first; workers' answers come back fenced, as data", () => {
+test("orchestrator: prompts — the protocol and limits first; workers' answers come back fenced, as data", () => {
   const first = M.firstPrompt({ task: "Coupons at checkout", allowed });
   assert.match(first, /End EVERY answer with one ```json block/);
   assert.match(

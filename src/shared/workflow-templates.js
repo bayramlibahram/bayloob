@@ -30,7 +30,7 @@
     "analyst",
     "arbiter",
     "discussion",
-    "mother",
+    "orchestrator",
     "you",
   ];
   const DISCUSSION_FORMATS = ["round-robin", "debate", "critique", "consensus", "war-room"];
@@ -556,23 +556,23 @@
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
       ],
     },
-    // Mother (28.2): the mother starts its own workers as it goes (docs/orchestration/MOTHER.md); its writers'
-    // parts are integrated — that branch is the mother's, so it fixes what fails the tests — and you merge
-    mother: {
-      id: "mother",
-      name: "Mother",
+    // Orchestrator (28.2): the orchestrator starts its own workers as it goes (docs/orchestration/ORCHESTRATOR.md); its writers'
+    // parts are integrated — that branch is the orchestrator's, so it fixes what fails the tests — and you merge
+    orchestrator: {
+      id: "orchestrator",
+      name: "Orchestrator",
       description:
         "One agent leads and starts its own workers as it goes (you approve its first batch; then it stays within the budget) → the parts are integrated and tested → you merge",
       builtin: true,
       stages: [
         {
           id: "lead",
-          title: "Mother",
-          role: "mother",
+          title: "Orchestrator",
+          role: "orchestrator",
           mode: "read-only",
           agents: [{ adapter: "claude", count: 1 }],
           allow: { agents: ["claude", "codex"], writers: true },
-          // what the mother is told to get done (the protocol and its limits come before it)
+          // what the orchestrator is told to get done (the protocol and its limits come before it)
           prompt: "{{task}}",
           budget: { workers: 6, turns: 8, minutes: 60, perTurn: 3 },
           gate: "always",
@@ -582,7 +582,7 @@
           title: "Integrate",
           role: "you",
           action: "integrate",
-          by: "mother",
+          by: "orchestrator",
           gate: "always",
         },
         {
@@ -592,7 +592,7 @@
           action: "run-tests",
           perCandidate: true,
           gate: "tests-pass",
-          // the integrated branch is the mother's: it fixes what fails, there and only there
+          // the integrated branch is the orchestrator's: it fixes what fails, there and only there
           onFail: { goto: "lead", prompt: FIX_TESTS_PROMPT, maxLoops: 2 },
         },
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
@@ -792,9 +792,14 @@
    */
   // A text-only agent (a local model through Ollama) has no tools: only the Arbiter or a discussion's voice
   const TEXT_AGENTS = ["ollama"];
-  // Agents on a local model: workers or the Arbiter, not the mother (small models plan poorly — the owner, 2026-10-12)
+  // Agents on a local model: workers or the Arbiter, not the orchestrator (small models plan poorly — the owner, 2026-10-12)
   const LOCAL_AGENTS = ["ollama", "codex-local"];
-  const MOTHER_BUDGET = { workers: [1, 20], turns: [1, 30], minutes: [5, 480], perTurn: [1, 6] };
+  const ORCHESTRATOR_BUDGET = {
+    workers: [1, 20],
+    turns: [1, 30],
+    minutes: [5, 480],
+    perTurn: [1, 6],
+  };
   function templateIssues(
     t,
     { capacity = { claude: 4, codex: 2, "codex-local": 1, gemini: 2, ollama: 1 } } = {}
@@ -984,24 +989,28 @@
           add(`${name}: the "on fail" prompt uses {{${v}}}, which doesn't exist`);
         }
       }
-      if (s.role === "mother") {
+      if (s.role === "orchestrator") {
         const agents = Array.isArray(s.agents) ? s.agents : [];
         if (agents.length !== 1 || Number(agents[0]?.count) !== 1) {
-          add(`${name}: the mother is exactly one agent`);
+          add(`${name}: the orchestrator is exactly one agent`);
         } else if (LOCAL_AGENTS.includes(agents[0].adapter)) {
-          add(`${name}: a local model can't be the mother — it can be a worker or the Arbiter`);
+          add(
+            `${name}: a local model can't be the orchestrator — it can be a worker or the Arbiter`
+          );
         }
         if (s.mode !== "read-only") {
-          add(`${name}: the mother only reads (its workers write) — its mode must be "read-only"`);
+          add(
+            `${name}: the orchestrator only reads (its workers write) — its mode must be "read-only"`
+          );
         }
         const may = Array.isArray(s.allow?.agents) ? s.allow.agents : [];
         if (!may.length) {
-          add(`${name}: pick the agents the mother may start`);
+          add(`${name}: pick the agents the orchestrator may start`);
         }
         for (const a of may.filter(x => !capacity[x] || TEXT_AGENTS.includes(x))) {
           add(`${name}: "${a}" can't be a worker`);
         }
-        for (const [k, [lo, hi]] of Object.entries(MOTHER_BUDGET)) {
+        for (const [k, [lo, hi]] of Object.entries(ORCHESTRATOR_BUDGET)) {
           const v = s.budget?.[k];
           if (v !== undefined && !(Number.isInteger(v) && v >= lo && v <= hi)) {
             add(`${name}: the budget's ${k} must be ${lo}–${hi}`);
@@ -1073,7 +1082,7 @@
     const preset = BUILTINS[w.pattern];
     if (!preset) {
       throw new Error(
-        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline, Best-of-N, Split work, Review board, Design debate and Lead + team can`
+        `${w.pattern ? `"${w.pattern}"` : "This pattern"} can't run yet — Pipeline, Best-of-N, Split work, Review board, Design debate, Lead + team and Orchestrator can`
       );
     }
     const t = clone(preset);
@@ -1081,6 +1090,25 @@
       .filter(([, n]) => n > 0)
       .map(([adapter, count]) => ({ adapter, count }));
     for (const s of t.stages) {
+      // Orchestrator: who it is, the agents it may start (those picked), whether they may write, its budget
+      if (s.role === "orchestrator") {
+        s.agents = [{ adapter: w.planner || "claude", count: 1 }];
+        if (builders.length) {
+          s.allow = {
+            agents: builders.map(b => b.adapter),
+            writers: w.orchestrator?.writers !== false,
+          };
+        }
+        s.budget = {
+          ...s.budget,
+          ...Object.fromEntries(
+            ["workers", "turns", "minutes"]
+              .filter(k => w.orchestrator?.[k])
+              .map(k => [k, w.orchestrator[k]])
+          ),
+        };
+        continue;
+      }
       if (s.role === "planner" && w.planner) {
         s.agents = [{ adapter: w.planner, count: 1 }];
       }

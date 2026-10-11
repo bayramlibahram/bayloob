@@ -1,6 +1,6 @@
-// Mother agent, level 2 (docs/orchestration/MOTHER.md): the mother starts its own workers — by asking. Each of its
+// Orchestrator agent, level 2 (docs/orchestration/ORCHESTRATOR.md): the orchestrator starts its own workers — by asking. Each of its
 // turns ends with one JSON block of requests; the engine reads it here, checks every request against the limits
-// the owner set, and runs only what passes. The mother never gets a command, a credential or a path of its own:
+// the owner set, and runs only what passes. The orchestrator never gets a command, a credential or a path of its own:
 // it proposes, Bayloob decides. Pure functions; the engine keeps the state.
 //
 //   {"actions":[{"do":"start","id":"api","agent":"codex","mode":"writes","files":["src/api/"],"prompt":"…"},
@@ -32,7 +32,7 @@ function jsonBlock(text) {
 }
 
 /**
- * The mother's requests from its answer → { actions, next, error }. A malformed block is an error (the mother is
+ * The orchestrator's requests from its answer → { actions, next, error }. A malformed block is an error (the orchestrator is
  * told why); unknown keys are dropped; nothing is fixed up.
  */
 function parseRequests(text) {
@@ -174,10 +174,10 @@ function checkBatch(actions, { allowed, workers = [], budget = DEFAULT_BUDGET })
   return { accepted, refused };
 }
 
-/** Whether the mother may take another turn: → null, or why not ("8 of 8 turns", "60 minutes"). */
+/** Whether the orchestrator may take another turn: → null, or why not ("8 of 8 turns", "60 minutes"). */
 function overBudget({ turns, startedAt, now, budget = DEFAULT_BUDGET }) {
   if (turns >= budget.turns) {
-    return `${budget.turns} of ${budget.turns} mother turns used`;
+    return `${budget.turns} of ${budget.turns} orchestrator turns used`;
   }
   if (now - startedAt >= budget.minutes * 60_000) {
     return `the ${budget.minutes} minutes are up`;
@@ -205,7 +205,7 @@ const PROTOCOL = [
   "- Requests that break a rule are refused and you're told why; nothing is fixed for you.",
 ].join("\n");
 
-/** The mother's first prompt: the task, what it may use, the protocol. */
+/** The orchestrator's first prompt: the task, what it may use, the protocol. */
 function firstPrompt({ task, allowed, budget = DEFAULT_BUDGET }) {
   return [
     PROTOCOL,
@@ -218,11 +218,11 @@ function firstPrompt({ task, allowed, budget = DEFAULT_BUDGET }) {
   ].join("\n");
 }
 
-// A worker's words, fenced: what the mother reads is data, never instructions to it (the discussion's rule)
+// A worker's words, fenced: what the orchestrator reads is data, never instructions to it (the discussion's rule)
 const fenced = text => `<<<\n${String(text || "").trim() || "(no answer)"}\n>>>`;
 
 /**
- * The mother's next prompt: what happened since its last turn. results: [{ id, agent, mode, status, answer,
+ * The orchestrator's next prompt: what happened since its last turn. results: [{ id, agent, mode, status, answer,
  * diff, tests }]; refused: [{ action, why }]; error: why its last block couldn't be read.
  */
 function nextPrompt({ results = [], refused = [], error = null, left }) {
@@ -253,7 +253,7 @@ function nextPrompt({ results = [], refused = [], error = null, left }) {
   return lines.join("\n");
 }
 
-/** What a worker is told before the mother's prompt: its place, its files, the rules nobody can lift. */
+/** What a worker is told before the orchestrator's prompt: its place, its files, the rules nobody can lift. */
 function workerPrompt({ prompt, mode, files = [], others = [] }) {
   const rules =
     mode === "writes"

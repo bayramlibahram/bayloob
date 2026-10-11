@@ -119,11 +119,11 @@ class StubRunner {
       return "## Decision\nCursor pagination on created_at.\n## Why\nIt scales.\n## Dissent\nNone left.\n## Open risks\nThe index.";
     }
     // Lead + team: the lead asks once for a change to the docs part, then it's right; it sums up at the end
-    // Mother (28.2): its first turn starts two writers (cart.js, DISCOUNTS.md) and a reader; then it's done
-    if (role === "mother") {
-      this.motherTurns = (this.motherTurns || 0) + 1;
+    // Orchestrator (28.2): its first turn starts two writers (cart.js, DISCOUNTS.md) and a reader; then it's done
+    if (role === "orchestrator") {
+      this.orchestratorTurns = (this.orchestratorTurns || 0) + 1;
       const json = obj => `\`\`\`json\n${JSON.stringify(obj)}\n\`\`\``;
-      return this.motherTurns === 1
+      return this.orchestratorTurns === 1
         ? `Two parts and a check.\n${json({
             actions: [
               {
@@ -252,7 +252,7 @@ const OWNER = {
   decision: ["accept"],
   merge: ["merge"],
   "discussion-end": ["adopt"],
-  delegation: ["approve"], // the mother's first batch of workers
+  delegation: ["approve"], // the orchestrator's first batch of workers
 };
 
 // A discussion (orchestration 14) and the plan that takes its decision
@@ -541,16 +541,16 @@ const reported = task =>
     }
   );
   await run(
-    "Mother (it asks: Codex writes cart.js, Claude DISCOUNTS.md, Claude reads; you approve; integrated, tested, merged)",
+    "Orchestrator (it asks: Codex writes cart.js, Claude DISCOUNTS.md, Claude reads; you approve; integrated, tested, merged)",
     { category: "workflow", workflow: { pattern: "pipeline" } },
     {
-      template: require("../src/shared/workflow-templates").builtin("mother"),
+      template: require("../src/shared/workflow-templates").builtin("orchestrator"),
       expect: (task, root) =>
         merged(task, root) ||
         (!fs.existsSync(path.join(root, "DISCOUNTS.md"))
           ? "DISCOUNTS.md missing after merge"
-          : task.mother?.workers.length !== 3
-            ? `${task.mother?.workers.length} workers`
+          : task.orchestrator?.workers.length !== 3
+            ? `${task.orchestrator?.workers.length} workers`
             : null),
     }
   );
