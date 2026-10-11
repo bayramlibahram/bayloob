@@ -377,6 +377,11 @@
     diff: 'Diff', review: 'Review', status2: 'Status', findings: n => n ? `${n} finding${n === 1 ? '' : 's'}` : 'no findings', files: n => `${n} file${n === 1 ? '' : 's'}`,
     out: 'Out', active: 'In the race', winner: 'Chosen', mergedInto: (b, applied) => `Chosen · ${applied ? 'applied to' : 'merged into'} ${b}`, choose: 'Choose this one', chosen: 'Picked',
     answer: 'Builder’s answer', reviewText: 'Review', noOutput: 'No output yet',
+    say: {
+      needsYou: (title, why) => `Task needs you: ${title}${why ? ` — ${why}` : ''}`,
+      ended: (title, status) => `Task ${status.toLowerCase()}: ${title}`,
+      step: (n, what, status) => `Runbook step ${n} ${status}: ${what}`,
+    },
     useAlt: 'Decisions take Alt+A (or Alt+P / Alt+R), or a click — not Enter',
     loading: 'Loading…', noLog: 'Nothing logged yet', noLogHint: 'Every stage, agent and decision is written here as it happens.',
     noSteps: 'The plan has no steps', noStepsHint: 'Nothing will run on the host. Stop the plan, or retry the task with a note.', retry: 'Retry', noInstances: 'No agent has started yet',
@@ -537,12 +542,29 @@
     setTask(task) {
       const before = this.tasks.get(task.id);
       this.tasks.set(task.id, task);
+      this.#announceChanges(before, task);
       // Artifacts may have changed with it: read them again when shown
       if (before?.updatedAt !== task.updatedAt) {
         for (const k of [...this.#art.keys()]) { if (k.startsWith(`${task.id}:`)) { this.#art.delete(k); } }
       }
       if (this.composing && this.open === task.id && task.gate?.id !== this.composing.gate) { this.composing = null; }
       if (!this.editing && (!this.composing || this.open !== task.id)) { this.render(); }
+    }
+
+    // What changed on its own, for a screen reader: the task now needs you, a runbook step finished
+    #announceChanges(before, task) {
+      if (!before) { return; }
+      if (task.status === 'needs-you' && (before.status !== 'needs-you' || before.gate?.id !== task.gate?.id)) {
+        announce(T.say.needsYou(task.title, task.gate?.title));
+      } else if (task.status !== before.status && ['done', 'failed', 'stopped'].includes(task.status)) {
+        announce(T.say.ended(task.title, T.status[task.status]));
+      }
+      const was = new Map((before.runbook?.steps || []).map(x => [x.id, x.status]));
+      for (const [i, x] of (task.runbook?.steps || []).entries()) {
+        if (was.has(x.id) && was.get(x.id) !== x.status && ['done', 'failed', 'skipped'].includes(x.status)) {
+          announce(T.say.step(i + 1, x.purpose || x.id, x.status));
+        }
+      }
     }
 
     setUsage(usage) { this.usage = usage; this.#renderUsage(); }

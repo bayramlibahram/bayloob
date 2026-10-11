@@ -424,7 +424,7 @@
       </div>
     </header>
 
-    <div class="finished" id="finished" hidden></div>
+    <div class="finished" id="finished" role="status" hidden></div>
 
     <div class="main">
       <nav class="side" id="side"></nav>
@@ -549,7 +549,7 @@
     wsPickAgent: 'Select an AI agent to open its folder', wsNoFolder: "This agent's folder isn't known", wsOpen: "Open the selected agent's folder",
     focusNoExt: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows', focusNoWindows: 'This app has no open windows',
     noActivity: 'No activity yet', noActivityHint: 'Windows opened, focus changes and new tabs show up here',
-    noMatchHint: 'Try another word, or clear the search (Esc)', clearSearch: 'Clear search',
+    noMatchHint: 'Try another word, or clear the search (Esc)', sayInbox: names => `New in the Inbox: ${names}`, clearSearch: 'Clear search',
     noContainers: 'No containers', noContainersHint: 'docker run or docker compose up starts one — it shows up here',
     emptyAction: { newTask: 'New task…', ask: 'Ask Bayloob', launch: 'Launch an app' },
     countTip: {
@@ -754,6 +754,7 @@
     #coolTimer = null;
     #pressing = false;      // a mouse button is held on the details: re-rendering now would swallow the click
     #renderLater = false;
+    #inboxSeen = null;      // the Inbox's item keys at the last render (null before the first)
     #palAt = 0;
     #palCmds = [];
     #prevStates = new Map(); // session id -> state at the previous update
@@ -814,6 +815,17 @@
       this.finished = this.finished.filter(id => list.some(s => s.id === id && s.state === 'done'));
       this.sessions = list;
       this.render();
+    }
+
+    // A new Inbox item (an approval, a question, a task that needs you), said to a screen reader
+    #announceInbox() {
+      const items = this.#items('inbox');
+      const keys = new Set(items.map(i => i.key));
+      if (this.#inboxSeen) {
+        const fresh = items.filter(i => !this.#inboxSeen.has(i.key));
+        if (fresh.length) { announce(T.sayInbox(fresh.map(i => i.name).join(', '))); }
+      }
+      this.#inboxSeen = keys;
     }
 
     #renderFinished() {
@@ -929,6 +941,7 @@
     // ---------- render ----------
 
     render() {
+      this.#announceInbox();
       this.#renderStatus();
       this.#renderSide();
       this.#renderList();

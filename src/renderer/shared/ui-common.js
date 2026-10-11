@@ -200,6 +200,25 @@ function skeletonHtml(widths = [70, 90, 55]) {
     .join("")}</div>`;
 }
 
+// Says `text` to a screen reader (a polite live region, made on first use). Events that arrive on their
+// own — a task needs you, a new Inbox item, a runbook step finished — go through here, not only on screen.
+function announce(text) {
+  let el = document.getElementById("announcer");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "announcer";
+    el.className = "sr-only";
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("role", "status");
+    document.body.appendChild(el);
+  }
+  // Emptied first, so the same words twice in a row are read twice
+  el.textContent = "";
+  setTimeout(() => {
+    el.textContent = text;
+  }, 60);
+}
+
 // The readable text of a rejected IPC call ("Error invoking remote method 'x': Error: …" → "…")
 function errorText(err) {
   const m = String(err?.message ?? err ?? "Unknown error");
