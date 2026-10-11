@@ -13,6 +13,10 @@
   still shows the red sound icon on the bar.
 
 ### Fixed
+- After a restart, a task's agent sessions came back through discovery without their task: the scheduler
+  counted a builder's own idle session against its next round (`codex 2/2 running`, waiting forever), and a
+  planner or reviewer lost the role that keeps it read-only at the hook. Sessions in a task's panes now get
+  their task, role and label back from the engine, and never count as the user's own.
 - A task's worktrees now get the project's env files too (`.env`, `.env.local`…, symlinked like `node_modules`
   and kept out of git; `.env.example` and the like stay as tracked). In the first real Best-of-N run every
   candidate's tests failed with `DATABASE_URL is required` only because `.env` is git-ignored.

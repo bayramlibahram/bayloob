@@ -240,11 +240,13 @@ class BayloobApp {
       capacity: () => this.#capacity(),
       limits: () => this.settings.get("limits"),
       freeMemory: () => memAvailable(),
-      // A task's own sessions are counted by the scheduler itself while they work
+      // A task's own sessions are counted by the scheduler itself while they work. After a restart they come
+      // back through discovery without their task, so the engine is asked too — otherwise a builder's idle
+      // session would count against its own next round and that round would wait forever.
       external: () =>
         this.server.store
           .list()
-          .filter(s => !s.task)
+          .filter(s => !s.task && !this.engine?.ownsPane(s.term?.tmux))
           .map(s => ({ adapter: s.agent, project: s.cwd })),
     });
     // The workflow engine: tasks run stage by stage; their agents are tmux sessions in the background
@@ -1192,7 +1194,16 @@ class BayloobApp {
     try {
       const store = this.server.store;
       const found = this.discovery.find();
-      const adopted = store.adopt(found);
+      let adopted = store.adopt(found);
+      // A task's sessions found again after a restart get their task and role back — the role is what keeps
+      // a planner or reviewer read-only at the hook
+      for (const s of store.list()) {
+        const owner = !s.task && this.engine?.ownerOf(s.term?.tmux);
+        if (owner) {
+          Object.assign(s, owner);
+          adopted = true;
+        }
+      }
       // Interactive Codex (0.162) doesn't call `notify`, so a task's Codex instance can't report the end of
       // its turn by hook: its rollout's task_complete (seen here) does it instead — only if it's newer than
       // the turn the engine is waiting for

@@ -86,6 +86,21 @@ class TaskEngine extends EventEmitter {
     return !!paneId && !!this.#findByPane(paneId);
   }
 
+  /** Which task, role and label a pane works for (sessions found again after a restart get them back). */
+  ownerOf(paneId) {
+    const found = paneId && this.#findByPane(paneId);
+    if (!found) {
+      return null;
+    }
+    const { task, inst } = found;
+    const st = task.template.stages.find(s => s.id === inst.stage);
+    return {
+      task: task.id,
+      role: inst.role,
+      label: `${task.title} · ${st?.title || inst.stage}${inst.candidate ? ` · ${inst.candidate}` : ""}`,
+    };
+  }
+
   // ---------- start ----------
 
   /**

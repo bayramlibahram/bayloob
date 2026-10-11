@@ -421,3 +421,16 @@ test("a turn end from before the current turn started is ignored (Codex's rollou
   await env.engine.settled(task.id);
   assert.equal(env.store.readArtifact(task.id, "plan.md"), "the plan");
 });
+
+test("a pane's owner: task, role and label (given back to sessions found again after a restart)", async () => {
+  const env = setup();
+  const task = await startBest(env);
+  const [planner] = env.runner.sessions;
+  assert.deepEqual(env.engine.ownerOf(planner.paneId), {
+    task: task.id,
+    role: "planner",
+    label: "Add a discount rule to orders · Plan",
+  });
+  assert.equal(env.engine.ownerOf("%999"), null);
+  assert.equal(env.engine.ownsPane(planner.paneId), true);
+});
