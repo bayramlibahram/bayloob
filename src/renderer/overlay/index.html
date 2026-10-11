@@ -10,6 +10,9 @@
     --glass: rgba(16, 15, 21, 0.985); /* nearly solid: whatever is behind never shows through */
     --card: rgb(var(--ink) / 0.045);
     --accent: var(--idle);
+    --chip-h: 22px; /* every chip / tag in the pill: one height, one radius */
+    --row-pad: 6px; /* list rows, "New session" and the music row share one left edge */
+    --avatar: 34px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: transparent; overflow: hidden; height: 100%;
@@ -18,6 +21,7 @@
   /* the pill floats just below the desktop's top bar (the window is placed there), with a little air */
   body { display: flex; justify-content: center; align-items: flex-start; padding-top: 6px; }
   button { font: inherit; color: inherit; border: 0; cursor: pointer; background: none; }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
   /* ---------- Pill ---------- */
   .pill {
@@ -75,15 +79,19 @@
   .label b { font-weight: 700; font-size: var(--label, 16px); letter-spacing: -.01em; }
   /* Settings → Pill size: the mascot's tile, and the bar's height and name with it (L is the original) */
   .pill[data-size=s] { --tile: 28px; --mascot: 24px; --bar-h: 40px; --label: 14px; }
-  .pill[data-size=m] { --tile: 36px; --mascot: 30px; --bar-h: 48px; --label: 15px; }
+  .pill[data-size=m] { --tile: 36px; --mascot: 30px; --bar-h: 48px; --label: 15px; --avatar: 32px; }
+  /* smaller pill, denser list: the rows follow the bar down */
+  .pill[data-size=s] { --avatar: 30px; }
+  .pill[data-size=s] .row { min-height: 44px; padding-top: 5px; padding-bottom: 5px; }
   .label span { color: var(--muted); }
   /* status chip: "••• Thinking" in the state's colour; the dots pulse while the agent is busy */
   .clash { margin-left: 6px; font-size: 13px; cursor: help; }
   .clash.conflict { color: var(--waiting); }
   .clash.shared { color: var(--working); }
-  .status { flex: none; display: none; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 9px; border-radius: 13px;
-    font-size: 12.5px; font-weight: 600; color: color-mix(in srgb, var(--accent) 80%, var(--chip-tint));
-    background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  /* same family as the row tags (.tag): pill radius, state colour on its own 15 % tint */
+  .status { flex: none; display: none; align-items: center; gap: 6px; height: var(--chip-h); padding: 0 10px 0 9px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; line-height: 1; color: color-mix(in srgb, var(--accent) 80%, var(--chip-tint));
+    background: color-mix(in srgb, var(--accent) 15%, transparent); }
   .status.on { display: inline-flex; }
   .status .dots { display: inline-flex; gap: 3px; }
   .status .dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; }
@@ -264,8 +272,8 @@
   .card .head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .card .head b { color: var(--text); font-weight: 600; }
   .card .head .adot { width: 7px; height: 7px; border-radius: 50%; }
-  .chip { display: inline-block; padding: 2px 8px; border-radius: 7px; font-size: 12px; font-weight: 600;
-    background: color-mix(in srgb, var(--working) 14%, transparent); color: var(--working); margin-right: 6px; }
+  .chip { display: inline-flex; align-items: center; height: var(--chip-h); padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1;
+    background: color-mix(in srgb, var(--working) 15%, transparent); color: var(--working); margin-right: 6px; }
   .code { font: 12.5px/1.5 ui-monospace, "Ubuntu Mono", "DejaVu Sans Mono", monospace; color: var(--softer);
     background: rgb(var(--shade) / calc(.35 * var(--shade-k))); border-radius: 8px; padding: 6px 8px; margin-top: 6px;
     max-height: 160px; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
@@ -307,13 +315,16 @@
      oversized max-height has run down; long lists scroll inside */
   .listwrap { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .28s cubic-bezier(.2,.8,.2,1), opacity .2s; }
   .pill.open .listwrap { grid-template-rows: 1fr; opacity: 1; }
-  .list { min-height: 0; overflow: hidden; padding: 0 12px; }
-  .pill.open .list { overflow-y: auto; max-height: 420px; padding-bottom: 10px; }
+  /* a hairline under the bar marks where the list starts (inset, so it stays put while the list scrolls) */
+  .list { min-height: 0; overflow: hidden; padding: 0 8px; }
+  .pill.open .list { overflow-y: auto; max-height: 420px; padding-top: 6px; padding-bottom: 8px; box-shadow: inset 0 1px 0 var(--line); }
   .pill.full .list { max-height: calc(100vh - 120px); }
+  .list::-webkit-scrollbar { width: 5px; }
+  .list::-webkit-scrollbar-thumb { background: rgb(var(--ink) / .14); border-radius: 3px; }
   /* full view: the activity line may wrap, and recent steps show under it */
   .pill.full .row { align-items: flex-start; padding-top: 10px; padding-bottom: 10px; }
-  .pill.full .row .mascot.mini, .pill.full .row .icon, .pill.full .row .st, .pill.full .row .diff { margin-top: 2px; }
-  .pill.full .row .name { white-space: normal; }
+  .pill.full .row .meta, .pill.full .row .acts { margin-top: 6px; }
+  .pill.full .row .name .l1 { white-space: normal; }
   .pill.full .row .out { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .row .hist { display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted); }
   .row .hist i { display: block; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8; }
@@ -347,52 +358,103 @@
   .voice .vbtns .primary { background: var(--brand); color: #fff; }
   .voice .vbtns .primary:hover { background: color-mix(in srgb, var(--brand) 85%, #fff); }
   .voice .vbtns button[hidden] { display: none; }
-  .row { position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 4px 8px 20px; border-top: 1px solid var(--line);
-    border-radius: 0 10px 10px 0; transition: background .15s; }
-  .row:hover { background: rgb(var(--ink) / .035); }
-  .row .name b { font-weight: 650; }
-  /* sessions are subs of the manager mascot: a tree guide links each row to the pill's mascot column */
-  .row::before { content: ''; position: absolute; left: 6px; top: -1px; bottom: 0; border-left: 1px solid rgb(var(--ink) / .12); }
-  .row::after { content: ''; position: absolute; left: 6px; top: 50%; width: 8px; border-top: 1px solid rgb(var(--ink) / .12); }
-  .row.last::before { bottom: 50%; }
-  .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* the agent's latest output, under its name */
-  /* uncommitted changes in the session's repo */
-  .row .queue { flex: none; font-size: 12px; color: var(--thinking); }
-  .row .diff { flex: none; font: 600 11.5px ui-monospace, "Ubuntu Mono", monospace; padding: 2px 6px; border-radius: 6px; background: rgb(var(--ink) / .05); }
-  .row .diff .add { color: var(--done); }
-  .row .diff .del { color: var(--waiting); }
-  .row .out { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .row .agent { color: var(--muted); font-size: 12px; }
-  /* the state as a small chip in its own colour */
-  .row .st { flex: none; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
-    background: color-mix(in srgb, currentColor 12%, transparent); }
-  .row .diff.files { color: var(--muted); font-family: inherit; }
-  .icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  /* One session: avatar · project / agent / latest line · tags · actions. Rows are soft tiles (no rules
+     between them), lit on hover, so the eye reads them as items rather than a table */
+  .row { position: relative; display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 7px 4px 7px var(--row-pad);
+    border-radius: 12px; transition: background .15s; }
+  .row + .row { margin-top: 2px; }
+  .row:hover, .row:focus-within { background: rgb(var(--ink) / .05); }
+  /* the agent's mascot on a small tile (like the manager's), with its state as a dot on the corner */
+  .row .avatar { position: relative; flex: none; width: var(--avatar); height: var(--avatar); display: grid; place-items: center;
+    border-radius: 10px; background: rgb(var(--ink) / .05); border: 1px solid rgb(var(--ink) / .07); }
+  .row .avatar .mascot.mini { width: 26px; height: 26px; }
+  .row .avatar::after { content: ''; position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--c); box-shadow: 0 0 0 2px var(--surface-solid); }
+  .row .name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .row .l1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .row .l1 b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 650; font-size: 13.5px; color: var(--text); }
+  .row .agent { flex: 0 0 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .row .tok { flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .row .tok::before { content: '·'; margin-right: 6px; }
+  /* the agent's latest message, as plain text (markdown stripped); the whole of it on hover */
+  .row .out { display: block; color: var(--muted); font-size: 12px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .meta { flex: none; display: flex; align-items: center; gap: 4px; }
+  .row .acts { flex: none; display: flex; align-items: center; gap: 1px; opacity: .62; transition: opacity .15s; }
+  .row:hover .acts, .row:focus-within .acts, .row .acts:has(.armed) { opacity: 1; }
+
+  /* Tags: one chip family across the list — the same height, radius and type as the bar's status chip.
+     --c (a token) colours the state ones; the rest are neutral */
+  .tag { flex: none; display: inline-flex; align-items: center; gap: 5px; height: var(--chip-h); padding: 0 8px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 600; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums;
+    color: var(--soft); background: rgb(var(--ink) / .07); }
+  .tag.st { color: color-mix(in srgb, var(--c) 80%, var(--chip-tint)); background: color-mix(in srgb, var(--c) 15%, transparent); }
+  .tag.st::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  /* uncommitted changes in the session's repo, and prompts queued for it */
+  .tag.diff .add { color: var(--done); }
+  .tag.diff .del { color: var(--waiting); }
+  .tag.queue { color: var(--thinking); }
+  .tag svg { width: 11px; height: 11px; fill: currentColor; }
+  .row .clash { margin: 0 2px; }
+
+  .icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px;
+    transition: background .15s, color .15s; }
   .icon:hover { background: rgb(var(--ink) / .1); color: var(--text); }
   .icon svg { width: 15px; height: 15px; fill: currentColor; }
   .icon.stop:hover { color: var(--waiting); }
   .icon.stop.armed { background: color-mix(in srgb, var(--waiting) 22%, transparent); color: var(--waiting); }
-  .new { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 2px; border-top: 1px solid var(--line);
-    color: var(--muted); text-align: left; transition: color .15s; }
-  .new:hover { color: var(--text); }
-  .new span { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 14px;
-    background: rgb(var(--ink) / .07); }
-  .empty { color: var(--muted); padding: 8px 2px; border-top: 1px solid var(--line); }
-  .music { display: flex; align-items: center; gap: 8px; padding: 7px 2px 2px; border-top: 1px solid var(--line); }
-  .music .art { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 11px;
-    background: linear-gradient(135deg, #B049F9, #601ADA); }
-  .music .t { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .music .t span { color: var(--muted); }
-  /* Agent usage (open pill only, while something runs): Claude ●●●○ 3/4 — limits from Settings → Agents */
-  .usage { display: none; gap: 12px; flex-wrap: wrap; padding: 0 16px 8px; color: var(--muted); font-size: 11.5px; }
+
+  /* "+ New session": an outlined slot that lines up with the avatars above it */
+  .new { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; margin-top: 4px; padding: 4px 8px 4px var(--row-pad);
+    border-radius: 12px; border: 1px dashed rgb(var(--ink) / .14); color: var(--soft); font-weight: 600; font-size: 12.5px; text-align: left;
+    transition: background .15s, border-color .15s, color .15s; }
+  .new:hover { color: var(--text); border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: color-mix(in srgb, var(--brand) 7%, transparent); }
+  .new .plus { flex: none; width: var(--avatar); height: 28px; display: grid; place-items: center; }
+  .new .plus i { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; color: var(--brand-soft);
+    background: color-mix(in srgb, var(--brand) 15%, transparent); }
+  .new .plus svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+  .empty { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 4px 8px 4px var(--row-pad); color: var(--muted); font-size: 12.5px; }
+  .empty::before { content: ''; flex: none; width: var(--avatar); height: 8px; background: radial-gradient(circle, var(--idle) 3px, transparent 3.5px); }
+
+  /* Now playing: art · title over artist (each ellipsised, full text on hover) · prev / play / next */
+  .music { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 4px 0 var(--row-pad); border-top: 1px solid var(--line); }
+  .music .art { flex: none; width: var(--avatar); height: var(--avatar); border-radius: 10px; display: flex; align-items: flex-end; justify-content: center;
+    gap: 2px; padding-bottom: 9px; color: var(--primary-fg); background: linear-gradient(135deg, var(--brand-soft), var(--brand)); }
+  .music .art i { width: 3px; height: 6px; border-radius: 2px; background: currentColor; opacity: .9; }
+  .music .art i:nth-child(2) { height: 12px; }
+  .music .art i:nth-child(3) { height: 9px; }
+  .music .art.on i { animation: eq .9s ease-in-out infinite alternate; }
+  .music .art.on i:nth-child(2) { animation-delay: -.3s; }
+  .music .art.on i:nth-child(3) { animation-delay: -.6s; }
+  @keyframes eq { from { transform: scaleY(.45); } to { transform: scaleY(1); } }
+  .music .art i { transform-origin: bottom; }
+  .music .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .music .t b, .music .t span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .music .t b { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .music .t span { font-size: 11.5px; color: var(--muted); }
+  .music .mctl { flex: none; display: flex; align-items: center; gap: 2px; }
+  .music .icon svg { width: 14px; height: 14px; }
+  .music .icon.play { width: 30px; height: 30px; border-radius: 50%; color: var(--text); background: rgb(var(--ink) / .08); }
+  .music .icon.play:hover { background: rgb(var(--ink) / .14); }
+
+  /* Agent usage (open pill only, while something runs): Claude ●●●○ 3/4 · Codex ●○ 1/2 — limits from
+     Settings → Agents. A quiet band under the bar; each adapter has its own tooltip */
+  .usage { display: none; flex-wrap: wrap; align-items: center; row-gap: 4px; margin: 0 8px 8px; padding: 5px 12px; border-radius: 10px;
+    background: rgb(var(--ink) / .04); color: var(--muted); font-size: 12px; }
   .pill.open .usage.on { display: flex; }
-  .usage span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-  .usage b { color: var(--soft); font-variant-numeric: tabular-nums; }
-  .usage .ud { display: inline-flex; gap: 2px; }
-  .usage .ud i { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--c); }
-  .usage .ud i.on { background: var(--c); }
-  .usage em { font-style: normal; color: var(--working); }
+  .usage > span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .usage > span + span { margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); }
+  .usage .an { color: var(--soft); font-weight: 600; }
+  .usage b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+  .usage .ud { display: inline-flex; gap: 3px; }
+  /* empty slots are a neutral track; used ones take the agent's colour, nudged toward the text colour so
+     they stay visible on white */
+  .usage .ud i { width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--ink) / .16); }
+  .usage .ud i.on { background: color-mix(in srgb, var(--c) 85%, var(--chip-tint)); }
+  .usage em { font-style: normal; font-weight: 600; color: var(--working); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .row, .acts, .icon, .new, .status.busy .dots i, .music .art.on i { transition: none; animation: none; }
+  }
 </style>
 </head>
 <body>
@@ -412,7 +474,7 @@
       <span class="plabel" id="plabel"></span>
     </div>
     <div class="moremenu" id="moremenu" role="menu"></div>
-    <div class="usage" id="usage" title="Agents running"></div>
+    <div class="usage" id="usage" role="status" aria-label="Agents running"></div>
     <div class="card" id="card"></div>
     <div class="voice" id="voice" data-s="off">
       <div class="vhead"><span class="vdot"></span><span id="vtitle">Voice prompt</span><button type="button" class="vtarget" id="vtarget" data-voice="target"></button></div>
@@ -425,6 +487,7 @@
   </div>
 
 <script src="../shared/ui-common.js"></script>
+<script src="../shared/markdown-lite.js"></script>
 <script src="../../assets/packs/meta.js"></script>
 <script src="../shared/novi.js"></script>
 <script src="../shared/sounds.js"></script>
@@ -518,6 +581,15 @@
 
   const ICON_PROMPT = '<svg viewBox="0 0 16 16"><path d="M2.5 2h11A1.5 1.5 0 0 1 15 3.5v7a1.5 1.5 0 0 1-1.5 1.5H6l-3.2 2.6A.5.5 0 0 1 2 14.2V12h.5A1.5 1.5 0 0 1 1 10.5v-7A1.5 1.5 0 0 1 2.5 2Zm1.5 3v1.3h8V5H4Zm0 2.7V9h5.5V7.7H4Z"/></svg>';
   const ICON_STOP = '<svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="2"/></svg>';
+  const ICON_PLUS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>';
+  const ICON_QUEUE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2h8v2.6L9.3 8l2.7 3.4V14H4v-2.6L6.7 8 4 4.6Z"/></svg>';
+  // Media keys as SVG, so they look the same on every system font (the ⏮ ⏸ glyphs didn't)
+  const ICON_MEDIA = {
+    prev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3h1.6v10H3.5zM13 3.6v8.8a.6.6 0 0 1-.9.5L6 8.5a.6.6 0 0 1 0-1l6.1-4.4a.6.6 0 0 1 .9.5Z"/></svg>',
+    next: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.9 3h1.6v10h-1.6zM3 3.6v8.8a.6.6 0 0 0 .9.5L10 8.5a.6.6 0 0 0 0-1L3.9 3.1a.6.6 0 0 0-.9.5Z"/></svg>',
+    play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.1v9.8a.6.6 0 0 0 .9.5l7.3-4.9a.6.6 0 0 0 0-1L5.9 2.6a.6.6 0 0 0-.9.5Z"/></svg>',
+    pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.8" y="3" width="3" height="10" rx=".8"/><rect x="9.2" y="3" width="3" height="10" rx=".8"/></svg>',
+  };
 
 
   /** Builds the hexagon mascot SVG in an agent's colors. Each copy gets unique gradient ids. */
@@ -854,6 +926,19 @@
 
     setCollisions(collisions) { this.collisions = collisions || {}; this.render(); }
 
+    // Shown in the open pill while any agent runs — "Claude ●●○○ 2/4 · Codex ●○ 1/2 +1"; the pill's
+    // ResizeObserver keeps the Linux shape in step when the band appears or wraps
+    setUsage(usage) {
+      const box = document.getElementById('usage');
+      const rows = Object.entries(usage?.agents || {}).filter(([, u]) => u.enabled && (u.running || u.queued));
+      box.classList.toggle('on', rows.length > 0);
+      box.innerHTML = rows.map(([a, u]) => {
+        const dots = Array.from({ length: Math.min(u.max, 8) }, (_, i) => `<i class="${i < u.running ? 'on' : ''}"></i>`).join('');
+        return `<span title="${esc(`${Agent.displayName(a)}: ${u.running} of ${u.max} running${u.queued ? `, ${u.queued} queued` : ''}`)}"><span class="an">${esc(Agent.displayName(a).split(' ')[0])}</span>
+          <span class="ud" style="--c:${Agent.color(a)}" aria-hidden="true">${dots}</span><b>${u.running}/${u.max}</b>${u.queued ? `<em>+${u.queued} queued</em>` : ''}</span>`;
+      }).join('');
+    }
+
     // ⚠ another agent works in the same tree: red when they edited the same file, yellow otherwise
     #collisionHtml(id) {
       const c = this.collisions[id];
@@ -883,7 +968,8 @@
       const deaf = !this.health.ok && this.health.issues.length > 0;
       this.el.pill.classList.toggle('deaf', deaf);
       this.#paint(this.el.label, deaf && !(top?.perm) ? this.#deafHtml() : this.#labelHtml(top, state));
-      this.el.label.title = deaf ? T.deafTip : '';
+      // a long project name or track title is cut at the bar's edge: the whole of it on hover
+      this.el.label.title = deaf ? T.deafTip : this.el.label.textContent.replace(/\s+/g, ' ').trim();
       this.#renderStatus(top, state, deaf);
       const n = this.sessions.length;
       this.#paint(this.el.count, n > 1 ? this.#stackHtml() : '');
@@ -1175,7 +1261,7 @@
       const tone = r?.status === 'failed' ? ' r-failed' : r?.status === 'untested' ? ' r-untested' : '';
       return { kind: `done${tone}`, html: `
         ${this.#cardHead(s, T.finished)}
-        <div class="summary">${esc(s.summary || T.taskDone)}</div>
+        <div class="summary" title="${esc(plainMarkdown(s.summary))}">${esc(plainMarkdown(s.summary) || T.taskDone)}</div>
         ${this.#receiptHtml(s)}
         ${this.#findingsHtml(s)}
         ${this.#suggHtml(s)}
@@ -1271,14 +1357,19 @@
 
     #listHtml() {
       if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
-      return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
-          <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
-          <span class="name" title="${esc(`${s.project} · ${Agent.displayName(s.agent)}`)}"><b>${esc(s.project)}</b> <span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}${this.full ? this.#histHtml(s) : ''}</span>
-          ${this.queues[s.id] ? `<span class="queue" title="${T.queuedTip(this.queues[s.id])}">⏳${this.queues[s.id]}</span>` : ''}
-          ${this.#diffHtml(s.id)}
-          ${this.#collisionHtml(s.id)}
-          <span class="st" style="color:${COLORS[s.state]}">${T.state[s.state]}${s.state === 'done' && this.receipts[s.id] ? (RECEIPT_MARK[this.receipts[s.id].status] || '') : ''}</span>
-          ${this.#rowControls(s)}</div>`).join('');
+      // project (strong) · agent and tokens (quiet) on top, the latest message as plain text under them;
+      // the tags on the right all share one chip style, the actions brighten on hover
+      return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}" style="--c:${COLORS[s.state]}">
+          <div class="avatar" title="${esc(T.state[s.state])}"><div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div></div>
+          <span class="name"><span class="l1"><b title="${esc(s.project)}">${esc(s.project)}</b><span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}</span>${this.#tokensHtml(s.id)}</span>${this.#outHtml(s.id)}${this.full ? this.#histHtml(s) : ''}</span>
+          <span class="meta">${this.queues[s.id] ? `<span class="tag queue" title="${T.queuedTip(this.queues[s.id])}">${ICON_QUEUE}${this.queues[s.id]}</span>` : ''}${this.#diffHtml(s.id)}${this.#collisionHtml(s.id)}<span class="tag st">${T.state[s.state]}${s.state === 'done' && this.receipts[s.id] ? (RECEIPT_MARK[this.receipts[s.id].status] || '') : ''}</span></span>
+          <span class="acts">${this.#rowControls(s)}</span></div>`).join('');
+    }
+
+    // The agent's latest message: Markdown markers would only be noise in one line, so it's shown as plain text
+    #outHtml(id) {
+      const text = this.output[id] ? plainMarkdown(this.output[id]) : '';
+      return text ? `<span class="out" title="${esc(text)}">${esc(text)}</span>` : '';
     }
 
     // Prompt needs a tmux pane (and no pending permission); stop only for sessions Bayloob launched
@@ -1286,16 +1377,16 @@
       const sid = esc(s.id);
       const armed = this.confirmStop === s.id;
       return [
-        !s.perm ? `<button class="icon" data-act="prompt" data-sid="${sid}" title="${T.sendPrompt}">${ICON_PROMPT}</button>` : '',
-        s.stoppable ? `<button class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
-        `<button class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}">${ICON_TERM}</button>`,
+        !s.perm ? `<button type="button" class="icon" data-act="prompt" data-sid="${sid}" title="${T.sendPrompt}" aria-label="${T.sendPrompt}">${ICON_PROMPT}</button>` : '',
+        s.stoppable ? `<button type="button" class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}" aria-label="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
+        `<button type="button" class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}" aria-label="${T.openTerminal}">${ICON_TERM}</button>`,
       ].join('');
     }
 
     // " · 1.35M tok" after the agent's name, with the full breakdown on hover
     #tokensHtml(id) {
       const t = this.tokens[id];
-      return t ? ` · <span title="${esc(T.tokensTip(t))}">${formatTokens(t.total)} tok</span>` : '';
+      return t ? `<span class="tok" title="${esc(T.tokensTip(t))}">${formatTokens(t.total)} tok</span>` : '';
     }
 
     // "+42 −7" for the session's repo; nothing when it's clean or not a repo
@@ -1304,9 +1395,9 @@
       if (!d || (!d.added && !d.deleted && !d.files && !d.untracked)) { return ''; }
       // Files changed but no lines counted (new untracked files, binaries, renames): say how many files
       if (!d.added && !d.deleted) {
-        return `<span class="diff files" title="${esc(T.diffTip(d))}">${T.filesChanged(d.files || d.untracked || 0)}</span>`;
+        return `<span class="tag diff files" title="${esc(T.diffTip(d))}">${T.filesChanged(d.files || d.untracked || 0)}</span>`;
       }
-      return `<span class="diff" title="${esc(T.diffTip(d))}"><span class="add">+${d.added}</span> <span class="del">−${d.deleted}</span></span>`;
+      return `<span class="tag diff" title="${esc(T.diffTip(d))}"><span class="add">+${d.added}</span><span class="del">−${d.deleted}</span></span>`;
     }
 
     // Live "waiting 2m 14s" on cards; the mascot fades the longer an agent waits (30 s hungry, 2 min starving)
@@ -1488,18 +1579,19 @@
     }
 
     #newSessionHtml() {
-      return this.api ? `<button class="new" data-act="new"><span>+</span> ${T.newSession}</button>` : '';
+      return this.api ? `<button type="button" class="new" data-act="new"><span class="plus"><i>${ICON_PLUS}</i></span>${T.newSession}</button>` : '';
     }
 
+    // Title over artist, each cut to one line with the whole of it on hover; the bars move only while it plays
     #musicHtml() {
       const m = this.music;
       if (!m?.title) { return ''; }
+      const by = `${m.artist || ''}${m.app ? `${m.artist ? ' · ' : ''}${m.app}` : ''}`;
+      const btn = (cmd, label, icon, cls = '') => `<button type="button" class="icon${cls}" data-act="music" data-m="${cmd}" title="${label}" aria-label="${label}">${icon}</button>`;
       return `<div class="music">
-        <div class="art">♪</div>
-        <div class="t"><b>${esc(m.title)}</b> <span>${esc(m.artist)}${m.app ? ` · ${esc(m.app)}` : ''}</span></div>
-        <button class="icon" data-act="music" data-m="prev" title="${T.prev}" aria-label="${T.prev}">⏮</button>
-        <button class="icon" data-act="music" data-m="toggle" title="${T.playPause}" aria-label="${T.playPause}">${m.playing ? '⏸' : '▶'}</button>
-        <button class="icon" data-act="music" data-m="next" title="${T.next}" aria-label="${T.next}">⏭</button></div>`;
+        <div class="art${m.playing ? ' on' : ''}" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="t" title="${esc(by ? `${m.title}\n${by}` : m.title)}"><b>${esc(m.title)}</b>${by ? `<span>${esc(by)}</span>` : ''}</div>
+        <span class="mctl">${btn('prev', T.prev, ICON_MEDIA.prev)}${btn('toggle', T.playPause, m.playing ? ICON_MEDIA.pause : ICON_MEDIA.play, ' play')}${btn('next', T.next, ICON_MEDIA.next)}</span></div>`;
     }
 
     async #onClick(e) {
@@ -1743,16 +1835,7 @@
     window.bayloobAPI.onTokens?.(tokens => view.setTokens(tokens));
     window.bayloobAPI.onQueues?.(q => view.setQueues(q));
     // Shown in the open pill while any agent runs; the pill's ResizeObserver keeps its shape in step
-    window.bayloobAPI.onUsage?.(usage => {
-      const box = document.getElementById('usage');
-      const rows = Object.entries(usage?.agents || {}).filter(([, u]) => u.enabled && (u.running || u.queued));
-      box.classList.toggle('on', rows.length > 0);
-      box.innerHTML = rows.map(([a, u]) => {
-        const dots = Array.from({ length: Math.min(u.max, 8) }, (_, i) => `<i class="${i < u.running ? 'on' : ''}"></i>`).join('');
-        return `<span title="${esc(`${Agent.displayName(a)}: ${u.running} of ${u.max} running${u.queued ? `, ${u.queued} queued` : ''}`)}">${esc(Agent.displayName(a).split(' ')[0])}
-          <span class="ud" style="--c:${Agent.color(a)}">${dots}</span><b>${u.running}/${u.max}</b>${u.queued ? `<em>+${u.queued}</em>` : ''}</span>`;
-      }).join('');
-    });
+    window.bayloobAPI.onUsage?.(usage => view.setUsage(usage));
     window.bayloobAPI.onBlocked?.(info => view.setBlocked(info));
     window.bayloobAPI.onReceipts?.(r => view.setReceipts(r));
     window.bayloobAPI.onProgress?.(p => view.setProgress(p));
@@ -1764,7 +1847,8 @@
     window.bayloobAPI.onAppearance?.(a => view.setAppearance(a));
   } else {
     // Opened in a plain browser: demo mode, driven from the console via window.__demo
-    window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open(), setAppearance: a => view.setAppearance(a), view };
+    window.__demo = { onSessions: list => view.setSessions(list), setMusic: np => view.setMusic(np), open: () => view.open(), setAppearance: a => view.setAppearance(a),
+      setUsage: u => view.setUsage(u), setOutput: o => view.setOutput(o), view };
   }
   view.render(); // first paint; the first list from main is the baseline for sounds, not news
 </script>
