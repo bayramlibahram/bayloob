@@ -33,6 +33,8 @@ const { parseFindings } = require("../agents/challenge-report");
 const { parseSubtasks, overlaps, describeSubtask } = require("./subtasks");
 const { arbiterInput, parseDecision, parseReport, needsOwner } = require("./arbiter");
 const { LOCAL, parseRunbook, reclassify, confirmLevel, classifyRisk } = require("./runbook");
+const Discussion = require("./discussion");
+const { AGENTS } = require("../agents/agents");
 
 const ARTIFACT_IN_PROMPT = 12_000; // an artifact pasted into a prompt keeps its tail beyond this
 const CHANGES_PROMPT = `The owner asked for changes:
@@ -72,7 +74,26 @@ const GATE_ACTIONS = {
   failed: ["retry", "abort"], // a stage couldn't run (launch error, no candidates left)
   stopped: ["retry", "continue", "abort"], // you stopped a stage (or its last agent): you say what's next
   runbook: ["abort"], // an operations plan: each step is run, skipped or edited through runbookAction(); abort stops the plan
+  discussion: ["next", "end", "abort"], // a discussion paused between rounds: on, end it (and decide), or stop
+  "discussion-end": ["adopt", "another", "abort"], // it ended: adopt the decision (yours or the decider's), or one more round
 };
+
+// Where a discussion's thread is, for its participants (in their read-only worktree, out of git)
+const THREAD_PATH = ".bayloob/discussion/thread.md";
+const DECIDE_PROMPT = [
+  "You decide how this discussion between coding agents ends. Read the whole thread in {{thread}} (the summary below",
+  "has each participant's last stance). Do not change any file. Write the decision as Markdown:",
+  "## Decision — the proposal chosen (or a combination), in a few lines",
+  "## Why — the arguments that carried it",
+  "## Dissent — who disagreed and why, and what that changes",
+  "## Open risks — what still needs checking",
+  "",
+  "Topic:",
+  "{{topic}}",
+  "",
+  "Summary:",
+  "{{summary}}",
+].join("\n");
 
 const firstLine = text =>
   String(text || "")
@@ -323,8 +344,22 @@ class TaskEngine extends EventEmitter {
           }
         }
         const st = this.#stage(task);
-        // An action that was running when Bayloob stopped simply runs again
-        if (st?.action === "run-tests" && task.stages[task.stage].status === "running") {
+        // A discussion's turn lost to the restart is asked again (same speaker), and the discussion goes on
+        const lostTurn =
+          st?.role === "discussion" && !task.gate
+            ? [...task.instances]
+                .reverse()
+                .find(i => i.stage === st.id && i.speaker && i.status === "interrupted")
+            : null;
+        if (lostTurn && task.discussion) {
+          if (lostTurn.kind === "decide") {
+            await this.#discussEnd(task, st, task.discussion.ended || "owner");
+          } else {
+            task.discussion.queue.unshift(lostTurn.speaker);
+            await this.#discussNext(task, st);
+          }
+        } else if (st?.action === "run-tests" && task.stages[task.stage].status === "running") {
+          // An action that was running when Bayloob stopped simply runs again
           await this.#runTests(task);
         } else if (lost) {
           await this.#checkStage(task);
@@ -455,6 +490,22 @@ class TaskEngine extends EventEmitter {
       task.gate = null;
       task.status = "running";
       switch (action) {
+        case "next":
+          task.discussion.pauseAfterRound = false;
+          await this.#discussRound(task, this.#stage(task));
+          break;
+        case "end":
+          await this.#discussEnd(task, this.#stage(task), "owner");
+          break;
+        case "another":
+          task.discussion.extraRounds = (task.discussion.extraRounds || 0) + 1;
+          Object.assign(task.discussion, { ended: null, decision: null, endRequested: false });
+          await this.#discussRound(task, this.#stage(task), note);
+          break;
+        case "adopt":
+          this.#discussAdopt(task, this.#stage(task), note);
+          await this.#advance(task);
+          break;
         case "approve":
           await this.#advance(task);
           break;
@@ -560,6 +611,26 @@ class TaskEngine extends EventEmitter {
       });
       await this.#endInstance(inst);
       const st = task.template.stages.find(s => s.id === inst.stage);
+      if (inst.speaker && task.discussion) {
+        // A discussion goes on without that turn; a stopped decider leaves the decision to you
+        if (inst.kind === "decide") {
+          this.#openGate(
+            task,
+            "discussion-end",
+            "You stopped the decider — decide",
+            this.#discussEndExtra(task)
+          );
+        } else {
+          this.#log(task, "engine", "discussion-skipped", {
+            participant: inst.speaker,
+            round: task.discussion.round,
+          });
+          await this.#discussNext(task, st);
+        }
+        this.#save(task);
+        this.pump();
+        return { ok: true };
+      }
       const cand = inst.candidate && task.candidates.find(c => c.id === inst.candidate);
       if (st?.role === "builder" && !st.split && cand?.status === "active") {
         Object.assign(cand, { status: "out", out: "Stopped by you", stoppedByYou: true });
@@ -586,6 +657,23 @@ class TaskEngine extends EventEmitter {
       const state = task.stages[task.stage];
       if (!st || state.status !== "running") {
         return { ok: false, error: "No stage is running" };
+      }
+      if (st.role === "discussion" && task.discussion) {
+        // Whoever is speaking stops; the discussion waits for you (on, end and decide, or stop the task)
+        for (const inst of task.instances.filter(i => i.stage === st.id && !ENDED.has(i.status))) {
+          await this.#endInstance(inst);
+        }
+        task.discussion.queue = [];
+        this.#log(task, "you", "stop-stage", { stage: st.id, round: task.discussion.round });
+        this.#openGate(
+          task,
+          "discussion",
+          `You stopped the discussion in round ${task.discussion.round}`,
+          this.#discussGate(task)
+        );
+        this.#save(task);
+        this.pump();
+        return { ok: true };
       }
       if (st.action || !st.agents?.length) {
         return { ok: false, error: "This is Bayloob's own step — wait for it, or stop the task" };
@@ -704,6 +792,8 @@ class TaskEngine extends EventEmitter {
       this.#openGate(task, "pick", "Pick the candidate to keep");
     } else if (st.role === "you") {
       this.#openGate(task, "approve", st.title);
+    } else if (st.role === "discussion") {
+      await this.#discussStart(task, st);
     } else {
       if (st.role === "arbiter" && !prompt) {
         await this.#prepareArbiter(task);
@@ -810,6 +900,418 @@ class TaskEngine extends EventEmitter {
     }
   }
 
+  // ---------- discussion (14): agents talk it through in rounds; Bayloob moderates ----------
+
+  /**
+   * The owner's part in a running discussion: a message to all (or `to` one participant), a question to one
+   * (it answers next), pin / unpin a message, pause after this round, end it now (then decide), add or remove a
+   * participant (from the next round). → { ok } or { ok: false, error }
+   */
+  discussionAction(taskId, action, opts = {}) {
+    const task = this.#tasks.get(taskId);
+    if (!task?.discussion || !OPEN.has(task.status)) {
+      return Promise.resolve({ ok: false, error: "No discussion is running in this task" });
+    }
+    return this.#serial(taskId, async () => {
+      const d = task.discussion;
+      const st = task.template.stages.find(x => x.id === d.stage);
+      const ids = d.participants.map(p => p.id);
+      const text = String(opts.text || "")
+        .trim()
+        .slice(0, 8000);
+      const to = opts.to && ids.includes(opts.to) ? opts.to : null;
+      switch (action) {
+        case "message":
+        case "ask": {
+          if (!text) {
+            return { ok: false, error: "Write the message" };
+          }
+          if (action === "ask" && !to) {
+            return { ok: false, error: "Pick who should answer" };
+          }
+          const m = this.#discussPush(task, { from: "you", to, text });
+          this.#log(task, "you", `discussion:${action}`, { message: m.id, to });
+          // A question: that participant answers next (after the turn that's running, if any)
+          if (action === "ask") {
+            d.queue = [to, ...d.queue.filter(x => x !== to)];
+            if (task.gate?.kind === "discussion") {
+              task.gate = null;
+              task.status = "running";
+              d.asking = true;
+              await this.#discussNext(task, st);
+            }
+          }
+          break;
+        }
+        case "pin": {
+          const m = d.messages.find(x => x.id === opts.message);
+          if (!m) {
+            return { ok: false, error: "No such message" };
+          }
+          m.pinned = opts.pinned !== false;
+          this.#log(task, "you", "discussion:pin", { message: m.id, pinned: m.pinned });
+          break;
+        }
+        case "pause":
+          d.pauseAfterRound = opts.on !== false;
+          break;
+        case "end":
+          if (task.gate?.kind === "discussion") {
+            task.gate = null;
+            task.status = "running";
+            await this.#discussEnd(task, st, "owner");
+          } else {
+            d.endRequested = true; // after the turn that's running
+          }
+          this.#log(task, "you", "discussion:end", {});
+          break;
+        case "add": {
+          const adapter = String(opts.adapter || "");
+          if (!AGENTS[adapter]) {
+            return { ok: false, error: "Pick an agent" };
+          }
+          const n = d.participants.filter(p => p.adapter === adapter).length + 1;
+          const label =
+            String(opts.role || "")
+              .trim()
+              .slice(0, 40) || "Participant";
+          const p = {
+            id: `${adapter}-${n}`,
+            adapter,
+            label,
+            name: `${AGENTS[adapter].name} · ${label}`,
+          };
+          d.participants.push(p);
+          d.active.push(p.id);
+          this.#log(task, "you", "discussion:add", { participant: p.id });
+          break;
+        }
+        case "remove": {
+          if (!d.active.includes(opts.participant)) {
+            return { ok: false, error: "That participant isn't taking part" };
+          }
+          if (d.active.length <= 1) {
+            return { ok: false, error: "A discussion needs someone left in it" };
+          }
+          d.active = d.active.filter(x => x !== opts.participant);
+          d.queue = d.queue.filter(x => x !== opts.participant);
+          this.#log(task, "you", "discussion:remove", { participant: opts.participant });
+          break;
+        }
+        default:
+          return { ok: false, error: `"${action}" isn't a discussion action` };
+      }
+      this.#discussWrite(task);
+      this.#save(task);
+      return { ok: true };
+    }).then(r => r || { ok: false, error: "Something went wrong — see the task log" });
+  }
+
+  #discussRounds(task, st) {
+    return Math.min(
+      Discussion.ROUNDS_MAX,
+      (Number(st.rounds) || 3) + (task.discussion?.extraRounds || 0)
+    );
+  }
+
+  async #discussStart(task, st) {
+    if (task.discussion?.stage !== st.id) {
+      const names = Object.fromEntries(Object.entries(AGENTS).map(([k, a]) => [k, a.name]));
+      const participants = Discussion.participantsOf(st, names);
+      task.discussion = {
+        stage: st.id,
+        format: st.format || "round-robin",
+        topic: renderPrompt(st.topic || "{{task}}", { task: task.text }, name =>
+          this.#artifactFor(task, name, null)
+        ),
+        participants,
+        active: participants.map(p => p.id),
+        round: 0,
+        queue: [],
+        messages: [],
+        tokens: 0,
+        handles: {}, // participant id → its session (a participant keeps its context across rounds)
+        pauseAfterRound: false,
+        endRequested: false,
+        extraRounds: 0,
+        agreement: null,
+        ended: null,
+        decision: null,
+      };
+      this.#log(task, "engine", "discussion", {
+        format: task.discussion.format,
+        participants: participants.map(p => p.id),
+        rounds: this.#discussRounds(task, st),
+      });
+    }
+    await this.#discussRound(task, st);
+  }
+
+  async #discussRound(task, st, note = "") {
+    const d = task.discussion;
+    d.round += 1;
+    d.queue = Discussion.speakers(d.format, d.participants, d.round, d.active);
+    if (note) {
+      this.#discussPush(task, { from: "you", to: null, text: note });
+    }
+    this.#log(task, "engine", "discussion-round", { round: d.round, speakers: d.queue });
+    await this.#discussNext(task, st);
+  }
+
+  // The next speaker of this round, or the round's end: stop, pause, or the next round
+  async #discussNext(task, st) {
+    const d = task.discussion;
+    if (d.endRequested) {
+      d.endRequested = false;
+      await this.#discussEnd(task, st, "owner");
+      return;
+    }
+    const pid = d.queue.shift();
+    if (pid) {
+      const files = task.attachments?.length ? this.attachments(task.id).manifest() : "";
+      const prompt = Discussion.turnPrompt({
+        topic: d.topic,
+        format: d.format,
+        participants: d.participants.filter(p => d.active.includes(p.id)),
+        me: pid,
+        round: d.round,
+        rounds: this.#discussRounds(task, st),
+        messages: d.messages,
+        threadPath: THREAD_PATH,
+        files,
+      });
+      await this.#discussTurn(task, st, pid, prompt);
+      return;
+    }
+    if (d.asking) {
+      d.asking = false; // a question answered while paused: back to the pause
+      this.#openGate(task, "discussion", `Paused after round ${d.round}`, this.#discussGate(task));
+      return;
+    }
+    const latest = {};
+    for (const m of d.messages) {
+      if (m.reply && d.active.includes(m.from)) {
+        latest[m.from] = m.reply;
+      }
+    }
+    d.agreement = Discussion.consensus(latest, d.active, this.arbiterThreshold());
+    const why = Discussion.stopReason({
+      format: d.format,
+      stop: { ...(st.stop || {}), maxRounds: this.#discussRounds(task, st) },
+      round: d.round,
+      tokens: d.tokens,
+      agreement: d.agreement,
+    });
+    this.#log(task, "engine", "discussion-round-end", {
+      round: d.round,
+      agreement: d.agreement,
+      stop: why,
+    });
+    if (why) {
+      await this.#discussEnd(task, st, why);
+    } else if (d.pauseAfterRound) {
+      this.#openGate(task, "discussion", `Paused after round ${d.round}`, this.#discussGate(task));
+    } else {
+      await this.#discussRound(task, st);
+    }
+  }
+
+  #discussGate(task) {
+    const d = task.discussion;
+    return {
+      round: d.round,
+      rounds: this.#discussRounds(task, this.#stage(task)),
+      agreement: d.agreement,
+    };
+  }
+
+  // One turn: the thread file where the participant reads it, then its session (the same one as before)
+  async #discussTurn(task, st, pid, prompt, kind = "turn") {
+    const d = task.discussion;
+    const decider = pid === "decider";
+    const p = decider ? { adapter: st.decider?.adapter } : d.participants.find(x => x.id === pid);
+    await this.workspace
+      .writeDiscussion?.({ dir: task.roDir, text: this.#discussThread(task) })
+      .catch(() => null);
+    const n = task.instances.filter(i => i.stage === st.id).length + 1;
+    const inst = {
+      id: `${st.id}.${d.round}.${pid}${kind === "reask" ? ".again" : ""}.${n}`,
+      stage: st.id,
+      round: task.stages[task.stage].round,
+      n,
+      candidate: null,
+      adapter: p.adapter,
+      role: decider ? "arbiter" : "discussant",
+      mode: "read-only",
+      prompt,
+      raw: true,
+      vars: {},
+      reuse: d.handles[pid] || null,
+      speaker: pid,
+      kind,
+      status: "queued",
+      waiting: null,
+      handle: null,
+      queuedAt: this.now(),
+    };
+    inst.schedId = this.#request(task, inst);
+    task.instances.push(inst);
+    this.pump();
+  }
+
+  async #discussAnswered(task, st, inst, message) {
+    const d = task.discussion;
+    if (inst.handle) {
+      d.handles[inst.speaker] = inst.handle;
+    }
+    d.tokens += Discussion.tokensOf(inst.prompt) + Discussion.tokensOf(message);
+    if (inst.kind === "decide") {
+      const name = st.artifact || "decision.md";
+      this.store.writeArtifact(task.id, name, message);
+      d.decision = { by: inst.adapter, artifact: name, at: this.now() };
+      this.#log(task, "agent", "discussion-decision", { by: inst.adapter, artifact: name });
+      this.#openGate(
+        task,
+        "discussion-end",
+        "The decider's answer is in — adopt it?",
+        this.#discussEndExtra(task)
+      );
+      return;
+    }
+    const ids = d.participants.map(p => p.id);
+    const parsed = Discussion.parseReply(message, ids);
+    if (!parsed.ok && inst.kind !== "reask") {
+      this.#log(task, "engine", "discussion-reask", {
+        participant: inst.speaker,
+        error: parsed.error,
+      });
+      await this.#discussTurn(
+        task,
+        st,
+        inst.speaker,
+        Discussion.reaskPrompt(parsed.error),
+        "reask"
+      );
+      return;
+    }
+    const before = [...d.messages].reverse().find(m => m.from === inst.speaker && m.reply)?.reply;
+    const m = this.#discussPush(task, {
+      from: inst.speaker,
+      to: null,
+      text: message,
+      reply: parsed.ok ? parsed.reply : null,
+      unstructured: !parsed.ok,
+      changed: !!(parsed.ok && before && before.stance !== parsed.reply.stance),
+      instance: inst.id,
+    });
+    this.#log(task, "agent", "discussion-reply", {
+      participant: inst.speaker,
+      message: m.id,
+      stance: m.reply?.stance || null,
+      confidence: m.reply?.confidence ?? null,
+      unstructured: m.unstructured,
+    });
+    this.#discussWrite(task);
+    await this.#discussNext(task, st);
+  }
+
+  #discussPush(task, m) {
+    const d = task.discussion;
+    const msg = {
+      id: `m${d.messages.length + 1}`,
+      round: d.round,
+      at: this.now(),
+      pinned: false,
+      ...m,
+    };
+    d.messages.push(msg);
+    return msg;
+  }
+
+  #discussThread(task) {
+    const d = task.discussion;
+    return Discussion.threadMarkdown({
+      topic: d.topic,
+      format: d.format,
+      participants: d.participants,
+      messages: d.messages,
+    });
+  }
+
+  // thread.md and discussion.jsonl in the task (the next stages can use {{artifact:thread.md}})
+  #discussWrite(task) {
+    const d = task.discussion;
+    this.store.writeArtifact(task.id, "thread.md", this.#discussThread(task));
+    this.store.writeArtifact(
+      task.id,
+      "discussion.jsonl",
+      `${d.messages.map(m => JSON.stringify(m)).join("\n")}\n`
+    );
+  }
+
+  // It stopped: the decider reads the thread, or the owner decides
+  async #discussEnd(task, st, why) {
+    const d = task.discussion;
+    d.ended = why;
+    d.queue = [];
+    const summary = Discussion.summary({
+      participants: d.participants,
+      messages: d.messages,
+      why,
+      agreement: d.agreement,
+    });
+    this.store.writeArtifact(task.id, "discussion-summary.json", JSON.stringify(summary, null, 2));
+    this.#discussWrite(task);
+    this.#log(task, "engine", "discussion-ended", { why, round: d.round, tokens: d.tokens });
+    if (st.decider?.adapter) {
+      const prompt = DECIDE_PROMPT.replace("{{thread}}", THREAD_PATH)
+        .replace("{{topic}}", () => d.topic)
+        .replace("{{summary}}", () => JSON.stringify(summary, null, 2));
+      await this.#discussTurn(task, st, "decider", prompt, "decide");
+      return;
+    }
+    const words = {
+      consensus: "they agree",
+      rounds: "the rounds ran out",
+      budget: "the token budget ran out",
+      owner: "you ended it",
+    };
+    this.#openGate(
+      task,
+      "discussion-end",
+      `The discussion ended (${words[why] || why}) — decide`,
+      this.#discussEndExtra(task)
+    );
+  }
+
+  #discussEndExtra(task) {
+    const d = task.discussion;
+    return { why: d.ended, agreement: d.agreement, decision: d.decision, round: d.round };
+  }
+
+  // Adopted: decision.md is the decider's answer, or the owner's note, or (neither) the proposal most agree with
+  #discussAdopt(task, st, note) {
+    const d = task.discussion;
+    const name = st.artifact || "decision.md";
+    if (note) {
+      this.store.writeArtifact(task.id, name, `## Decision (yours)\n\n${note}\n`);
+      d.decision = { by: "you", artifact: name, at: this.now() };
+    } else if (!d.decision) {
+      const lead = d.agreement?.proposer;
+      const m = [...d.messages].reverse().find(x => x.from === lead && x.reply);
+      const who = d.participants.find(p => p.id === lead)?.name || lead;
+      this.store.writeArtifact(
+        task.id,
+        name,
+        m
+          ? `## Decision\n\n${who}'s proposal (${d.agreement.agree} of ${d.agreement.of} agree):\n\n${m.reply.proposal || m.reply.position}\n`
+          : "## Decision\n\nNo proposal was made.\n"
+      );
+      d.decision = { by: "you", artifact: name, at: this.now() };
+    }
+    this.#log(task, "you", "discussion-adopted", { by: d.decision.by });
+  }
+
   async #launch(task, inst) {
     if (inst.status !== "starting") {
       this.scheduler.release(inst.schedId, "stopped"); // stopped while it waited: its slot is free again
@@ -878,6 +1380,9 @@ class TaskEngine extends EventEmitter {
   }
 
   #prompt(task, inst, cand) {
+    if (inst.raw) {
+      return inst.prompt; // a discussion turn: built whole (the thread may hold "{{" of its own)
+    }
     const st = task.template.stages.find(s => s.id === inst.stage);
     const splitBuild = task.template.stages.find(s => s.role === "builder" && s.split);
     const vars = {
@@ -934,6 +1439,19 @@ class TaskEngine extends EventEmitter {
     const st = task.template.stages.find(s => s.id === inst.stage);
     const cand = inst.candidate ? task.candidates.find(c => c.id === inst.candidate) : null;
     this.store.writeArtifact(task.id, `msg.${inst.id}.md`, message);
+    if (inst.speaker) {
+      if (await this.workspace.dirty(inst.cwd).catch(() => false)) {
+        Object.assign(inst, { status: "failed", error: "Changed files although it was read-only" });
+        this.#log(task, "engine", "read-only-violation", { instance: inst.id, cwd: inst.cwd });
+        this.#openGate(task, "violation", "A discussion participant changed files", {
+          detail: `${inst.id}: ${inst.cwd}`,
+        });
+      } else {
+        await this.#discussAnswered(task, st, inst, message);
+      }
+      this.#save(task);
+      return;
+    }
     if (st.artifact) {
       const same = task.instances.filter(
         i => i.stage === inst.stage && i.round === inst.round && i.candidate === inst.candidate

@@ -1706,6 +1706,14 @@ class BayloobApp {
       this.engine.stopInstance(String(id), String(instanceId))
     );
     ipcMain.handle("tasks:stop-stage", (_e, id) => this.engine.stopStage(String(id)));
+    // A discussion: your message, a question, pin, pause, end, add / remove a participant
+    ipcMain.handle("tasks:discussion", (_e, id, action, opts) =>
+      this.engine.discussionAction(
+        String(id),
+        String(action),
+        opts && typeof opts === "object" ? opts : {}
+      )
+    );
     // A runbook step: run · dry · rollback · skip · edit — the engine checks the confirmation again
     ipcMain.handle("tasks:runbook", (_e, id, stepId, action, opts) =>
       this.engine.runbookAction(String(id), String(stepId), String(action), {

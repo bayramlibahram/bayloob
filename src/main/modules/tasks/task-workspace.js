@@ -199,7 +199,22 @@ class TaskWorkspace {
       }
     };
     copy(from, dest);
-    const ignored = await run(dir, ["check-ignore", "-q", ".bayloob/attachments"]).then(
+    await this.#excludeBayloob(dir);
+    return dest;
+  }
+
+  /** A discussion's thread where its participants read it: `<dir>/.bayloob/discussion/thread.md`, out of git. */
+  async writeDiscussion({ dir, text }) {
+    const file = path.join(dir, ".bayloob", "discussion", "thread.md");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+    await this.#excludeBayloob(dir);
+    return file;
+  }
+
+  // .bayloob/ (attachments, a discussion's thread) stays out of git: the repo's local exclude file, once
+  async #excludeBayloob(dir) {
+    const ignored = await run(dir, ["check-ignore", "-q", ".bayloob/x"]).then(
       () => true,
       () => false
     );
@@ -207,9 +222,11 @@ class TaskWorkspace {
       const common = (await run(dir, ["rev-parse", "--git-common-dir"])).trim();
       const exclude = path.resolve(dir, common, "info", "exclude");
       fs.mkdirSync(path.dirname(exclude), { recursive: true });
-      fs.appendFileSync(exclude, "\n# Bayloob: files attached to tasks\n/.bayloob/\n");
+      fs.appendFileSync(
+        exclude,
+        "\n# Bayloob: files attached to tasks, discussion threads\n/.bayloob/\n"
+      );
     }
-    return dest;
   }
 
   /** The candidate's whole change against the base (for the Arbiter's input). */

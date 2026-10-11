@@ -1391,3 +1391,254 @@ test("Attachments: copied into the task when it starts, mirrored where each agen
     ]
   );
 });
+
+// ---------- Discussion ----------
+
+const say = (stance, agrees = [], confidence = 0.8, proposal = "Use cursor pagination") =>
+  `## Position\nI think so.\n## Responses\n- ok\n## Proposal\n${proposal}\n\`\`\`json\n${JSON.stringify({ stance, agrees_with: agrees, confidence, open_points: [] })}\n\`\`\``;
+
+function talkTemplate(extra = {}) {
+  return {
+    id: "talk",
+    name: "Design debate",
+    stages: [
+      {
+        id: "talk",
+        title: "Discuss",
+        role: "discussion",
+        mode: "read-only",
+        format: "round-robin",
+        rounds: 3,
+        participants: [
+          { adapter: "claude", count: 1, role: "Architect" },
+          { adapter: "codex", count: 1, role: "Skeptic" },
+        ],
+        gate: "human",
+        ...extra,
+      },
+      {
+        id: "plan",
+        title: "Plan",
+        role: "planner",
+        mode: "plan",
+        agents: [{ adapter: "claude", count: 1 }],
+        prompt: "Plan this decision:\n{{artifact:decision.md}}",
+        artifact: "plan.md",
+        gate: "human",
+      },
+    ],
+  };
+}
+
+async function startTalk(env, extra) {
+  const config = draft(env.store, BEST);
+  await env.engine.start(config, talkTemplate(extra));
+  await env.engine.settled(config.id);
+  return env.engine.get(config.id);
+}
+
+// The participant whose turn it is answers
+async function speak(env, task, who, text) {
+  const inst = task.instances.find(i => i.speaker === who && i.status === "running");
+  assert.ok(
+    inst,
+    `${who} isn't speaking now (running: ${task.instances.filter(i => i.status === "running").map(i => i.speaker)})`
+  );
+  assert.ok(env.engine.turnEnded(inst.handle.paneId, text));
+  await env.engine.settled(task.id);
+}
+
+test("Discussion: one speaker at a time, each sees what came before; consensus ends it; you adopt, the plan gets it", async () => {
+  const env = setup();
+  const task = await startTalk(env);
+  // round 1: claude first, alone; it opens the discussion
+  assert.deepEqual(
+    task.instances.filter(i => i.status === "running").map(i => i.speaker),
+    ["claude-1"]
+  );
+  const [first] = env.runner.by({ role: "discussant" });
+  assert.equal(first.mode, "read-only");
+  assert.equal(first.cwd, "/w/shop-ro");
+  assert.match(
+    first.prompt,
+    /You are Claude Code · Architect \(claude-1\)[\s\S]*Round 1 of 3[\s\S]*you open the discussion/
+  );
+  await speak(env, task, "claude-1", say("propose"));
+  // codex sees claude's proposal
+  const second = env.runner.by({ role: "discussant" })[1];
+  assert.match(
+    second.prompt,
+    /Claude Code · Architect \(claude-1\) — proposes[\s\S]*Use cursor pagination/
+  );
+  await speak(env, task, "codex-1", say("oppose", [], 0.7, "Offset is simpler"));
+  // round 2: the same sessions continue (their context stays)
+  assert.equal(env.runner.prompts.length, 1);
+  assert.match(
+    env.runner.prompts[0][1],
+    /Round 2 of 3[\s\S]*Codex · Skeptic \(codex-1\) — opposes/
+  );
+  await speak(env, task, "claude-1", say("revise", [], 0.8, "Cursor, with an offset fallback"));
+  await speak(env, task, "codex-1", say("support", ["claude-1"], 0.9));
+  assert.equal(task.gate.kind, "discussion-end");
+  assert.match(task.gate.title, /they agree/);
+  assert.deepEqual(task.gate.agreement, { reached: true, proposer: "claude-1", agree: 2, of: 2 });
+  assert.match(env.store.readArtifact(task.id, "thread.md"), /## Round 2[\s\S]*supports, 0\.9/);
+  assert.equal(env.store.readArtifact(task.id, "discussion.jsonl").trim().split("\n").length, 4);
+  await decide(env, task, "adopt");
+  assert.match(
+    env.store.readArtifact(task.id, "decision.md"),
+    /Claude Code · Architect's proposal \(2 of 2 agree\):\n\nCursor, with an offset fallback/
+  );
+  const [planner] = env.runner.by({ role: "planner" });
+  assert.match(planner.prompt, /Plan this decision:\n## Decision[\s\S]*offset fallback/);
+});
+
+test("Discussion: a reply that can't be read is asked for once more in the same session, then kept as unstructured", async () => {
+  const env = setup();
+  const task = await startTalk(env, { rounds: 1 });
+  await speak(env, task, "claude-1", "I think cursors are better.");
+  assert.match(env.runner.prompts.at(-1)[1], /couldn't be read: The reply has no ```json block/);
+  assert.equal(env.runner.prompts.at(-1)[0], env.runner.by({ role: "discussant" })[0].name); // same session
+  await speak(env, task, "claude-1", "Still no form.");
+  assert.equal(task.discussion.messages[0].unstructured, true);
+  assert.deepEqual(
+    task.instances.filter(i => i.status === "running").map(i => i.speaker),
+    ["codex-1"]
+  );
+  await speak(env, task, "codex-1", say("propose"));
+  assert.equal(task.gate.kind, "discussion-end");
+  assert.match(task.gate.title, /the rounds ran out/);
+});
+
+test("Discussion: you pause it, pin a message, ask one agent, end it; the decider writes decision.md", async () => {
+  const env = setup();
+  const task = await startTalk(env, { decider: { adapter: "codex" } });
+  assert.deepEqual((await env.engine.discussionAction(task.id, "pause")).ok, true);
+  await speak(env, task, "claude-1", say("propose"));
+  await speak(env, task, "codex-1", say("oppose"));
+  assert.equal(task.gate.kind, "discussion");
+  assert.equal(task.gate.title, "Paused after round 1");
+  assert.equal(
+    (
+      await env.engine.discussionAction(task.id, "message", {
+        text: "Must stay backwards compatible",
+      })
+    ).ok,
+    true
+  );
+  const mine = task.discussion.messages.at(-1);
+  assert.equal(mine.from, "you");
+  await env.engine.discussionAction(task.id, "pin", { message: mine.id });
+  assert.match(env.store.readArtifact(task.id, "thread.md"), /## Pinned\n\n### You \(the owner\)/);
+  // a question while paused: that one answers, then it's paused again
+  assert.match(
+    (await env.engine.discussionAction(task.id, "ask", { text: "Why?" })).error,
+    /Pick who should answer/
+  );
+  await env.engine.discussionAction(task.id, "ask", {
+    to: "codex-1",
+    text: "What breaks with cursors?",
+  });
+  await env.engine.settled(task.id);
+  assert.match(
+    env.runner.prompts.at(-1)[1],
+    /You \(the owner\) → Codex · Skeptic[\s\S]*What breaks with cursors\?/
+  );
+  await speak(env, task, "codex-1", say("undecided", [], 0.5));
+  assert.equal(task.gate.kind, "discussion");
+  // remove / add between rounds
+  assert.match(
+    (await env.engine.discussionAction(task.id, "remove", { participant: "nobody" })).error,
+    /isn't taking part/
+  );
+  await env.engine.discussionAction(task.id, "add", { adapter: "gemini", role: "Pragmatist" });
+  assert.deepEqual(task.discussion.active, ["claude-1", "codex-1", "gemini-1"]);
+  await decide(env, task, "end");
+  // the decider (codex, read-only) reads the whole thread
+  const decider = env.runner.by({ role: "arbiter" })[0];
+  assert.equal(decider.adapter, "codex");
+  assert.match(
+    decider.prompt,
+    /You decide how this discussion[\s\S]*\.bayloob\/discussion\/thread\.md[\s\S]*"why": "owner"/
+  );
+  const inst = task.instances.find(i => i.speaker === "decider" && i.status === "running");
+  env.engine.turnEnded(inst.handle.paneId, "## Decision\nCursors.\n## Why\nScale.");
+  await env.engine.settled(task.id);
+  assert.equal(task.gate.kind, "discussion-end");
+  assert.equal(
+    env.store.readArtifact(task.id, "decision.md"),
+    "## Decision\nCursors.\n## Why\nScale."
+  );
+  await decide(env, task, "another", { note: "One more round on the fallback" });
+  assert.equal(task.discussion.round, 2);
+  assert.match(task.discussion.messages.at(-1).text, /One more round/);
+});
+
+test("Discussion: a turn lost to a restart is asked again, and the discussion goes on", async () => {
+  const env = setup();
+  const task = await startTalk(env);
+  await speak(env, task, "claude-1", say("propose"));
+  const running = task.instances.find(i => i.speaker === "codex-1" && i.status === "running");
+  env.runner.dead.add(running.handle.name);
+  const engine2 = new TaskEngine({
+    store: env.store,
+    scheduler: env.scheduler,
+    runner: env.runner,
+    workspace: env.workspace,
+    capacity: env.capacity,
+  });
+  await engine2.restore();
+  await engine2.settled(task.id);
+  const t2 = engine2.get(task.id);
+  assert.equal(t2.instances.find(i => i.id === running.id).status, "interrupted");
+  assert.deepEqual(
+    t2.instances
+      .filter(i => i.status === "running" || i.status === "queued" || i.status === "starting")
+      .map(i => i.speaker),
+    ["codex-1"]
+  );
+});
+
+test("Discussion templates: participants, a known format, 1–10 rounds, read-only", () => {
+  const { validateTemplate } = require("../src/shared/workflow-templates");
+  assert.deepEqual(validateTemplate(talkTemplate()), []);
+  const bad = talkTemplate({
+    format: "chat",
+    rounds: 0,
+    mode: "writes",
+    participants: [{ adapter: "grok", count: 1 }],
+    decider: { adapter: "nope" },
+  });
+  assert.deepEqual(validateTemplate(bad), [
+    'Stage 1 "Discuss": "grok" is not an agent that can run here',
+    'Stage 1 "Discuss": pick a format (round-robin, debate, critique, consensus, war-room)',
+    'Stage 1 "Discuss": rounds must be 1–10',
+    'Stage 1 "Discuss": participants only read — the mode must be "read-only"',
+    'Stage 1 "Discuss": the decider "nope" is not an agent that can run here',
+  ]);
+  assert.match(
+    validateTemplate(
+      talkTemplate({ format: "debate", participants: [{ adapter: "claude", count: 1 }] })
+    ).join(),
+    /a debate needs at least two participants/
+  );
+});
+
+test("Discussion: stopping a speaker skips its turn; stopping the stage pauses it for you", async () => {
+  const env = setup();
+  const task = await startTalk(env);
+  const claude = task.instances.find(i => i.speaker === "claude-1" && i.status === "running");
+  assert.equal((await env.engine.stopInstance(task.id, claude.id)).ok, true);
+  await env.engine.settled(task.id);
+  assert.deepEqual(
+    task.instances
+      .filter(i => i.status === "running" || i.status === "queued" || i.status === "starting")
+      .map(i => i.speaker),
+    ["codex-1"]
+  );
+  assert.equal((await env.engine.stopStage(task.id)).ok, true);
+  assert.equal(task.gate.kind, "discussion");
+  assert.match(task.gate.title, /You stopped the discussion in round 1/);
+  await decide(env, task, "next");
+  assert.equal(task.discussion.round, 2);
+});

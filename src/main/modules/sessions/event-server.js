@@ -23,7 +23,14 @@ const DENIED_BY_USER = "User denied this from Bayloob";
 const DENIED_READ_ONLY =
   "This session is a read-only reviewer (Bayloob ⚔ challenge): report problems, don't change files";
 // Workflow roles that never write: whatever isn't read-only is refused for them too (no card)
-const READ_ONLY_ROLES = new Set(["challenger", "planner", "reviewer", "arbiter", "analyst"]);
+const READ_ONLY_ROLES = new Set([
+  "challenger",
+  "planner",
+  "reviewer",
+  "arbiter",
+  "analyst",
+  "discussant",
+]);
 const deniedFor = role =>
   role === "challenger"
     ? DENIED_READ_ONLY

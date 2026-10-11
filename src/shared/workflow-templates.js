@@ -22,7 +22,17 @@
 // Analysis (category "analysis"): an optional `collect` action gathers log sources and, for a security review, the
 // project's dependency audit (artifacts logs.md, audit.md); analysts read in parallel; the Arbiter writes the report.
 (root => {
-  const ROLES = ["planner", "builder", "tester", "reviewer", "analyst", "arbiter", "you"];
+  const ROLES = [
+    "planner",
+    "builder",
+    "tester",
+    "reviewer",
+    "analyst",
+    "arbiter",
+    "discussion",
+    "you",
+  ];
+  const DISCUSSION_FORMATS = ["round-robin", "debate", "critique", "consensus", "war-room"];
   const MODES = ["writes", "read-only", "plan"];
   const ACTIONS = ["run-tests", "integrate", "merge", "collect"];
   const GATES = ["always", "human", "tests-pass", "arbiter", "no-findings"];
@@ -530,7 +540,51 @@
         add(`${name}: pick a gate (${GATES.join(", ")})`);
       }
       const deciding = s.role === "arbiter" && Array.isArray(s.agents) && s.agents.length > 0;
-      const agentStage = !s.action && s.role !== "you" && (s.role !== "arbiter" || deciding);
+      const agentStage =
+        !s.action &&
+        s.role !== "you" &&
+        s.role !== "discussion" &&
+        (s.role !== "arbiter" || deciding);
+      if (s.role === "discussion") {
+        const ps = Array.isArray(s.participants) ? s.participants : [];
+        const total = ps.reduce((a, x) => a + (Number(x?.count) || 0), 0);
+        if (!ps.length) {
+          add(`${name}: add the participants`);
+        }
+        for (const p of ps) {
+          const max = capacity[p?.adapter];
+          const n = Number(p?.count);
+          if (!max) {
+            add(`${name}: "${p?.adapter}" is not an agent that can run here`);
+          } else if (!Number.isInteger(n) || n < 1 || n > max * 4) {
+            add(`${name}: the count for ${p.adapter} must be 1–${max * 4}`);
+          }
+        }
+        if (total > 8) {
+          add(`${name}: at most 8 participants`);
+        }
+        if (!DISCUSSION_FORMATS.includes(s.format)) {
+          add(`${name}: pick a format (${DISCUSSION_FORMATS.join(", ")})`);
+        }
+        if (["debate", "critique"].includes(s.format) && total < 2) {
+          add(
+            `${name}: a ${s.format === "debate" ? "debate" : "critique"} needs at least two participants`
+          );
+        }
+        const rounds = Number(s.rounds);
+        if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) {
+          add(`${name}: rounds must be 1–10`);
+        }
+        if (s.mode !== "read-only") {
+          add(`${name}: participants only read — the mode must be "read-only"`);
+        }
+        if (s.decider?.adapter && !capacity[s.decider.adapter]) {
+          add(`${name}: the decider "${s.decider.adapter}" is not an agent that can run here`);
+        }
+        for (const v of unknownVariables(s.topic || "")) {
+          add(`${name}: the topic uses {{${v}}}, which doesn't exist`);
+        }
+      }
       if (deciding) {
         const n = s.agents.reduce((a, x) => a + Number(x?.count || 0), 0);
         if (n !== 1) {
@@ -713,6 +767,7 @@
   const builtin = id => (BUILTINS[id] ? clone(BUILTINS[id]) : null);
 
   const api = {
+    DISCUSSION_FORMATS,
     CODE_RUBRIC,
     analysisTemplate,
     ROLES,

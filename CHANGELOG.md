@@ -29,6 +29,11 @@
 - **Analyze files**, a new analysis preset: analysts answer your question from the attached files, citing file and
   line (or a PDF's page); the Arbiter merges their findings into one report.
 - `scripts/task-demo.js` runs Analyze files too (6 scenarios).
+- **Agent discussion, engine** (orchestration 14, part A): a workflow stage where agents talk a question through
+  in rounds — round-robin, debate, critique → revise, consensus or war-room — with Bayloob moderating: one speaker
+  at a time, read-only, a fixed reply form (asked again once), stops on consensus, rounds, token budget or you; a
+  decider agent or you write `decision.md` for the next stages. You can message, ask one participant, pin, pause,
+  end, and add or remove participants. `scripts/task-demo.js` runs all five formats. The Discussion view comes next.
 - **Response formats** (Settings → General → Prompts): templates your prompts go into, your text where `{{prompt}}`
   is — a new session, the prompt box, the queue, "run the tests". Four ship with Bayloob: **ADHD-friendly**,
   **Concise**, **Step-by-step plan** and **Explain like a teacher**; add, rename and remove your own.

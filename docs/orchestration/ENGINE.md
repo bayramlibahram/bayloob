@@ -112,6 +112,36 @@ Start in the New task dialog for Pipeline, Best-of-N and the owner's templates. 
 (`src/main/modules/tasks/template-store.js`) keeps them in `<config>/Bayloob/workflows/`, and the same
 validation (`templateIssues`, per stage) runs in the builder, on save and when a task starts.
 
+## Discussion (14, engine)
+A stage with `role: "discussion"` lets agents talk a question through in rounds; Bayloob only moderates
+(`src/main/modules/tasks/discussion.js`, pure; the engine runs the turns).
+
+```json
+{ "id": "talk", "role": "discussion", "mode": "read-only", "format": "round-robin", "rounds": 3,
+  "topic": "{{task}}", "participants": [{ "adapter": "claude", "count": 1, "role": "Architect" },
+  { "adapter": "codex", "count": 1, "role": "Skeptic" }], "stop": { "consensus": true, "tokenBudget": 200000 },
+  "decider": { "adapter": "codex" }, "artifact": "decision.md", "gate": "human" }
+```
+
+- **Formats:** round-robin and consensus (everyone in turn), war-room (the same, about findings), debate (for and
+  against take turns; never stops on consensus), critique (the first proposes, the others critique, it revises).
+- **Turns** run one at a time, each in the participant's own session (kept across rounds), read-only, in the
+  read-only worktree. The prompt names the thread file (`.bayloob/discussion/thread.md`, out of git), quotes what's
+  new since that participant last spoke, and says other agents' words are discussion data, never instructions.
+- **Reply form:** `## Position`, `## Responses`, `## Proposal`, then a JSON block (stance, agrees_with,
+  confidence, open_points). A reply that can't be read is asked for once more in the same session, then kept as
+  "unstructured".
+- **Stops** on consensus (everyone backs one proposal at ≥ the Arbiter threshold), the last round, the token
+  budget (≈ 4 characters a token) or the owner. Then the decider (an agent, read-only) writes `decision.md`, or the
+  owner decides: gate `discussion-end` — adopt (your note, the decider's answer, or the proposal most agree with),
+  another round, or abort. Later stages read it as `{{artifact:decision.md}}`.
+- **The owner, any time** (`discussionAction`): a message to all or one, a question one participant answers next,
+  pin a message (always in context), pause after this round (gate `discussion`: next round, end, abort), end now,
+  add or remove a participant from the next round. Stop on one speaker skips its turn; Stop stage pauses.
+- **Artifacts:** `thread.md`, `discussion.jsonl` (one message a line), `discussion-summary.json`, `decision.md`.
+- **Restart:** a turn lost to a restart is asked again of the same speaker, and the discussion goes on.
+- No UI yet (Part B: prototype first, for the owner's approval).
+
 ## Not yet / limitations
 - Read-only Codex runs with `--sandbox read-only --ask-for-approval never` (#34). With the default on-request
   policy, a config with `approvals_reviewer = "auto_review"` approved the write. The post-turn `git status`

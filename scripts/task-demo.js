@@ -60,6 +60,8 @@ function toyRepo(base) {
 // The runner port with stub agents: one child process per turn, the role's work played on exit
 class StubRunner {
   read = []; // attached files the analysts found in their folder
+  spoke = []; // a discussion's turns: "claude-1:2:support"
+  opener = null;
   #n = 0;
   #tries = new Map(); // cwd → turns so far
   constructor(engine) {
@@ -99,6 +101,22 @@ class StubRunner {
   #play({ role, cwd, taskId }, prompt) {
     const tries = (this.#tries.get(cwd) || 0) + 1;
     this.#tries.set(cwd, tries);
+    // A discussion: the first speaker proposes; the others oppose in round 1, then come round to it (a critique's
+    // proposer revises). The decider writes the decision.
+    if (role === "discussant") {
+      const me = prompt.match(/^You are .+? \(([a-z]+-\d+)\)/m)?.[1];
+      const round = Number(prompt.match(/Round (\d+) of/)?.[1] || 1);
+      if (prompt.includes("you open the discussion")) {
+        this.opener = me;
+      }
+      const first = this.opener === me;
+      const stance = first ? (round > 1 ? "revise" : "propose") : round > 1 ? "support" : "oppose";
+      this.spoke.push(`${me}:${round}:${stance}`);
+      return `## Position\n${first ? "Cursor pagination on created_at." : round > 1 ? "Convinced." : "Offset is simpler."}\n## Responses\n- noted\n## Proposal\n${first ? "Cursor pagination" : "Support the cursor proposal"}\n\`\`\`json\n${JSON.stringify({ stance, agrees_with: stance === "support" ? [this.opener] : [], confidence: 0.8, open_points: ["index on created_at"] })}\n\`\`\``;
+    }
+    if (role === "arbiter" && prompt.includes("You decide how this discussion")) {
+      return "## Decision\nCursor pagination on created_at.\n## Why\nIt scales.\n## Dissent\nNone left.\n## Open risks\nThe index.";
+    }
     if (role === "planner" && prompt.includes("independent subtasks")) {
       return `Discount in cart.js, docs next to it.\n\n\`\`\`json\n${JSON.stringify({
         subtasks: [
@@ -178,10 +196,73 @@ class StubRunner {
 
 const runners = [];
 // The owner's answer at each gate: approve the plan, accept the Arbiter's pick, merge
-const OWNER = { approve: ["approve"], decision: ["accept"], merge: ["merge"] };
+const OWNER = {
+  approve: ["approve"],
+  decision: ["accept"],
+  merge: ["merge"],
+  "discussion-end": ["adopt"],
+};
+
+// A discussion (orchestration 14) and the plan that takes its decision
+const talk = (format, { rounds = 2, decider = null, participants = null } = {}) => ({
+  id: `talk-${format}`,
+  name: `Discussion: ${format}`,
+  stages: [
+    {
+      id: "talk",
+      title: "Discuss",
+      role: "discussion",
+      mode: "read-only",
+      format,
+      rounds,
+      topic: "Pagination for the product list in shop: {{task}}",
+      participants: participants || [
+        { adapter: "claude", count: 1, role: "Architect" },
+        { adapter: "codex", count: 1, role: "Skeptic" },
+      ],
+      ...(decider ? { decider: { adapter: decider } } : {}),
+      gate: "human",
+    },
+    {
+      id: "plan",
+      title: "Plan",
+      role: "planner",
+      mode: "plan",
+      agents: [{ adapter: "claude", count: 1 }],
+      prompt: "Make a plan for this decision:\n{{artifact:decision.md}}",
+      artifact: "plan.md",
+      gate: "human",
+    },
+  ],
+});
+// Ended, decided, and the plan got the decision
+const discussed = (want, spoke) => (task, _root, store) => {
+  if (task.status !== "done") {
+    return `ended ${task.status}`;
+  }
+  const d = task.discussion;
+  if (d.ended !== want.why) {
+    return `stopped on ${d.ended}, not ${want.why}`;
+  }
+  if (want.turns && spoke().length !== want.turns) {
+    return `${spoke().length} turns, not ${want.turns}: ${spoke().join(" ")}`;
+  }
+  const decision = store.readArtifact(task.id, "decision.md") || "";
+  if (!/Decision/.test(decision)) {
+    return "no decision.md";
+  }
+  const plan = store
+    .log(task.id)
+    .some(e => e.event === "launched" && e.instance?.startsWith("plan."));
+  return plan ? null : "the plan stage didn't run";
+};
 const failures = [];
 
-async function run(name, draft, { expect, confidence = 0.9, answer = () => null, files = null }) {
+async function run(
+  name,
+  draft,
+  { expect, confidence = 0.9, answer = () => null, files = null, template = null }
+) {
   console.log(`\n=== ${name} ===`);
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "bayloob-demo-"));
   const root = toyRepo(base);
@@ -247,7 +328,7 @@ async function run(name, draft, { expect, confidence = 0.9, answer = () => null,
     ...draft,
     attachments,
   });
-  await engine.start(config, templateFor(config));
+  await engine.start(config, template || templateFor(config));
   const task = await done;
   console.log(
     `\nresult: ${task.status}${task.merged ? `, merged ${task.merged.branch} into ${task.merged.into}` : ""}`
@@ -267,7 +348,7 @@ async function run(name, draft, { expect, confidence = 0.9, answer = () => null,
   console.log(
     `  audit trail: ${store.log(task.id).length} entries in ${path.join(store.dirOf(task.id), "log.jsonl")}`
   );
-  const problem = expect(task, root);
+  const problem = expect(task, root, store);
   if (problem) {
     failures.push(`${name}: ${problem}`);
     console.log(`  ✗ ${problem}`);
@@ -405,10 +486,52 @@ const reported = task =>
       },
     }
   );
+  // Discussions: every format; the stub's participants come round to the opener's proposal in round 2
+  const spoke = () => runners.at(-1).spoke;
+  for (const [format, opts, want, note] of [
+    ["round-robin", { rounds: 3 }, { why: "consensus", turns: 4 }, "Claude + Codex, you decide"],
+    ["consensus", { rounds: 3, decider: "codex" }, { why: "consensus", turns: 4 }, "Codex decides"],
+    [
+      "debate",
+      { rounds: 2, decider: "claude" },
+      { why: "rounds", turns: 4 },
+      "for / against, no consensus stop",
+    ],
+    [
+      "critique",
+      {
+        rounds: 3,
+        participants: [
+          { adapter: "claude", count: 1, role: "Proposer" },
+          { adapter: "codex", count: 2, role: "Critic" },
+        ],
+      },
+      { why: "consensus", turns: 3 },
+      "Claude proposes, Codex ×2 critique",
+    ],
+    ["war-room", { rounds: 2 }, { why: "consensus", turns: 4 }, "with an attached log"],
+  ]) {
+    await run(
+      `Discussion: ${format} (${note})`,
+      {
+        category: "workflow",
+        text: "Keep the product list fast",
+        workflow: { pattern: "pipeline" },
+      },
+      {
+        template: talk(format, opts),
+        files:
+          format === "war-room"
+            ? [["app.log", "12:03 ERROR slow query on products (4.2 s)\n"]]
+            : null,
+        expect: discussed(want, spoke),
+      }
+    );
+  }
   console.log(
     failures.length
       ? `\n✗ ${failures.length} failed:\n  ${failures.join("\n  ")}`
-      : "\n✓ all 6 ran as expected"
+      : "\n✓ all 11 ran as expected"
   );
   process.exitCode = failures.length ? 1 : 0;
 })();
