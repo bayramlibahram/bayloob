@@ -102,6 +102,10 @@
   .tcard { display: flex; flex-direction: column; gap: 7px; padding: 10px 11px; border-radius: 12px; background: var(--backdrop); border: 1px solid var(--line);
     text-align: left; box-shadow: 0 1px 2px rgb(var(--shade) / calc(0.2 * var(--shade-k))); }
   .tcard.fresh { animation: slidein 0.2s ease-out; }
+  /* a stage that just finished: its check pops in */
+  .sstep.done.changed { animation: none; }
+  .sstep.done.changed .si { animation: tick 0.35s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes tick { from { transform: scale(.4); opacity: 0; } }
   .tcard:hover { border-color: var(--line-strong); }
   .tcard.needs { border-color: color-mix(in srgb, var(--waiting) 55%, transparent); }
   .tcard .tt { display: flex; gap: 7px; align-items: flex-start; }
@@ -510,6 +514,8 @@
       this.el = { main: document.getElementById('main'), usage: document.getElementById('usage'), toast: document.getElementById('toast') };
       document.getElementById('logo').innerHTML = Agent.thumb(MANAGER);
       try { this.density = localStorage.getItem(DENSITY_KEY) || 'comfortable'; } catch { /* storage unavailable */ }
+      // Until the first state arrives: the board's shape, not a blank window
+      this.el.main.innerHTML = `<div class="phead"><h1>${T.tasks}</h1></div><div class="board">${COLS.map(() => `<section class="col">${skeletonHtml([60, 85, 40])}</section>`).join('')}</div>`;
       this.#bind();
       setInterval(() => { if (!this.composing && !this.editing) { this.render(); } }, 30_000);
     }
@@ -593,7 +599,7 @@
       const by = Object.fromEntries(COLS.map(c => [c, []]));
       for (const t of shown) { by[columnOf(t)].push(t); }
       const cols = COLS.map(c => `<section class="col" data-k="col:${c}" aria-label="${T.cols[c]}">
-          <h3>${T.cols[c]} <em class="${c === 'needs' && by[c].length ? 'hot' : ''}">${by[c].length}</em></h3>
+          <h3>${T.cols[c]} <em class="${c === 'needs' && by[c].length ? 'hot' : ''}" data-k="n:${c}" data-v="${by[c].length}">${by[c].length}</em></h3>
           ${by[c].length ? by[c].map(t => this.#card(t, c)).join('') : `<div class="none">${T.colEmpty[c]}</div>`}
         </section>`).join('');
       return `<div class="phead"><h1>${T.tasks}</h1>
@@ -640,7 +646,7 @@
         const st = t.stages[i];
         const cls = { done: 'done', running: 'run', waiting: 'wait', stopped: 'fail', failed: 'fail' }[st.status] || '';
         const inner = cls === 'done' ? ICON.check : cls === 'wait' ? '!' : cls === 'fail' ? '×' : '';
-        return `${i ? '<span class="sline"></span>' : ''}<div class="sstep ${cls}"${i === t.stage && live ? ' aria-current="step"' : ''}><span class="si">${inner}</span><span>${esc(s.title)} <small>${esc(this.#stageNote(t, s, st))}</small></span></div>`;
+        return `${i ? '<span class="sline"></span>' : ''}<div class="sstep ${cls}" data-k="step:${esc(t.id)}:${i}" data-v="${cls}"${i === t.stage && live ? ' aria-current="step"' : ''}><span class="si">${inner}</span><span>${esc(s.title)} <small>${esc(this.#stageNote(t, s, st))}</small></span></div>`;
       }).join('');
       const board = !t.template.stages.some(s => s.role === 'builder');
       const arb = t.template.stages.some(s => s.role === 'arbiter' && s.agents?.length);
@@ -660,7 +666,7 @@
         </div>
         <nav class="stepbar" aria-label="Stages">${steps}</nav>
         ${t.status === 'stopped' ? `<div class="banner" style="--c:var(--idle)">${T.stopped}</div>` : ''}
-        <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${k === 'reviews' && t.template.stages.some(x => x.role === 'analyst') ? T.analystsTab : T.tabs[k]}${n ? `<em>${n}</em>` : ''}</button>`).join('')}</div>
+        <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${k === 'reviews' && t.template.stages.some(x => x.role === 'analyst') ? T.analystsTab : T.tabs[k]}${n ? `<em data-k="tab:${t.id}:${k}" data-v="${n}">${n}</em>` : ''}</button>`).join('')}</div>
         <div class="pane" id="pane" data-k="pane:${esc(t.id)}:${this.tab}">${pane}</div>
         ${t.gate ? this.#actions(t) : ''}`;
     }

@@ -1273,7 +1273,7 @@
       if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
       return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}">
           <div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div>
-          <span class="name"><b>${esc(s.project)}</b> <span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}${this.full ? this.#histHtml(s) : ''}</span>
+          <span class="name" title="${esc(`${s.project} · ${Agent.displayName(s.agent)}`)}"><b>${esc(s.project)}</b> <span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}${this.#tokensHtml(s.id)}</span>${this.output[s.id] ? `<span class="out" title="${esc(this.output[s.id])}">${esc(this.output[s.id])}</span>` : ''}${this.full ? this.#histHtml(s) : ''}</span>
           ${this.queues[s.id] ? `<span class="queue" title="${T.queuedTip(this.queues[s.id])}">⏳${this.queues[s.id]}</span>` : ''}
           ${this.#diffHtml(s.id)}
           ${this.#collisionHtml(s.id)}

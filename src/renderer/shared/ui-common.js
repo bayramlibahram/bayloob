@@ -124,6 +124,8 @@ function stateBlock({
 // Swaps a container's HTML without the jumps of a plain innerHTML rebuild: the scroll position of every element
 // with a data-k (or id), the open/closed state of each <details> (keyed by its summary text) and the focused
 // control with its caret all carry over to the new markup. A data-k that changes (e.g. per tab) starts at the top.
+// An element with a data-k and a data-v (a count, a stage's status) gets the class "changed" when its value
+// differs from the last paint, so CSS can fade the new number in or tick a finished stage.
 function swapHtml(root, html) {
   const scrollKey = el => el.dataset.k || el.id;
   const focusKey = el =>
@@ -148,6 +150,9 @@ function swapHtml(root, html) {
     }
   }
   const open = new Map(detailsKeys().map(([k, d]) => [k, d.open]));
+  const values = new Map(
+    [...root.querySelectorAll("[data-k][data-v]")].map(el => [el.dataset.k, el.dataset.v])
+  );
   const active = root.contains(document.activeElement) ? document.activeElement : null;
   const focus = active && {
     key: focusKey(active),
@@ -160,6 +165,12 @@ function swapHtml(root, html) {
     const s = scrolls.get(scrollKey(el));
     if (s) {
       [el.scrollTop, el.scrollLeft] = s;
+    }
+  }
+  for (const el of root.querySelectorAll("[data-k][data-v]")) {
+    const was = values.get(el.dataset.k);
+    if (was !== undefined && was !== el.dataset.v) {
+      el.classList.add("changed");
     }
   }
   for (const [k, d] of detailsKeys()) {
@@ -180,6 +191,13 @@ function swapHtml(root, html) {
       }
     }
   }
+}
+
+// Grey placeholder lines in the shape of what is loading (styles: .skel in theme.css); widths in %
+function skeletonHtml(widths = [70, 90, 55]) {
+  return `<div class="skel-lines" role="status" aria-busy="true" aria-label="Loading">${widths
+    .map(w => `<span class="skel" style="width:${w}%"></span>`)
+    .join("")}</div>`;
 }
 
 // The readable text of a rejected IPC call ("Error invoking remote method 'x': Error: …" → "…")

@@ -540,8 +540,8 @@
       const box = !this.cfg.project.cwd ? '' : !i && failed ? stateBlock({ kind: 'error', title: T.infoFailed, action: { label: T.retry, data: { 'retry-info': '1' } }, details: failed })
         : !i ? `<div class="projinfo"><div><span class="label">${T.git}</span><span class="skel"></span></div><div><span class="label">${T.stack}</span><span class="skel"></span></div><div><span class="label">${T.tests}</span><span class="skel"></span></div></div>`
         : `<div class="projinfo"><div><span class="label">${T.git}</span><b>${!i.exists ? T.missing : i.git ? `${esc(i.git.branch)} · ${i.git.changes ? `${i.git.changes} changes` : 'clean'}` : T.noGit}</b></div>
-            <div><span class="label">${T.stack}</span><b>${esc(i.stack.join(', ') || '—')}</b></div>
-            <div><span class="label">${T.tests}</span><b class="${i.test ? 'mono' : 'muted'}">${esc(i.test || T.notDetected)}</b></div></div>
+            <div><span class="label">${T.stack}</span><b title="${esc(i.stack.join(', '))}">${esc(i.stack.join(', ') || '—')}</b></div>
+            <div><span class="label">${T.tests}</span><b class="${i.test ? 'mono' : 'muted'}" title="${esc(i.test || '')}">${esc(i.test || T.notDetected)}</b></div></div>
           ${i.git?.changes ? `<div class="note">${I('alert')}<span>${T.dirty(i.git.changes)}</span></div>` : ''}
           ${i.exists && !i.git ? `<div class="note" style="--c:var(--thinking)">${I('info')}<span>${T.noGitNote}</span></div>` : ''}`;
       return `<div class="field">${I('search')}<input id="q" data-focus value="${esc(this.query)}" placeholder="${T.search}" spellcheck="false" aria-label="${T.search}">

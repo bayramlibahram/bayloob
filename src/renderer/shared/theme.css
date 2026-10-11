@@ -148,6 +148,41 @@
   }
 }
 
+/* Numbers keep their width, so counts and clocks don't jiggle as they change */
+html {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A value that changed since the last paint (swapHtml marks it): the new one fades in */
+.changed {
+  animation: ui-changed 0.3s ease-out;
+}
+@keyframes ui-changed {
+  from {
+    opacity: 0.15;
+  }
+}
+
+/* Skeleton: grey lines in the shape of what is loading (skeletonHtml() in ui-common.js) */
+.skel-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 4px;
+}
+.skel {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--raised-2);
+  animation: ui-skel 1.2s ease-in-out infinite;
+}
+@keyframes ui-skel {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 /* Reduced motion (every page): nothing slides, spins, bounces or dances — opacity may still fade, briefly */
 @media (prefers-reduced-motion: reduce) {
   *,

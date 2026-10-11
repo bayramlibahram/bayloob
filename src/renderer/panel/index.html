@@ -956,11 +956,11 @@
     #renderSide() {
       const nav = key => {
         const n = this.#items(key).length;
-        const em = n ? `<em class="${key === 'inbox' ? 'hot' : ''}" title="${esc(T.countTip[key](n))}">${n}</em>` : '';
+        const em = n ? `<em class="${key === 'inbox' ? 'hot' : ''}" title="${esc(T.countTip[key](n))}" data-k="nav:${key}" data-v="${n}">${n}</em>` : '';
         return `<button class="nav${key === this.section && !this.launchMode ? ' on' : ''}" data-section="${key}" title="${T.sections[key]}">${ICONS[key]}<span>${T.sections[key]}</span>${em}</button>`;
       };
-      this.el.side.innerHTML = NAV.map(group => group.map(nav).join('')).join('<hr>')
-        + `<button class="nav bottom" data-settings title="${T.settingsNav}">${ICONS.gear}<span>${T.settingsNav}</span></button>`;
+      swapHtml(this.el.side, NAV.map(group => group.map(nav).join('')).join('<hr>')
+        + `<button class="nav bottom" data-settings title="${T.settingsNav}">${ICONS.gear}<span>${T.settingsNav}</span></button>`);
     }
 
     #renderList() {
@@ -1003,7 +1003,7 @@
           ? `<div class="group${String(groupOf(i)).startsWith('task:') ? ' task' : ''}" title="${esc(this.section === 'agents' ? i.data.cwd || '' : '')}">${groupHead(i)}<span>· ${sizes.get(groupOf(i))}</span></div>` : ''}
         <div class="row${i.key === sel ? ' sel' : ''}" data-key="${esc(i.key)}">
           ${iconHtml(i)}
-          <div class="who"><b>${esc(i.name)}</b><span title="${esc(i.subtitle || '')}"${i.why ? ` class="why" style="--c:${WHY_COLOR[i.why]}"` : ''}>${esc(i.subtitle || '')}</span></div>
+          <div class="who"><b title="${esc(i.name)}">${esc(i.name)}</b><span title="${esc(i.subtitle || '')}"${i.why ? ` class="why" style="--c:${WHY_COLOR[i.why]}"` : ''}>${esc(i.subtitle || '')}</span></div>
           ${i.kind === 'agent' ? this.#clashBadge(i.data) : ''}
           <div class="slot">${stateHtml(i.status)}<div class="acts">
             <button class="square" data-act="primary" title="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}" aria-label="${i.kind === 'agent' ? T.openTerminal : i.kind === 'task' ? T.openTasks : T.focus}">${i.kind === 'agent' ? ICON_TERM : ICONS.chevron}</button>
@@ -1039,7 +1039,7 @@
       this.el.rows.innerHTML = list.map(a => `
         <div class="row" data-launch="${esc(a.id)}">
           ${iconHtml({ kind: 'app', data: a })}
-          <div class="who"><b>${esc(a.name)}</b><span>${T.kind[a.category] || ''}</span></div>
+          <div class="who"><b title="${esc(a.name)}">${esc(a.name)}</b><span>${T.kind[a.category] || ''}</span></div>
           <button class="square" data-act="launch" title="${T.open}">${ICONS.chevron}</button>
         </div>`).join('');
     }
@@ -1052,7 +1052,7 @@
       const term = item.kind === 'agent' ? `<button type="button" class="square" data-act="terminal" title="${T.openTerminal}" aria-label="${T.openTerminal}">${ICON_TERM}</button>` : '';
       // An agent's header names its project (and its task, when it works for one), not just "AI agent"
       const sub = item.kind === 'agent' ? [item.data.label, projectPath(item.data)].filter(Boolean).join(' · ') : T.kind[item.category] || '';
-      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b>${esc(item.name)}</b><span title="${esc(item.data.cwd || '')}">${esc(sub)}</span></div>${stateHtml(item.status)}${term}</div>`;
+      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b title="${esc(item.name)}">${esc(item.name)}</b><span title="${esc(item.data.cwd || '')}">${esc(sub)}</span></div>${stateHtml(item.status)}${term}</div>`;
       const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'task' ? this.#taskDetail(item.data)
         : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
       // Keep the console's scroll: stuck to the newest step while at the bottom, left alone when scrolled up
@@ -1289,8 +1289,9 @@
       const history = (s.history || []).slice(0, 6);
       const con = this.#consoleFor(s);
       // The console (turns read from the agent's transcript) when there is one; the activity timeline otherwise
-      const body = con?.turns?.length
-        ? this.#consoleHtml(con.turns, live)
+      // First look at the transcript still on its way: the console's shape, so the timeline doesn't flash first
+      const body = con?.turns?.length ? this.#consoleHtml(con.turns, live)
+        : !con && this.api?.console ? skeletonHtml([45, 80, 65, 30])
         : `<div class="doing"><b title="${esc(doing.title)}">${esc(doing.title)}</b><span title="${esc(doing.detail)}">${esc(doing.detail || projectPath(s))}</span></div>
            <ul class="timeline">${history.map((h, i) => `<li class="${i === 0 && live ? 'now' : ''}"><span class="t" title="${esc(h.detail || h.title)}">${esc(h.title)}</span><span class="ago">${timeAgo(h.at)}</span></li>`).join('')}</ul>`;
       return `
