@@ -8,6 +8,9 @@ section of the Workspace window (04b) with the workflow builder (04c).
 |---|---|
 | `src/shared/workflow-templates.js` | Stage schema, validation (plain-language errors), built-ins Pipeline, Best-of-N, Split work and Review board, prompt variables |
 | `src/main/modules/tasks/arbiter.js` | The Arbiter: its input (goal, plan, per candidate: diff, tests, reviews, metrics), the decision / report schema, when the owner decides |
+| `src/main/modules/tasks/runbook.js` | Operations rules: risk classification, allow patterns, confirmation levels, dry runs, the exact local / SSH argv, host and runbook checks |
+| `src/main/modules/tasks/ops-runner.js` | Runs one step (no shell; SSH in batch mode), streams its output, timeout and Stop |
+| `src/main/modules/tasks/ops-memory.js` | Antibodies (skipped as dangerous) and Combo counts across tasks |
 | `src/main/modules/tasks/log-sources.js` | Analysis inputs: log sources (file / journalctl / pm2 / docker, read-only argv) and the project's dependency audit |
 | `src/main/modules/tasks/subtasks.js` | Split work: the planner's subtasks (JSON block), file disjointness, what each builder is told |
 | `src/main/modules/tasks/task-engine.js` | State machine: stages, instances, candidates, gates, loops, restart recovery |
@@ -69,6 +72,15 @@ section of the Workspace window (04b) with the workflow builder (04c).
   - Log sources are parsed into an argv. Only files, `journalctl` (without its write options), `pm2 logs --nostream`
     and `docker logs` are allowed; follow flags are dropped.
   - The report also writes `findings.json`. The Report tab exports it as Markdown with `reportMarkdown()`.
+- **Operations** (command 08b, `OPERATIONS.md`): with `runbook: true` on the Arbiter stage, its JSON also carries
+  `runbook`.
+  - `runbook.js` checks it against the hosts (`ops.hosts()`, plus `local`), classifies every step's risk and works
+    out its confirmation level.
+  - The task waits at a `runbook` gate. `runbookAction(task, step, run | dry | rollback | skip | edit, opts)` checks
+    the confirmation again, then runs the step through `ops.runner` (`ops-runner.js`), one step at a time and in
+    order.
+  - `ops.memory` (`ops-memory.js`) keeps the antibodies (skipped as dangerous) and the Combo counts.
+  - A step that was running when Bayloob stopped comes back as failed.
 - **Loops**: `onFail: { goto, prompt, maxLoops }`. Failing tests send only the failing candidates back,
   into their own sessions. After `maxLoops` such a candidate drops out. If none is left, the owner decides.
 

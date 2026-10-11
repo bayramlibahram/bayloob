@@ -43,6 +43,7 @@
     parts: "How many builders the plan may be split between (Split work)",
     diff: "The git command that shows the change under review (Review board)",
     rubric: "What the Arbiter judges by (its stage's rubric)",
+    hosts: "The hosts a runbook may use (Settings → Hosts, and this machine)",
     "artifact:logs.md": "The log sources Bayloob collected (Incident analysis)",
     "artifact:audit.md": "The project's own dependency audit (Security review)",
     "artifact:arbiter-input.md":
@@ -194,6 +195,17 @@
     "{{artifact:arbiter-input.md}}"
   );
 
+  // With "Also prepare an operations plan": the Arbiter also proposes a runbook — Bayloob runs nothing by itself
+  const RUNBOOK_PART = lines(
+    "",
+    "Also propose an operations plan: the commands that would fix or confirm the most important findings, in order.",
+    'Add a "runbook" list to the same JSON block. Each step: {"host": one of the hosts below, "argv": ["systemctl", "restart", "php8.3-fpm"],',
+    '"purpose": "why, citing a finding", "risk": "low" | "medium" | "high", "rollback": an argv or null, "timeoutSec": seconds}.',
+    "argv is a list of words, never a shell string. Prefer read-only checks first. Nothing runs until the owner clicks Run on each step.",
+    "Hosts:",
+    "{{hosts}}"
+  );
+
   const ANALYSIS_NAMES = {
     audit: "Code audit",
     security: "Security review",
@@ -246,9 +258,16 @@
           role: "arbiter",
           mode: "read-only",
           agents: [{ adapter: a.arbiter || "codex", count: 1 }],
-          prompt: ANALYSIS_ARBITER_PROMPT,
+          // The runbook part goes before the (long) input, next to the JSON form it extends
+          prompt: a.opsPlan
+            ? ANALYSIS_ARBITER_PROMPT.replace(
+                "{{artifact:arbiter-input.md}}",
+                `${RUNBOOK_PART.trim()}\n\n{{artifact:arbiter-input.md}}`
+              )
+            : ANALYSIS_ARBITER_PROMPT,
           artifact: "report.md",
           gate: "always",
+          ...(a.opsPlan ? { runbook: true } : {}),
         },
       ],
     };

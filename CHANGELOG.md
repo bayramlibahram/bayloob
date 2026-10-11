@@ -3,6 +3,43 @@
 ## Unreleased
 
 ### Added
+- **Operations** (orchestration 08b, as approved in `docs/orchestration/OPERATIONS.md`): an analysis with "Also
+  prepare an operations plan" ends with a **runbook** the Arbiter proposes. Nothing in it runs by itself.
+  - **Runbook tab:**
+    - one card per step, in order: host (prod in red), risk, command, purpose, rollback;
+    - actions: **Run · Dry run · Skip · Skip — looks dangerous · Edit**, and **Stop plan** in the bar;
+    - the output streams in as it runs; the exit code and duration follow, and the whole log is saved as an
+      artifact.
+  - **Risk:** Bayloob classifies every command itself (reads low, service changes medium, removal or escalation
+    high), and the agent's own risk can only raise it.
+  - **What running a step takes:**
+    - a click for a low step on dev or staging;
+    - a confirmation for a medium step, or any step on prod;
+    - the **host name typed** for a high step, for medium on prod, and for anything outside the host's allowed
+      commands;
+    - on **prod**, a command outside its allowed list is refused.
+
+    Alt+Enter runs the focused step; a bare Enter never does.
+  - **When a step fails,** the plan pauses: Run rollback, Retry, Skip or Stop. Nothing is rolled back
+    automatically.
+  - **Execution:** local steps run as an argv with no shell. Remote steps run as `ssh -o BatchMode=yes -T -a -x
+    <alias> -- …`, with every argument quoted for the remote shell, so no password is ever asked for. Exit 255
+    shows as "Couldn't connect".
+  - **Immune system:**
+    - a step like one you skipped as dangerous gets a red warning;
+    - three very fast Runs make the next one wait;
+    - a low-risk command that ran fine three times on a host is offered as an allowed pattern (never on prod).
+  - **Settings → Hosts:**
+    - name, SSH alias (suggested from `~/.ssh/config`, warned when it isn't there), environment, allowed
+      commands and notes;
+    - **Test connection** runs `ssh … <alias> true`, only after you confirm.
+  - The audit trail logs every proposal, edit, confirmation, run, result, skip, rollback and stop.
+  - **Checked with a real agent:** an incident analysis on a toy repo, with a made-up log of FPM and MySQL errors.
+    - Claude found 7 issues and proposed 6 read-only checks on `local`.
+    - Step 1 (`git ls-files`, low risk, one click) ran: exit 0, its output kept.
+    - Step 2 was skipped, then the plan was stopped.
+
+    No remote host was touched (the owner's choice); the SSH path is covered by unit tests.
 - **Analysis** (orchestration 07): the New task dialog's Analysis category now runs. It is read-only from start to
   finish.
   - **Presets:** Code audit, Security review, Incident / log analysis, Performance review, Dependency upgrade
@@ -23,7 +60,6 @@
   - **Checked with real agents on a toy repo:** a security review with Claude and Codex as analysts and Claude as
     the Arbiter found both SQL injections, the missing authorization, the hard-coded admin password and the
     committed key style. That is 9 findings, 5 of them high, each with a recommendation and a confidence.
-  - The "operations plan" option is still there; its runbook comes with operations (08).
 - **Arbiter** (orchestration 06): one read-only agent decides between the candidates.
   - **Agent:** Codex by default, or the one picked in New task. The New task dialog suggests one that isn't
     building.
@@ -106,6 +142,9 @@
   still shows the red sound icon on the bar.
 
 ### Fixed
+- Retry after an agent's session was cut off ran the whole stage again, every agent in it. Now only the cut-off
+  agents run again, and the others' answers stay: a lone retried analyst no longer overwrites the first one's
+  `analysis.md`. Found when Codex couldn't start (its own `account/read failed` error) during a real run.
 - A Bayloob on another port or with its own token file (a second instance, `--demo`) didn't hear its task agents:
   tmux starts sessions with its server's environment, so their hooks went to the default port. `BAYLOOB_PORT` and
   `BAYLOOB_TOKEN_FILE` are now passed into every session Bayloob starts.

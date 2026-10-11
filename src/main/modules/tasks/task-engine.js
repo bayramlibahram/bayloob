@@ -31,6 +31,7 @@ const {
 const { parseFindings } = require("../agents/challenge-report");
 const { parseSubtasks, overlaps, describeSubtask } = require("./subtasks");
 const { arbiterInput, parseDecision, parseReport, needsOwner } = require("./arbiter");
+const { LOCAL, parseRunbook, reclassify, confirmLevel, classifyRisk } = require("./runbook");
 
 const ARTIFACT_IN_PROMPT = 12_000; // an artifact pasted into a prompt keeps its tail beyond this
 const CHANGES_PROMPT = `The owner asked for changes:
@@ -60,6 +61,7 @@ const GATE_ACTIONS = {
   interrupted: ["retry", "abort"], // an agent's session ended before its turn did
   violation: ["continue", "abort"], // a read-only agent changed files
   failed: ["retry", "abort"], // a stage couldn't run (launch error, no candidates left)
+  runbook: ["abort"], // an operations plan: each step is run, skipped or edited through runbookAction(); abort stops the plan
 };
 
 const firstLine = text =>
@@ -77,6 +79,7 @@ class TaskEngine extends EventEmitter {
   #tasks = new Map(); // id → state
   #chains = new Map(); // id → promise: one change at a time per task
   #pumping = false;
+  #opsRuns = new Map(); // `${task}:${step}` → the running step's handle (stop)
 
   constructor({
     store,
@@ -86,9 +89,19 @@ class TaskEngine extends EventEmitter {
     capacity = () => undefined,
     now = Date.now,
     arbiterThreshold = () => 0.6,
+    ops = null, // { hosts() → [host], runner: OpsRunner, memory: OpsMemory } — operations (08b)
   }) {
     super();
-    Object.assign(this, { store, scheduler, runner, workspace, capacity, now, arbiterThreshold });
+    Object.assign(this, {
+      store,
+      scheduler,
+      runner,
+      workspace,
+      capacity,
+      now,
+      arbiterThreshold,
+      ops,
+    });
     scheduler.on("released", () => this.pump());
   }
 
@@ -202,6 +215,14 @@ class TaskEngine extends EventEmitter {
       }
       await this.#serial(saved.id, async () => {
         const task = this.#tasks.get(saved.id);
+        for (const step of task.runbook?.steps || []) {
+          if (step.status === "running") {
+            Object.assign(step, {
+              status: "failed",
+              result: { code: null, error: "Bayloob restarted while it ran — check the host" },
+            });
+          }
+        }
         let lost = false;
         for (const inst of task.instances) {
           if (inst.status === "queued") {
@@ -360,7 +381,10 @@ class TaskEngine extends EventEmitter {
           break;
         case "retry":
           if (gate.kind === "interrupted" || gate.kind === "failed") {
-            await this.#runStage(task, { only: gate.candidates || null });
+            await this.#runStage(task, {
+              only: gate.candidates?.length ? gate.candidates : null,
+              slots: gate.slots || null,
+            });
           } else {
             // Another attempt by the builders, with the owner's note
             const build = this.#builderIndex(task);
@@ -454,7 +478,10 @@ class TaskEngine extends EventEmitter {
    * Runs the current stage. only: candidate ids (a loop that concerns some of them); prompt/vars: a follow-up
    * prompt instead of the stage's own (loops, requested changes); reuse: continue the stage's last sessions.
    */
-  async #runStage(task, { only = null, prompt = null, vars = {}, reuse = false } = {}) {
+  async #runStage(
+    task,
+    { only = null, prompt = null, vars = {}, reuse = false, slots = null } = {}
+  ) {
     const st = this.#stage(task);
     const state = task.stages[task.stage];
     Object.assign(state, { status: "running", startedAt: this.now(), endedAt: null });
@@ -477,7 +504,7 @@ class TaskEngine extends EventEmitter {
       if (st.role === "arbiter" && !prompt) {
         await this.#prepareArbiter(task);
       }
-      this.#queueAgents(task, st, state.round, { only, prompt, vars, reuse });
+      this.#queueAgents(task, st, state.round, { only, prompt, vars, reuse, slots });
       if (!task.instances.some(i => i.stage === st.id && i.round === state.round)) {
         await this.#checkStage(task); // nobody to run (no candidate left for this round)
       }
@@ -486,7 +513,7 @@ class TaskEngine extends EventEmitter {
     this.#save(task);
   }
 
-  #queueAgents(task, st, round, { only, prompt, vars, reuse }) {
+  #queueAgents(task, st, round, { only, prompt, vars, reuse, slots = null }) {
     // reuseHandle: continue in that session instead of starting a new one (when it's still alive)
     const make = (adapter, n, candidate, reuseHandle) => {
       const inst = {
@@ -565,6 +592,9 @@ class TaskEngine extends EventEmitter {
     for (const a of st.agents) {
       for (let i = 0; i < a.count; i++) {
         n += 1;
+        if (slots && !slots.includes(n)) {
+          continue; // a retry of the agents that were cut off: the others already answered
+        }
         if (st.perCandidate) {
           for (const c of this.#active(task, only)) {
             make(a.adapter, n, c.id, previous(n, c.id));
@@ -651,6 +681,7 @@ class TaskEngine extends EventEmitter {
       parts: st?.split && splitBuild ? splitBuild.agents.reduce((n, a) => n + a.count, 0) : "",
       diff: task.review ? `git diff ${task.review.from}..${task.review.to}` : "",
       rubric: st?.rubric || CODE_RUBRIC,
+      hosts: st?.runbook ? this.#hostsText() : "",
       ...inst.vars,
     };
     return renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
@@ -700,7 +731,8 @@ class TaskEngine extends EventEmitter {
       if (cand) {
         name = insertBeforeExt(name, cand.id);
       }
-      if (same.length > 1 && inst.n > 1) {
+      const slotsInStage = (st.agents || []).reduce((k, a) => k + Number(a.count || 0), 0);
+      if ((same.length > 1 || slotsInStage > 1) && inst.n > 1) {
         name = insertBeforeExt(name, String(inst.n));
       }
       this.store.writeArtifact(task.id, name, message);
@@ -758,6 +790,8 @@ class TaskEngine extends EventEmitter {
         `${interrupted.length} agent session(s) ended before finishing`,
         {
           candidates: [...new Set(interrupted.map(i => i.candidate).filter(Boolean))],
+          // Which agent slots (n) to run again: only the ones that were cut off, not the whole stage
+          slots: [...new Set(interrupted.map(i => i.n))],
         }
       );
       return;
@@ -994,6 +1028,25 @@ class TaskEngine extends EventEmitter {
     }
     state.reasked = false;
     if (board) {
+      // An operations plan comes with the report: checked against the hosts first (asked again once)
+      let runbook = null;
+      if (st.runbook && parsed.runbook?.length) {
+        const rb = parseRunbook(parsed.runbook, this.ops?.hosts() || []);
+        if (!rb.ok && !state.reasked) {
+          state.reasked = true;
+          this.#log(task, "engine", "arbiter-invalid", { error: rb.error, reasked: false });
+          await this.#runStage(task, {
+            prompt: REASK_PROMPT,
+            vars: { note: rb.error },
+            reuse: true,
+          });
+          return;
+        }
+        runbook = rb.ok
+          ? { steps: rb.steps.map(x => this.#warned(x)), status: "open", runs: [] }
+          : { steps: [], status: "unusable", error: rb.error };
+      }
+      state.reasked = false;
       task.report = parsed.report;
       this.store.writeArtifact(
         task.id,
@@ -1001,6 +1054,27 @@ class TaskEngine extends EventEmitter {
         JSON.stringify(parsed.report.findings, null, 2)
       );
       this.#log(task, "agent", "report", { findings: parsed.report.findings.length });
+      if (runbook) {
+        task.runbook = runbook;
+        this.#log(task, "agent", "ops:proposed", {
+          steps: runbook.steps.map(x => ({
+            id: x.id,
+            host: x.host,
+            argv: x.argv,
+            proposed: x.proposedRisk,
+            risk: x.risk,
+          })),
+          error: runbook.error || null,
+        });
+      }
+      if (runbook?.status === "open" && runbook.steps.length) {
+        this.#openGate(
+          task,
+          "runbook",
+          `Runbook: ${runbook.steps.length} step(s) — each runs only when you click`
+        );
+        return;
+      }
       await this.#advance(task);
       return;
     }
@@ -1099,6 +1173,250 @@ class TaskEngine extends EventEmitter {
       error: r.error || null,
     });
     await this.#advance(task);
+  }
+
+  // ---------- operations (08b) ----------
+
+  /**
+   * The owner's action on a runbook step, in order: run · dry · rollback · skip · edit. A step only runs after its
+   * confirmation: opts.confirmed (level 'confirm'), opts.typed = the host's name (level 'typed'); 'refused' never
+   * runs. → { ok, error? } — a run answers when it has started; its end comes as a task change.
+   */
+  runbookAction(taskId, stepId, action, opts = {}) {
+    const task = this.#tasks.get(taskId);
+    if (!task?.runbook) {
+      return Promise.resolve({ ok: false, error: "This task has no runbook" });
+    }
+    return this.#serial(taskId, async () => {
+      const rb = task.runbook;
+      if (rb.status !== "open") {
+        return { ok: false, error: "The runbook is over" };
+      }
+      const step = rb.steps.find(x => x.id === stepId);
+      if (!step) {
+        return { ok: false, error: "No such step" };
+      }
+      if (rb.steps.some(x => x.status === "running")) {
+        return { ok: false, error: "A step is still running" };
+      }
+      const host = this.#host(step.host);
+      if (!host) {
+        return { ok: false, error: `The host "${step.host}" isn't in Settings → Hosts any more` };
+      }
+      if (action === "edit") {
+        if (step.status !== "pending" && step.status !== "failed") {
+          return { ok: false, error: "Only a step that hasn't run can be edited" };
+        }
+        const argv = (Array.isArray(opts.argv) ? opts.argv : []).map(String).filter(Boolean);
+        if (!argv.length) {
+          return { ok: false, error: "The command is empty" };
+        }
+        const before = step.argv;
+        Object.assign(step, this.#warned(reclassify(step, argv, host)), { status: "pending" });
+        this.#log(task, "you", "ops:edited", {
+          step: step.id,
+          before,
+          after: argv,
+          risk: step.risk,
+          level: step.level,
+        });
+        this.#save(task);
+        return { ok: true };
+      }
+      if (step !== this.#currentStep(task)) {
+        return { ok: false, error: "Steps run in order — this one isn't next" };
+      }
+      if (action === "skip") {
+        step.status = "skipped";
+        if (opts.dangerous) {
+          this.ops?.memory?.markDangerous(step.argv, host.id);
+        }
+        this.#log(task, "you", "ops:skipped", { step: step.id, dangerous: !!opts.dangerous });
+        await this.#runbookNext(task);
+        return { ok: true };
+      }
+      if (!["run", "dry", "rollback"].includes(action)) {
+        return { ok: false, error: `"${action}" isn't a runbook action` };
+      }
+      const argv =
+        action === "dry" ? step.dryRun : action === "rollback" ? step.rollback : step.argv;
+      if (!argv) {
+        return {
+          ok: false,
+          error: action === "dry" ? "This step has no dry run" : "This step has no rollback",
+        };
+      }
+      if (action === "rollback" && step.status !== "failed") {
+        return { ok: false, error: "Rollback is for a step that failed" };
+      }
+      // The level is worked out again now: the host's allow patterns may have changed since the plan came in
+      const risk =
+        action === "dry" ? "low" : action === "rollback" ? classifyRisk(argv) : step.risk;
+      const level =
+        action === "dry" && host.env !== "prod"
+          ? "click"
+          : confirmLevel(action === "dry" ? "low" : risk, host, argv);
+      if (level === "refused") {
+        return {
+          ok: false,
+          error: `${host.name} is prod: add a pattern for this command in Settings → Hosts first`,
+        };
+      }
+      if (level === "typed" && String(opts.typed || "").trim() !== host.name) {
+        return { ok: false, error: `Type the host name (${host.name}) to run this` };
+      }
+      if (level === "confirm" && !opts.confirmed) {
+        return { ok: false, error: "Confirm the command first" };
+      }
+      if (rb.slowUntil && this.now() < rb.slowUntil) {
+        return { ok: false, error: "Wait a moment — three Runs came very fast" };
+      }
+      this.#tripwire(rb);
+      this.#log(task, "you", "ops:confirmed", { step: step.id, level, action });
+      this.#log(task, "you", action === "rollback" ? "ops:rollback" : "ops:run", {
+        step: step.id,
+        host: host.id,
+        env: host.env,
+        argv,
+        dry: action === "dry",
+      });
+      Object.assign(step, { status: "running", running: action, tail: "", startedAt: this.now() });
+      this.#save(task);
+      const handle = this.ops.runner.run({
+        host,
+        argv,
+        cwd: task.project.root,
+        timeoutSec: step.timeoutSec,
+        onOutput: tail => {
+          step.tail = tail;
+          this.#saveSoon(task);
+        },
+      });
+      this.#opsRuns.set(`${task.id}:${step.id}`, handle);
+      handle.done.then(r =>
+        this.#serial(task.id, () => this.#stepEnded(task, step, host, action, argv, r))
+      );
+      return { ok: true };
+    }).then(r => r || { ok: false, error: "Something went wrong — see the task log" });
+  }
+
+  async #stepEnded(task, step, host, action, argv, r) {
+    this.#opsRuns.delete(`${task.id}:${step.id}`);
+    const name = `ops-${step.id}${action === "run" ? "" : `-${action}`}.log`;
+    this.store.writeArtifact(task.id, name, `$ ${argv.join(" ")}  (${host.name})\n${r.output}`);
+    const ok = r.code === 0 && !r.timedOut && !r.stopped;
+    const result = {
+      code: r.code,
+      ms: r.ms,
+      ok,
+      log: name,
+      error: r.stopped
+        ? "stopped"
+        : r.timedOut
+          ? "timeout"
+          : r.connection
+            ? "Couldn't connect"
+            : null,
+    };
+    this.#log(task, "engine", ok ? "ops:result" : "ops:failed", {
+      step: step.id,
+      action,
+      ...result,
+      bytes: r.output.length,
+    });
+    step.running = null;
+    step.tail = r.output.split("\n").slice(-50).join("\n");
+    if (action === "dry") {
+      Object.assign(step, { status: "pending", dryResult: result });
+    } else if (action === "rollback") {
+      Object.assign(step, { status: "failed", rollbackResult: result });
+    } else {
+      Object.assign(step, { status: ok ? "done" : "failed", result });
+    }
+    // Combo: a low-risk command that ran fine on the same (non-prod) host three times → offer a pattern
+    if (
+      ok &&
+      action === "run" &&
+      step.risk === "low" &&
+      host.env !== "prod" &&
+      host.id !== "local"
+    ) {
+      if (
+        this.ops?.memory?.ranFine(host.id, step.argv) &&
+        !(host.allow || []).includes(step.argv.join(" "))
+      ) {
+        task.runbook.offer = { host: host.id, pattern: step.argv.join(" ") };
+        this.#log(task, "engine", "ops:combo-offered", task.runbook.offer);
+      }
+    }
+    if (task.runbook.status === "stopped") {
+      this.#save(task);
+      return;
+    }
+    if (step.status === "done") {
+      await this.#runbookNext(task);
+      return;
+    }
+    this.#save(task);
+  }
+
+  // Done or skipped: the plan goes on; when every step is through, the task is done
+  async #runbookNext(task) {
+    if (!this.#currentStep(task)) {
+      task.runbook.status = "done";
+      await this.#finish(task, "done", "runbook finished");
+      return;
+    }
+    this.#save(task);
+  }
+
+  #currentStep(task) {
+    return task.runbook?.steps.find(x => x.status !== "done" && x.status !== "skipped") || null;
+  }
+
+  #host(id) {
+    return id === LOCAL.id ? LOCAL : (this.ops?.hosts() || []).find(h => h.id === id) || null;
+  }
+
+  // Antibody: a step like one you skipped as dangerous gets a warning (never a block)
+  #warned(step) {
+    const like = this.ops?.memory?.resembles(step.argv);
+    return {
+      ...step,
+      warn: like ? `Like a step you skipped as dangerous: ${like.argv.join(" ")}` : null,
+    };
+  }
+
+  // Tripwire: three Runs each within a second of the one before → the next one waits 3 s
+  #tripwire(rb) {
+    const t = this.now();
+    rb.runs = [...(rb.runs || []), t].slice(-3);
+    if (rb.runs.length === 3 && rb.runs[2] - rb.runs[0] < 2000) {
+      rb.slowUntil = t + 3000;
+    }
+  }
+
+  #hostsText() {
+    return [LOCAL, ...(this.ops?.hosts() || [])]
+      .map(
+        h =>
+          `- ${h.id} (${h.env}${h.id === "local" ? ", this machine" : `, ssh ${h.alias}`})${h.allow?.length ? ` · allowed: ${h.allow.join("; ")}` : ""}`
+      )
+      .join("\n");
+  }
+
+  #saveTimers = new Map();
+  #saveSoon(task) {
+    if (this.#saveTimers.has(task.id)) {
+      return;
+    }
+    this.#saveTimers.set(
+      task.id,
+      setTimeout(() => {
+        this.#saveTimers.delete(task.id);
+        this.#save(task);
+      }, 400)
+    );
   }
 
   // Split work: the parts' branches merged into one candidate (in its own worktree), which the later stages
@@ -1247,6 +1565,13 @@ class TaskEngine extends EventEmitter {
 
   async #stop(task, why) {
     this.scheduler.cancel({ taskId: task.id });
+    if (task.runbook?.status === "open") {
+      task.runbook.status = "stopped";
+      for (const step of task.runbook.steps) {
+        this.#opsRuns.get(`${task.id}:${step.id}`)?.stop();
+      }
+      this.#log(task, "you", "ops:stopped", { at: this.#currentStep(task)?.id || null });
+    }
     for (const inst of task.instances) {
       if (inst.status === "queued" || inst.status === "starting") {
         inst.status = "stopped";

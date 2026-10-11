@@ -178,6 +178,29 @@
   .rank .sc { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; font-size: 12.5px; }
   .rank ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--soft); }
   .sev { display: inline-block; min-width: 58px; text-align: center; }
+  /* Runbook: one card per step, in order; only the next one has buttons */
+  .ops { display: flex; flex-direction: column; gap: 10px; max-width: 1080px; }
+  .opscard { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--raised); border: 1.5px solid var(--line); }
+  .opscard:focus-within, .opscard.next { border-color: color-mix(in srgb, var(--brand) 60%, transparent); }
+  .opscard.done { border-color: color-mix(in srgb, var(--done) 45%, transparent); }
+  .opscard.failed { border-color: var(--waiting); }
+  .opscard.skipped, .opscard.later { opacity: .7; }
+  .opscard .oh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .opscard .oh .n { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .opscard .oh .sp { flex: 1; }
+  .opscard .purpose { font-size: 12.5px; color: var(--soft); }
+  .opscard .cmd { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--text) 6%, transparent);
+    font: 12.5px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
+  .opscard .cmd .p { color: var(--muted); user-select: none; }
+  .opscard .warn { color: var(--waiting); font-size: 12.5px; font-weight: 600; display: flex; gap: 6px; }
+  .opscard .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .opscard .row .sp { flex: 1; }
+  .opscard .row .msg { flex: 1; min-width: 200px; font-size: 12.5px; color: var(--soft); }
+  .opscard input.typed { font: 12.5px ui-monospace, monospace; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--waiting); background: transparent; color: var(--text); min-width: 180px; }
+  .opscard textarea.argv { width: 100%; min-height: 54px; font: 12.5px ui-monospace, monospace; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--text); }
+  .opscard pre.output { max-height: 240px; }
+  .opscard .res { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .env-dev { --c: var(--idle); } .env-staging { --c: var(--working); } .env-prod { --c: var(--waiting); }
   .rfilter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .rfilter .sp { flex: 1; }
   .rfilter .chip { cursor: pointer; border: 1px solid transparent; }
@@ -331,7 +354,7 @@
     noTasks: 'No tasks yet', noTasksHint: 'Start one with New task → Agentic workflow (Pipeline or Best-of-N).',
     category: { workflow: 'Agentic workflow', analysis: 'Analysis', single: 'Single agent' },
     status: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', stopped: 'Stopped', failed: 'Failed' },
-    tabs: { overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
+    tabs: { runbook: 'Runbook', overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
     stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
     stopped: 'Stopped. Worktrees and branches are kept until you delete them.',
     queuedN: n => `${n} queued`, runningN: n => `${n} running`, of: (a, b) => `${a} of ${b}`,
@@ -355,6 +378,7 @@
       approve: { approve: 'Approve', changes: 'Request changes', abort: 'Abort' },
       pick: { pick: 'Pick', retry: 'Retry with note', abort: 'Abort' },
       decision: { accept: 'Accept decision', pick: 'Pick', retry: 'Retry with note', abort: 'Abort' },
+      runbook: { abort: 'Stop plan' },
       merge: { merge: 'Merge', keep: 'Keep branch', pick: 'Pick another', abort: 'Abort' },
       'tests-failed': { continue: 'Continue anyway', retry: 'Retry with note', abort: 'Abort' },
       interrupted: { retry: 'Run again', abort: 'Abort' },
@@ -368,11 +392,21 @@
     confidence: 'confidence', risks: 'Risks', score: s => `${s}/10`, arbiterAnswer: 'The Arbiter’s answer',
     noReport: 'No report yet', noReportHint: 'The Arbiter merges the reviews when they are all in.', reportBad: 'The Arbiter’s report couldn’t be read — see each review in Reviews',
     sev: { high: 'High', medium: 'Medium', low: 'Low' },
+    ops: {
+      next: 'Next', running: 'Running…', done: 'Done', failed: 'Failed', skipped: 'Skipped', pending: 'Not run', edited: 'edited by you',
+      risk: { low: 'Low risk', medium: 'Medium risk', high: 'High risk' },
+      run: 'Run', dry: 'Dry run', skip: 'Skip', skipDanger: 'Skip — looks dangerous', edit: 'Edit', save: 'Save', cancel: 'Cancel', retry: 'Retry', rollback: 'Run rollback',
+      confirmQ: (cmd, host) => `Run <code>${cmd}</code> on <b>${host}</b>?`, typeQ: host => `Type <b>${host}</b> to run this step`, refused: host => `${host} is prod — this command isn’t in its allowed patterns. Add one in Settings → Hosts first.`,
+      exit: (c, ms) => `exit ${c ?? '—'} · ${ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`}`, rollbackOf: 'Rollback', dryDone: 'Dry run',
+      offer: (p, h) => `“${p}” ran fine on ${h} three times — add it to its allowed commands?`, add: 'Add pattern', added: 'Added to the host’s allowed commands',
+      over: { done: 'The runbook is finished.', stopped: 'The plan was stopped — the steps not run stay as they are.', unusable: 'The Arbiter’s runbook couldn’t be used' },
+      keys: 'Alt+Enter runs the focused step · nothing runs on a bare Enter', remoteStop: 'Stopping ends the SSH session; a remote command started with nohup may keep running.',
+    },
     analystsTab: 'Analysts', all: 'All', filterSev: 'Show findings of', exportMd: 'Export Markdown', exported: p => `Saved ${p}`, collected: 'What Bayloob collected for the analysts (read-only)',
     col: { sev: 'Severity', where: 'Where', problem: 'Problem', rec: 'Recommendation', conf: 'Confidence', by: 'Found by' },
     notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
     send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
-    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
+    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', runbook: 'Run, skip or edit each step in the Runbook tab — in order', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
     ago: at => timeAgo(at),
     log: {
       started: e => e.fromWorktree ? `Task started from your files as they were (on ${e.branch || '?'})` : `Task started from ${String(e.base || '').slice(0, 8)} on ${e.branch || '?'}`,
@@ -460,6 +494,7 @@
     density = 'comfortable';
     picked = new Map(); // task id → candidate the owner selected for "Pick"
     sevFilter = new Map(); // task id → the Report's severity filter (null: all)
+    opsUi = null; // the runbook step being confirmed / typed / edited: { task, step, mode, action, typed, argv }
     composing = null; // { action } while a note / confirmation is being written
     #art = new Map(); // `${task}:${name}` → text | null (artifacts and logs, refreshed when the task changes)
     #toastTimer = null;
@@ -600,10 +635,10 @@
       }).join('');
       const board = !t.template.stages.some(s => s.role === 'builder');
       const arb = t.template.stages.some(s => s.role === 'arbiter' && s.agents?.length);
-      const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ['reviews', t.instances.filter(i => (i.role === 'reviewer' || i.role === 'analyst') && i.status === 'done').length || ''], ['log']]
+      const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ...(t.runbook ? [['runbook', t.runbook.steps.length || '']] : []), ['reviews', t.instances.filter(i => (i.role === 'reviewer' || i.role === 'analyst') && i.status === 'done').length || ''], ['log']]
         : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['decision'], ['tests'], ['log']];
       if (!tabs.some(([k]) => k === this.tab)) { this.tab = 'overview'; }
-      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), log: () => this.#log(t) }[this.tab]();
+      const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), runbook: () => this.#runbook(t), log: () => this.#log(t) }[this.tab]();
       return `<div class="dhead"><div class="t">
           <button class="crumb" type="button" data-act="board">${ICON.back} ${T.back}</button>
           <h1>${esc(t.title)}</h1>
@@ -756,6 +791,73 @@
         </tbody></table>${collected}</div>`;
     }
 
+    // Operations: the Arbiter's runbook as step cards — each runs only from its own button, in order
+    #runbook(t) {
+      const rb = t.runbook;
+      if (rb.status === 'unusable') { return `<div class="banner" style="--c:var(--waiting);margin:0">${ICON.warn}<span><b>${T.ops.over.unusable}</b><br>${esc(rb.error || '')}</span></div>`; }
+      const open = rb.status === 'open';
+      const next = rb.steps.find(x => x.status !== 'done' && x.status !== 'skipped');
+      const q = a => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`);
+      const line = argv => esc(argv.map(q).join(' '));
+      const ui = this.opsUi?.task === t.id ? this.opsUi : null;
+      const cards = rb.steps.map((x, i) => {
+        const isNext = open && x === next;
+        const st = x.status === 'pending' && isNext ? 'next' : x.status;
+        const res = r => r ? `<span class="res">${r.error ? `${esc(r.error)} · ` : ''}${T.ops.exit(r.code, r.ms)}</span>` : '';
+        let actions = '';
+        if (isNext && x.status !== 'running') {
+          const mine = ui?.step === x.id ? ui : null;
+          if (mine?.mode === 'edit') {
+            actions = `<textarea class="argv" data-ops-argv spellcheck="false">${esc(mine.argv)}</textarea>
+              <div class="row"><span class="sp"></span><button class="btn" type="button" data-ops="cancel">${T.ops.cancel}</button><button class="btn primary" type="button" data-ops="save-edit" data-step="${x.id}">${T.ops.save}</button></div>`;
+          } else if (mine?.mode === 'confirm') {
+            const argv = mine.action === 'dry' ? x.dryRun : mine.action === 'rollback' ? x.rollback : x.argv;
+            actions = `<div class="row"><span class="msg">${T.ops.confirmQ(line(argv), esc(x.hostName))}</span><button class="btn" type="button" data-ops="cancel">${T.ops.cancel}</button>
+              <button class="btn primary" type="button" data-ops="go" data-step="${x.id}">${ICON.check} ${T.ops[mine.action === 'dry' ? 'dry' : mine.action === 'rollback' ? 'rollback' : 'run']}</button></div>`;
+          } else if (mine?.mode === 'typed') {
+            const okName = mine.typed.trim() === x.hostName;
+            actions = `<div class="row"><span class="msg">${T.ops.typeQ(esc(x.hostName))}</span><input class="typed" data-ops-typed value="${esc(mine.typed)}" spellcheck="false" aria-label="${esc(T.ops.typeQ(x.hostName).replace(/<[^>]+>/g, ''))}">
+              <button class="btn" type="button" data-ops="cancel">${T.ops.cancel}</button><button class="btn danger" type="button" data-ops="go" data-step="${x.id}" ${okName ? '' : 'disabled'}>${T.ops[mine.action === 'rollback' ? 'rollback' : 'run']}</button></div>`;
+          } else if (x.level === 'refused') {
+            actions = `<div class="row"><span class="msg" style="color:var(--waiting)">${esc(T.ops.refused(x.hostName))}</span><button class="btn" type="button" data-ops="edit" data-step="${x.id}">${T.ops.edit}</button><button class="btn" type="button" data-ops="skip" data-step="${x.id}">${T.ops.skip}</button></div>`;
+          } else {
+            const failed = x.status === 'failed';
+            actions = `<div class="row">
+              ${x.dryRun && !failed ? `<button class="btn" type="button" data-ops="dry" data-step="${x.id}">${T.ops.dry}</button>` : ''}
+              ${failed && x.rollback ? `<button class="btn" type="button" data-ops="rollback" data-step="${x.id}">${T.ops.rollback}</button>` : ''}
+              <button class="btn" type="button" data-ops="edit" data-step="${x.id}">${T.ops.edit}</button>
+              <button class="btn" type="button" data-ops="skip" data-step="${x.id}">${T.ops.skip}</button>
+              <button class="btn" type="button" data-ops="skip-danger" data-step="${x.id}">${T.ops.skipDanger}</button>
+              <span class="sp"></span>
+              <button class="btn ${x.risk === 'high' || x.level === 'typed' ? 'danger' : 'primary'}" type="button" data-ops="run" data-step="${x.id}" data-primary>${failed ? T.ops.retry : T.ops.run} <kbd>Alt ↵</kbd></button></div>`;
+          }
+        }
+        return `<article class="opscard ${st}${!isNext && x.status === 'pending' ? ' later' : ''}" data-step="${x.id}" tabindex="${isNext ? 0 : -1}">
+          <div class="oh"><span class="n">${i + 1}</span><span class="chip c env-${esc(x.env)}">${x.env === 'prod' ? 'PROD · ' : ''}${esc(x.hostName)}</span>
+            <span class="chip c" style="--c:${{ low: 'var(--done)', medium: 'var(--working)', high: 'var(--waiting)' }[x.risk]}">${T.ops.risk[x.risk]}</span>
+            ${x.edited ? `<span class="chip">${T.ops.edited}</span>` : ''}<span class="sp"></span>
+            <span class="chip c" style="--c:${{ done: 'var(--done)', failed: 'var(--waiting)', running: 'var(--thinking)', skipped: 'var(--idle)' }[x.status] || 'var(--idle)'}">${x.status === 'pending' && isNext ? T.ops.next : T.ops[x.status]}</span></div>
+          ${x.warn ? `<div class="warn">${ICON.warn}<span>${esc(x.warn)}</span></div>` : ''}
+          ${x.purpose ? `<div class="purpose">${esc(x.purpose)}</div>` : ''}
+          <div class="cmd"><span class="p">$</span><span>${line(x.argv)}</span></div>
+          ${x.rollback ? `<details class="more"><summary>${T.ops.rollbackOf}</summary><div class="cmd"><span class="p">$</span><span>${line(x.rollback)}</span></div>${res(x.rollbackResult)}</details>` : ''}
+          ${x.dryResult ? `<div class="res">${T.ops.dryDone}: ${res(x.dryResult)}</div>` : ''}
+          ${x.tail ? `<pre class="output">${esc(x.tail)}</pre>` : ''}${res(x.result)}
+          ${actions}
+        </article>`;
+      }).join('');
+      const offer = rb.offer ? `<div class="banner" style="--c:var(--brand);margin:0">${ICON.check}<span>${esc(T.ops.offer(rb.offer.pattern, rb.offer.host))}</span><button class="btn sm" type="button" data-ops="allow">${T.ops.add}</button></div>` : '';
+      const over = open ? `<small style="color:var(--muted)">${T.ops.keys}${rb.steps.some(x => x.env && x.host !== 'local') ? ` · ${T.ops.remoteStop}` : ''}</small>` : `<div class="banner" style="--c:var(--idle);margin:0">${T.ops.over[rb.status] || ''}</div>`;
+      return `<div class="ops">${over}${offer}${cards}</div>`;
+    }
+
+    async #opsAction(t, stepId, action, opts = {}) {
+      const r = await this.api.runbook?.(t.id, stepId, action, opts);
+      if (r && !r.ok) { this.toast(r.error, true); return false; }
+      this.opsUi = null;
+      return true;
+    }
+
     // Review board: every reviewer's answer on its own, with its findings count (the Arbiter merges them from 06)
     #reviews(t) {
       const done = t.instances.filter(i => i.artifact && (i.role === 'reviewer' || i.role === 'analyst'));
@@ -879,7 +981,7 @@
     }
 
     #openTask(id) {
-      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'decision' ? 'decision' : this.tasks.get(id)?.gate?.kind === 'pick' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
+      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'runbook' ? 'runbook' : this.tasks.get(id)?.gate?.kind === 'decision' ? 'decision' : this.tasks.get(id)?.gate?.kind === 'pick' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
       this.open = id;
       this.view = 'detail';
       this.composing = null;
@@ -910,6 +1012,15 @@
         });
       }
       this.el.main.addEventListener('input', e => {
+        // The host name typed for a high-risk step: Run turns on when it matches (no re-render under the caret)
+        if (e.target.matches?.('[data-ops-typed]') && this.opsUi) {
+          this.opsUi.typed = e.target.value;
+          const t = this.tasks.get(this.opsUi.task);
+          const step = t?.runbook?.steps.find(x => x.id === this.opsUi.step);
+          const go = this.el.main.querySelector('[data-ops="go"]');
+          if (go && step) { go.disabled = e.target.value.trim() !== step.hostName; }
+          return;
+        }
         if (this.view === 'builder' && this.builder.onInput(e, this.el.main)) { return; }
         if (e.target.id === 'q') {
           this.query = e.target.value;
@@ -947,6 +1058,37 @@
         if (term && t) {
           const r = await this.api.terminal(t.id, term.dataset.term);
           if (!r?.ok) { this.toast(r?.error || 'Could not open a terminal', true); }
+          return;
+        }
+        const ob = e.target.closest('[data-ops]');
+        if (ob && t?.runbook) {
+          const a = ob.dataset.ops;
+          const step = t.runbook.steps.find(x => x.id === ob.dataset.step);
+          if (a === 'cancel') { this.opsUi = null; return this.render(); }
+          if (a === 'allow') {
+            const r = await this.api.allowPattern?.(t.runbook.offer.host, t.runbook.offer.pattern);
+            this.toast(r?.ok ? T.ops.added : r?.error || T.wrong, !r?.ok);
+            return;
+          }
+          if (a === 'edit') { this.opsUi = { task: t.id, step: step.id, mode: 'edit', argv: step.argv.map(x => (/\s/.test(x) ? `"${x}"` : x)).join(' ') }; return this.render(); }
+          if (a === 'save-edit') {
+            const text = this.el.main.querySelector('[data-ops-argv]')?.value || '';
+            const argv = [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2] ?? m[3]);
+            await this.#opsAction(t, step.id, 'edit', { argv });
+            return this.render();
+          }
+          if (a === 'skip' || a === 'skip-danger') { await this.#opsAction(t, step.id, 'skip', { dangerous: a === 'skip-danger' }); return this.render(); }
+          if (a === 'go') {
+            const ui = this.opsUi;
+            await this.#opsAction(t, step.id, ui.action, ui.mode === 'typed' ? { typed: ui.typed } : { confirmed: true });
+            return this.render();
+          }
+          // run / dry / rollback: straight away for 'click', otherwise the step's confirmation first
+          const level = a === 'dry' ? (step.env === 'prod' ? 'confirm' : 'click') : step.level === 'click' && a === 'rollback' ? 'confirm' : step.level;
+          if (level === 'click') { await this.#opsAction(t, step.id, a); return this.render(); }
+          this.opsUi = { task: t.id, step: step.id, mode: level === 'typed' ? 'typed' : 'confirm', action: a, typed: '' };
+          this.render();
+          this.el.main.querySelector('[data-ops-typed], [data-ops="go"]')?.focus();
           return;
         }
         const sev = e.target.closest('[data-sev]');
@@ -1008,6 +1150,12 @@
         if (e.altKey && (e.key === 'a' || e.key === 'A') && this.view === 'detail' && t?.gate) {
           e.preventDefault();
           return this.el.main.querySelector('.actions .btn.primary:not(:disabled)')?.click();
+        }
+        // Alt+Enter on a focused runbook card: its Run (which still asks for its confirmation)
+        if (e.altKey && e.key === 'Enter' && this.view === 'detail') {
+          const card = document.activeElement?.closest?.('.opscard');
+          const run = card?.querySelector('[data-primary]');
+          if (run) { e.preventDefault(); return run.click(); }
         }
         // Alt+P pick another · Alt+R retry with a note (never a bare Enter on a decision)
         const alt = e.altKey && { p: 'pick', r: 'retry' }[e.key.toLowerCase()];

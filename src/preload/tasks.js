@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld("tasksAPI", {
   stop: id => ipcRenderer.invoke("tasks:stop", id),
   // Saves a task's report as Markdown (a save dialog) → { ok, path } | { ok: false, canceled | error }
   exportReport: id => ipcRenderer.invoke("tasks:export-report", id),
+  // A runbook step: run · dry · rollback · skip · edit (opts: confirmed, typed, dangerous, argv) → { ok, error? }
+  runbook: (id, stepId, action, opts) =>
+    ipcRenderer.invoke("tasks:runbook", id, stepId, action, opts),
+  allowPattern: (hostId, pattern) => ipcRenderer.invoke("tasks:allow-pattern", hostId, pattern),
   // Opens a terminal attached to one instance's tmux session
   terminal: (id, instanceId) => ipcRenderer.invoke("tasks:terminal", id, instanceId),
   newTask: () => ipcRenderer.send("open-launcher"),

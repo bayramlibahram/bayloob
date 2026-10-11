@@ -5,6 +5,7 @@ const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { CAPACITY } = require("../../shared/task-shape");
 const { clampScale } = require("../windows/ui-scale");
+const { normalizeHost } = require("../modules/tasks/runbook");
 
 // Settings → Agents: per agent on/off, how many may run at once, and a note. Limits for all of them together.
 const AGENT_DEFAULTS = Object.fromEntries(
@@ -28,6 +29,7 @@ const DEFAULTS = {
   soundVolume: 0.8, // 0..1
   soundToggles: {}, // sound name -> on/off, overriding the pack's default_enabled
   watchClipboard: false, // opt-in: offer "Fix this error?" when a stack trace is copied
+  hosts: [], // operations: { id, name, alias (~/.ssh/config), env dev|staging|prod, allow: [patterns], notes }
   agents: AGENT_DEFAULTS, // per agent: { enabled, max (parallel instances), notes }
   limits: LIMIT_DEFAULTS, // { total, perProject, minFreeGB } for task instances (see tasks/scheduler.js)
 };
@@ -49,6 +51,7 @@ const ENV = {
   watchClipboard: () => undefined,
   agents: () => undefined,
   limits: () => undefined,
+  hosts: () => undefined,
 };
 
 const VALIDATE = {
@@ -72,6 +75,17 @@ const VALIDATE = {
         ([k, on]) => /^[a-z][a-z-]{0,39}$/.test(k) && typeof on === "boolean"
       )
     ),
+  // Hosts that check out (OPERATIONS.md §2), one per id
+  hosts: v => {
+    const out = [];
+    for (const h of Array.isArray(v) ? v.slice(0, 50) : []) {
+      const r = normalizeHost(h);
+      if (r.ok && !out.some(x => x.id === r.host.id)) {
+        out.push(r.host);
+      }
+    }
+    return out;
+  },
   // Known agents only; a missing one keeps its defaults
   agents: v =>
     Object.fromEntries(

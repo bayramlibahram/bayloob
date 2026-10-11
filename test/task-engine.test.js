@@ -897,3 +897,263 @@ test("Analysis: logs collected read-only → analysts in parallel → the Arbite
     "Pool exhausted"
   );
 });
+
+// ---------- Operations (08b) ----------
+
+class FakeOps {
+  runs = [];
+  results = []; // next results, in order; default exit 0
+  hosts = () => this.hostList;
+  hostList = [
+    {
+      id: "web-stg",
+      name: "web staging",
+      alias: "web-stg",
+      env: "staging",
+      allow: ["uptime", "systemctl status *"],
+    },
+    { id: "web-prod", name: "web prod", alias: "web", env: "prod", allow: ["uptime"] },
+  ];
+  runner = {
+    run: ({ host, argv, onOutput }) => {
+      this.runs.push([host.id, argv.join(" ")]);
+      const r = this.results.shift() || { code: 0 };
+      onOutput("output line");
+      return {
+        done: Promise.resolve({
+          output: `ran ${argv.join(" ")}`,
+          ms: 12,
+          timedOut: false,
+          stopped: false,
+          connection: false,
+          ...r,
+        }),
+        stop: () => {},
+      };
+    },
+  };
+}
+
+async function toRunbook(steps, { ops = new FakeOps(), memory = null } = {}) {
+  const env = setup();
+  env.ops = Object.assign(ops, { memory });
+  env.engine.ops = env.ops;
+  env.workspace.collect = () =>
+    Promise.resolve({ logs: { markdown: "# Logs", results: [] }, audit: null });
+  const config = env.store.saveDraft({
+    category: "analysis",
+    project: { cwd: "/w/shop", name: "shop" },
+    text: "FPM keeps timing out",
+    analysis: {
+      preset: "incident",
+      agents: { claude: 1 },
+      arbiter: "codex",
+      logSources: ["a.log"],
+      opsPlan: true,
+    },
+  });
+  await env.engine.start(config, templateFor(config));
+  await env.engine.settled(config.id);
+  const task = env.engine.get(config.id);
+  await endTurn(
+    env,
+    task,
+    env.runner.by({ role: "analyst" })[0],
+    "high — a.log — pool exhausted — restart"
+  );
+  const [arb] = env.runner.by({ role: "arbiter" });
+  assert.match(
+    arb.prompt,
+    /- local \(dev, this machine\)\n- web-stg \(staging, ssh web-stg\) · allowed: uptime; systemctl status \*/
+  );
+  await endTurn(
+    env,
+    task,
+    arb,
+    "```json\n" +
+      JSON.stringify({
+        summary: "Pool.",
+        findings: [{ severity: "high", problem: "Pool exhausted" }],
+        runbook: steps,
+      }) +
+      "\n```"
+  );
+  return { env, task };
+}
+
+const ops = (env, task, step, action, opts) =>
+  env.engine.runbookAction(task.id, step, action, opts).then(async r => {
+    await env.engine.settled(task.id);
+    await env.engine.settled(task.id);
+    return r;
+  });
+
+test("Runbook demo: 3 steps — run 1, skip 1, stop the plan; each step only after its confirmation", async () => {
+  const { env, task } = await toRunbook([
+    { host: "web-stg", argv: ["systemctl", "status", "php8.3-fpm"], purpose: "Check", risk: "low" },
+    { host: "web-stg", argv: ["systemctl", "restart", "php8.3-fpm"], purpose: "Fix", risk: "low" },
+    { host: "local", argv: ["uptime"], purpose: "After" },
+  ]);
+  assert.equal(task.gate.kind, "runbook");
+  assert.equal(task.status, "needs-you");
+  const [s1, s2] = task.runbook.steps;
+  assert.deepEqual([s1.risk, s1.level], ["low", "click"]);
+  // restart: the agent said low, Bayloob says medium — and it's outside web-stg's allow patterns → typed
+  assert.deepEqual([s2.proposedRisk, s2.risk, s2.level], ["low", "medium", "typed"]);
+  assert.equal(env.ops.runs.length, 0); // nothing ran by itself
+
+  assert.match((await ops(env, task, "s2", "run")).error, /isn't next/);
+  assert.deepEqual(await ops(env, task, "s1", "run"), { ok: true });
+  assert.deepEqual(env.ops.runs, [["web-stg", "systemctl status php8.3-fpm"]]);
+  assert.equal(s1.status, "done");
+  assert.match(
+    env.store.readArtifact(task.id, "ops-s1.log"),
+    /^\$ systemctl status php8\.3-fpm {2}\(web staging\)\nran /
+  );
+
+  assert.match((await ops(env, task, "s2", "run")).error, /Type the host name \(web staging\)/);
+  await ops(env, task, "s2", "skip", { dangerous: false });
+  assert.equal(task.runbook.steps[1].status, "skipped");
+  await env.engine.decide(task.id, task.gate.id, "abort");
+  await env.engine.settled(task.id);
+  assert.equal(task.status, "stopped");
+  assert.equal(task.runbook.status, "stopped");
+  assert.equal(task.runbook.steps[2].status, "pending"); // not run
+  const events = env.store.log(task.id).map(e => e.event);
+  for (const e of [
+    "ops:proposed",
+    "ops:confirmed",
+    "ops:run",
+    "ops:result",
+    "ops:skipped",
+    "ops:stopped",
+  ]) {
+    assert.ok(events.includes(e), e);
+  }
+});
+
+test("Runbook: prod refuses a step outside its patterns; high needs the typed name; confirm is required", async () => {
+  const { env, task } = await toRunbook([
+    { host: "web-prod", argv: ["uptime"], risk: "low" },
+    { host: "web-prod", argv: ["systemctl", "restart", "nginx"], risk: "medium" },
+  ]);
+  const [s1, s2] = task.runbook.steps;
+  assert.equal(s1.level, "confirm"); // prod: even a low step is confirmed
+  assert.equal(s2.level, "refused");
+  assert.match((await ops(env, task, "s1", "run")).error, /Confirm the command first/);
+  await ops(env, task, "s1", "run", { confirmed: true });
+  assert.match(
+    (await ops(env, task, "s2", "run", { typed: "web prod", confirmed: true })).error,
+    /is prod: add a pattern/
+  );
+  // The owner adds the pattern in Settings → the level is worked out again at Run
+  env.ops.hostList[1].allow.push("systemctl restart *");
+  assert.match(
+    (await ops(env, task, "s2", "run", { confirmed: true })).error,
+    /Type the host name \(web prod\)/
+  );
+  await ops(env, task, "s2", "run", { typed: "web prod" });
+  assert.equal(task.status, "done");
+});
+
+test("Runbook: a failed step pauses the plan — rollback, retry or skip; an edit is classified again", async () => {
+  const fake = new FakeOps();
+  fake.results = [{ code: 1 }, { code: 0 }];
+  const { env, task } = await toRunbook(
+    [
+      {
+        host: "local",
+        argv: ["php", "artisan", "queue:restart"],
+        risk: "low",
+        rollback: ["php", "artisan", "up"],
+      },
+      { host: "local", argv: ["uptime"] },
+    ],
+    { ops: fake }
+  );
+  const s1 = task.runbook.steps[0];
+  assert.equal(s1.risk, "medium"); // restart → medium
+  await ops(env, task, "s1", "run", { confirmed: true });
+  assert.equal(s1.status, "failed");
+  assert.equal(task.runbook.steps[1].status, "pending");
+  assert.match((await ops(env, task, "s2", "run")).error, /isn't next/); // paused at the failure
+  await ops(env, task, "s1", "rollback", { confirmed: true });
+  assert.equal(s1.rollbackResult.ok, true);
+  assert.equal(env.ops.runs.at(-1)[1], "php artisan up");
+  // The owner edits it into something riskier: classified again
+  await ops(env, task, "s1", "edit", { argv: ["rm", "-rf", "storage/framework/cache"] });
+  assert.deepEqual([s1.risk, s1.level, s1.edited, s1.status], ["high", "typed", true, "pending"]);
+  const edit = env.store.log(task.id).find(e => e.event === "ops:edited");
+  assert.deepEqual(
+    [edit.before, edit.after],
+    [
+      ["php", "artisan", "queue:restart"],
+      ["rm", "-rf", "storage/framework/cache"],
+    ]
+  );
+});
+
+test("Runbook: skipped as dangerous warns the next time; Combo offers a pattern after three fine runs (not on prod)", async () => {
+  const { OpsMemory } = require("../src/main/modules/tasks/ops-memory");
+  const memory = new OpsMemory();
+  const first = await toRunbook([{ host: "local", argv: ["rm", "-rf", "/var/cache/app"] }], {
+    memory,
+  });
+  await ops(first.env, first.task, "s1", "skip", { dangerous: true });
+  const second = await toRunbook([{ host: "local", argv: ["rm", "-rf", "/var/cache/app/"] }], {
+    memory,
+  });
+  assert.match(
+    second.task.runbook.steps[0].warn,
+    /Like a step you skipped as dangerous: rm -rf \/var\/cache\/app/
+  );
+
+  const mem2 = new OpsMemory();
+  let last;
+  for (let i = 0; i < 3; i++) {
+    last = await toRunbook([{ host: "web-stg", argv: ["df", "-h"], risk: "low" }], {
+      memory: mem2,
+    });
+    await ops(last.env, last.task, "s1", "run", { typed: "web staging" }); // df -h isn't in its allow list yet
+  }
+  assert.deepEqual(last.task.runbook.offer, { host: "web-stg", pattern: "df -h" });
+});
+
+test("Runbook: Tripwire — three very fast Runs make the next one wait", async () => {
+  const { env, task } = await toRunbook(
+    [1, 2, 3, 4].map(() => ({ host: "local", argv: ["uptime"], risk: "low" }))
+  );
+  for (const s of ["s1", "s2", "s3"]) {
+    assert.deepEqual(await ops(env, task, s, "run"), { ok: true });
+  }
+  assert.match((await ops(env, task, "s4", "run")).error, /Wait a moment/);
+});
+
+test("Retry after a cut-off session runs only that agent again; the others' answers are kept", async () => {
+  const env = setup();
+  env.workspace.collect = () => Promise.resolve({ logs: null, audit: null });
+  const config = env.store.saveDraft({
+    category: "analysis",
+    project: { cwd: "/w/shop", name: "shop" },
+    text: "Audit it",
+    analysis: { preset: "audit", agents: { claude: 1, codex: 1 }, arbiter: "claude" },
+  });
+  await env.engine.start(config, templateFor(config));
+  await env.engine.settled(config.id);
+  const task = env.engine.get(config.id);
+  const [a1, a2] = env.runner.by({ role: "analyst" });
+  env.engine.sessionGone(a2.paneId); // Codex died at start-up
+  await env.engine.settled(task.id);
+  await endTurn(env, task, a1, "high — a.js:1 — bug — fix");
+  assert.equal(task.gate.kind, "interrupted");
+  assert.deepEqual(task.gate.slots, [2]);
+  await decide(env, task, "retry");
+  const again = env.runner.by({ role: "analyst" });
+  assert.equal(again.length, 3); // only the cut-off one again, not Claude too
+  assert.equal(again[2].adapter, "codex");
+  await endTurn(env, task, again[2], "low — b.js:2 — naming — rename");
+  assert.equal(env.store.readArtifact(task.id, "analysis.md"), "high — a.js:1 — bug — fix"); // not overwritten
+  assert.equal(env.store.readArtifact(task.id, "analysis.2.md"), "low — b.js:2 — naming — rename");
+  const [arb] = env.runner.by({ role: "arbiter" });
+  assert.match(arb.prompt, /a\.js:1 — bug[\s\S]*b\.js:2 — naming/);
+});

@@ -11,5 +11,8 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   forgetDenial: id => ipcRenderer.invoke("settings:forget-denial", id),
   shellIntegration: on => ipcRenderer.invoke("settings:shell-integration", on),
   resize: height => ipcRenderer.send("settings:resize", height),
+  // Settings → Hosts
+  sshAliases: () => ipcRenderer.invoke("settings:ssh-aliases"),
+  testHost: host => ipcRenderer.invoke("settings:test-host", host),
   close: () => ipcRenderer.send("settings:close"),
 });

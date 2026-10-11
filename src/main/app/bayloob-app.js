@@ -57,6 +57,10 @@ const { ProjectInfo } = require("../modules/tasks/project-info");
 const { Scheduler } = require("../modules/tasks/scheduler");
 const { TaskEngine } = require("../modules/tasks/task-engine");
 const { reportMarkdown } = require("../modules/tasks/arbiter");
+const { OpsRunner } = require("../modules/tasks/ops-runner");
+const { OpsMemory } = require("../modules/tasks/ops-memory");
+const { normalizeHost } = require("../modules/tasks/runbook");
+const { sshAliases } = require("../infrastructure/system/ssh-config");
 const { TaskRunner } = require("../modules/tasks/task-runner");
 const { TaskWorkspace } = require("../modules/tasks/task-workspace");
 const { builtin, templateFor } = require("../../shared/workflow-templates");
@@ -148,6 +152,7 @@ class BayloobApp {
   stats = new AgentStats();
   music = IS_LINUX ? new MusicWatcher() : null;
   settings = null;
+  opsRunner = new OpsRunner(); // runbook steps and Settings → Hosts → Test connection
   recent = null;
   tray = null;
   installed = detectAgents();
@@ -274,6 +279,12 @@ class BayloobApp {
       scheduler: this.scheduler,
       capacity: () => this.#capacity(),
       arbiterThreshold: () => this.settings.get("arbiterConfidence"),
+      // Operations: hosts from Settings, steps run only from the owner's clicks (runbookAction)
+      ops: {
+        hosts: () => this.settings.get("hosts"),
+        runner: this.opsRunner,
+        memory: new OpsMemory({ file: path.join(data, "ops-memory.json") }),
+      },
       workspace: new TaskWorkspace({ git: this.git }),
       runner: new TaskRunner({
         launcher: this.launcher,
@@ -1487,6 +1498,26 @@ class BayloobApp {
       })
     );
     ipcMain.handle("tasks:stop", (_e, id) => this.engine.stop(String(id)));
+    // A runbook step: run · dry · rollback · skip · edit — the engine checks the confirmation again
+    ipcMain.handle("tasks:runbook", (_e, id, stepId, action, opts) =>
+      this.engine.runbookAction(String(id), String(stepId), String(action), {
+        confirmed: opts?.confirmed === true,
+        typed: opts?.typed ? String(opts.typed) : "",
+        dangerous: opts?.dangerous === true,
+        argv: Array.isArray(opts?.argv) ? opts.argv.map(String).slice(0, 200) : undefined,
+      })
+    );
+    // Combo's offer: add a command to a host's allow patterns (never offered for prod)
+    ipcMain.handle("tasks:allow-pattern", (_e, hostId, pattern) => {
+      const hosts = this.settings.get("hosts");
+      const host = hosts.find(h => h.id === String(hostId));
+      if (!host || host.env === "prod") {
+        return { ok: false, error: "Not for this host" };
+      }
+      host.allow = [...new Set([...host.allow, String(pattern)])];
+      this.settings.save({ hosts });
+      return { ok: true };
+    });
     // A report as Markdown, saved where the owner picks (nothing leaves the machine)
     ipcMain.handle("tasks:export-report", async (e, id) => {
       const task = this.engine.get(String(id));
@@ -1652,6 +1683,27 @@ class BayloobApp {
     ipcMain.on("panel:window", (_e, action) => this.workspaceWindow.control(String(action)));
 
     // Settings
+    // Settings → Hosts: the aliases in ~/.ssh/config, and Test connection (`ssh … <alias> true`, batch mode)
+    ipcMain.handle("settings:ssh-aliases", () => sshAliases());
+    ipcMain.handle("settings:test-host", async (_e, raw) => {
+      const r = normalizeHost(raw);
+      if (!r.ok) {
+        return { ok: false, error: r.error };
+      }
+      const out = await this.opsRunner.run({
+        host: r.host,
+        argv: ["true"],
+        cwd: os.homedir(),
+        timeoutSec: 20,
+      }).done;
+      return out.code === 0
+        ? { ok: true, ms: out.ms }
+        : {
+            ok: false,
+            error: out.output.trim().split("\n").pop() || `exit ${out.code}`,
+            connection: out.connection,
+          };
+    });
     ipcMain.handle("settings:save", (_e, values) =>
       result(() => {
         this.settings.save(values || {});

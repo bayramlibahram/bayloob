@@ -215,7 +215,12 @@ function parseReport(text) {
   }
   const rank = s => SEVERITIES.indexOf(s);
   findings.sort((a, b) => rank(a.severity) - rank(b.severity));
-  return { ok: true, report: { summary: String(data.summary || "").trim(), findings } };
+  // An analysis with an operations plan also proposes a runbook (checked by the engine against the hosts)
+  return {
+    ok: true,
+    report: { summary: String(data.summary || "").trim(), findings },
+    runbook: Array.isArray(data.runbook) ? data.runbook : null,
+  };
 }
 
 /** A report as Markdown, for export: title, summary, then the findings by severity. */

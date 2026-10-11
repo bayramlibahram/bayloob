@@ -73,6 +73,18 @@
   .btn:disabled { opacity: .5; cursor: progress; }
   /* Settings → Agents: per agent on/off, max parallel instances, commands, notes; then the limits for all */
   .agentsum { color: var(--soft); font-size: 12.5px; }
+  /* Settings → Hosts: one card per host, prod in red */
+  .hostlist { display: flex; flex-direction: column; gap: 8px; }
+  .host { display: grid; grid-template-columns: 1fr 1fr 120px; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
+  .host.prod { border-color: color-mix(in srgb, var(--waiting) 60%, transparent); }
+  .host label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); }
+  .host input, .host select, .host textarea { padding: 5px 8px; font: 12.5px -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
+  .host textarea { grid-column: 1 / -1; min-height: 44px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--text); font-family: ui-monospace, monospace; resize: vertical; }
+  .host .wide { grid-column: 1 / -1; }
+  .host .acts { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+  .host .acts .st { flex: 1; font-size: 12px; color: var(--muted); }
+  .host .acts .st.ok { color: var(--done); } .host .acts .st.err { color: var(--waiting); }
+  .host .warnalias { color: var(--working); }
   .agentgrid { grid-column: 1 / -1; display: flex; flex-direction: column; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
   .agentgrid[hidden] { display: none; }
   .arow { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 4px 10px; align-items: center; padding: 9px 12px; }
@@ -121,6 +133,7 @@
       <button type="button" class="tab" role="tab" data-tab="sounds">Sounds</button>
       <button type="button" class="tab" role="tab" data-tab="agents">Agents</button>
       <button type="button" class="tab" role="tab" data-tab="permissions">Permissions</button>
+      <button type="button" class="tab" role="tab" data-tab="hosts">Hosts</button>
     </div>
 
     <section class="pane" data-pane="general" role="tabpanel">
@@ -204,6 +217,13 @@
     </div>
     </section>
 
+    <section class="pane" data-pane="hosts" role="tabpanel" hidden>
+    <p class="none" style="margin:0">Hosts a runbook may use. Bayloob connects with your own SSH keys (batch mode — it never asks for a password) and runs a step only when you click it. <b>prod</b> refuses any command that isn't in its allowed list.</p>
+    <div class="hostlist" id="hostList"></div>
+    <datalist id="sshAliases"></datalist>
+    <div><button type="button" class="btn" id="addHost">+ Add a host</button></div>
+    </section>
+
     <section class="pane" data-pane="permissions" role="tabpanel" hidden>
     <div class="rules" id="rules" hidden></div>
     <div class="rules" id="denials" hidden></div>
@@ -220,6 +240,12 @@
 <script src="../shared/ui-common.js"></script>
 <script>
   const TAB_KEY = 'bayloob.settings.tab';
+  const H = {
+    name: 'Name', alias: 'SSH alias (~/.ssh/config)', env: 'Environment', allow: 'Allowed commands — one pattern per line; * is one word, a final * the rest',
+    notes: 'Notes', test: 'Test connection', testing: 'Connecting…', remove: 'Remove', unknownAlias: 'not in your SSH config',
+    testAsk: alias => `Test connects once: ssh -o BatchMode=yes ${alias} true — go on?`, ok: ms => `Connected (${ms} ms)`,
+    allowPh: 'systemctl status *\njournalctl *\ndocker logs *',
+  };
   const T = {
     denialsTitle: 'Denied before (similar requests get a red card)', forget: 'Forget',
     shellOn: (rc, backup) => `Added to ${rc}${backup ? ` (backup: ${backup})` : ''}. New terminals pick it up; in an open one run: source ${rc}`,
@@ -279,6 +305,14 @@
       this.sounds = values.sounds;
       this.soundToggles = { ...(values.soundToggles || {}) };
       this.agents = JSON.parse(JSON.stringify(values.agents || {}));
+      this.hosts = JSON.parse(JSON.stringify(values.hosts || []));
+      this.hostStatus = {};
+      this.#renderHosts();
+      this.api?.sshAliases?.().then(list => {
+        this.aliases = list || [];
+        document.getElementById('sshAliases').innerHTML = this.aliases.map(a => `<option value="${esc(a)}">`).join('');
+        this.#renderHosts();
+      });
       this.limits = { ...(values.limits || {}) };
       this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
       this.el.shortcut.value = values.shortcut;
@@ -362,6 +396,23 @@
           <span>${T.total}<small>${T.totalSub}</small></span>${stepper('limit.total', l.total, ...LIMIT_RANGE.total, T.total)}
           <span>${T.perProject}<small>${T.perProjectSub}</small></span>${stepper('limit.perProject', l.perProject, ...LIMIT_RANGE.perProject, T.perProject)}
           <span>${T.memory}<small>${T.memorySub(freeGB)}</small></span>${stepper('limit.minFreeGB', l.minFreeGB, ...LIMIT_RANGE.minFreeGB, T.memory)}</div>`;
+    }
+
+    #renderHosts() {
+      const list = document.getElementById('hostList');
+      if (!list) { return; }
+      const known = a => !this.aliases || this.aliases.includes(a);
+      list.innerHTML = this.hosts.map((h, i) => {
+        const st = this.hostStatus[i];
+        return `<div class="host${h.env === 'prod' ? ' prod' : ''}" data-host="${i}">
+          <label>${H.name}<input type="text" data-h="name" value="${esc(h.name)}" spellcheck="false"></label>
+          <label>${H.alias}${h.alias && !known(h.alias) ? ` <span class="warnalias">· ${H.unknownAlias}</span>` : ''}<input type="text" data-h="alias" list="sshAliases" value="${esc(h.alias)}" spellcheck="false"></label>
+          <label>${H.env}<select data-h="env">${['dev', 'staging', 'prod'].map(e => `<option value="${e}"${h.env === e ? ' selected' : ''}>${e}</option>`).join('')}</select></label>
+          <label class="wide">${H.allow}<textarea data-h="allow" rows="${Math.max(2, (h.allow || []).length + 1)}" spellcheck="false" placeholder="${H.allowPh}">${esc((h.allow || []).join('\n'))}</textarea></label>
+          <label class="wide">${H.notes}<input type="text" data-h="notes" value="${esc(h.notes || '')}"></label>
+          <div class="acts"><span class="st ${st?.ok ? 'ok' : st?.error ? 'err' : ''}">${st ? esc(st.ok ? H.ok(st.ms) : st.busy ? H.testing : st.error) : ''}</span>
+            <button type="button" class="btn" data-htest="${i}" ${h.alias ? '' : 'disabled'}>${H.test}</button><button type="button" class="btn" data-hdel="${i}">${H.remove}</button></div></div>`;
+      }).join('');
     }
 
     #fit() { this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20); }
@@ -469,7 +520,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
-        agents: this.agents, limits: this.limits,
+        agents: this.agents, limits: this.limits, hosts: this.hosts,
         mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
@@ -533,6 +584,35 @@
       });
       this.el.agentGrid.addEventListener('input', e => {
         if (e.target.dataset.notes) { this.agents[e.target.dataset.notes].notes = e.target.value; }
+      });
+      const hostList = document.getElementById('hostList');
+      document.getElementById('addHost').addEventListener('click', () => {
+        this.hosts.push({ name: '', alias: '', env: 'staging', allow: [], notes: '' });
+        this.#renderHosts();
+        this.#fit();
+        hostList.querySelector('.host:last-child [data-h="name"]')?.focus();
+      });
+      hostList.addEventListener('input', e => {
+        const i = Number(e.target.closest('[data-host]')?.dataset.host);
+        const f = e.target.dataset.h;
+        if (!f || !this.hosts[i]) { return; }
+        this.hosts[i][f] = f === 'allow' ? e.target.value.split('\n').map(x => x.trim()).filter(Boolean) : e.target.value;
+        if (f === 'env') { this.#renderHosts(); }
+      });
+      hostList.addEventListener('change', e => { if (e.target.dataset.h === 'env' || e.target.dataset.h === 'alias') { this.#renderHosts(); } });
+      hostList.addEventListener('click', async e => {
+        const del = e.target.closest('[data-hdel]');
+        if (del) { this.hosts.splice(Number(del.dataset.hdel), 1); this.hostStatus = {}; this.#renderHosts(); return this.#fit(); }
+        const test = e.target.closest('[data-htest]');
+        if (!test) { return; }
+        const i = Number(test.dataset.htest);
+        const h = this.hosts[i];
+        // A real connection: only after the owner says so
+        if (!confirm(H.testAsk(h.alias))) { return; }
+        this.hostStatus[i] = { busy: true };
+        this.#renderHosts();
+        this.hostStatus[i] = (await this.api?.testHost?.(h)) || { error: 'No answer' };
+        this.#renderHosts();
       });
       this.el.watchClipboard.addEventListener('click', () => { this.watchClipboard = !this.watchClipboard; this.#renderWatch(); });
       const tabs = document.getElementById('tabs');
