@@ -40,14 +40,20 @@ class FakeWorkspace {
   tests = new Map(); // dir → [results in order]; default ok
   dirtyDirs = new Set();
   merges = [];
+  applies = [];
+  prepared = [];
   commits = 0;
   testCommandValue = "npm test";
-  prepare() {
+  prepare(opts) {
+    this.prepared.push(opts);
+    const fromWorktree = opts.from === "worktree";
     return Promise.resolve({
       root: "/w/shop",
-      sha: "a1b2c3d4e5f6a7b8",
+      sha: fromWorktree ? "f0f0f0f0f0f0f0f0" : "a1b2c3d4e5f6a7b8",
+      head: "a1b2c3d4e5f6a7b8",
       branch: "main",
       roDir: "/w/shop-ro",
+      fromWorktree,
     });
   }
   addCandidate({ taskId, candidate }) {
@@ -79,6 +85,10 @@ class FakeWorkspace {
   }
   merge(opts) {
     this.merges.push(opts);
+    return Promise.resolve({ ok: true });
+  }
+  apply(opts) {
+    this.applies.push(opts);
     return Promise.resolve({ ok: true });
   }
 }
@@ -372,4 +382,30 @@ test("a template with mistakes is refused with plain-language reasons", async ()
     assert.match(err.message, /\{\{taks\}\}, which doesn't exist/);
     return true;
   });
+});
+
+test("started from your files as they are: the winner is applied to them instead of merged", async () => {
+  const env = setup();
+  const task = await startBest(env, { ...BEST, agents: { claude: 1 }, base: "worktree" });
+  assert.equal(env.workspace.prepared[0].from, "worktree");
+  assert.deepEqual(task.base, {
+    sha: "f0f0f0f0f0f0f0f0",
+    branch: "main",
+    head: "a1b2c3d4e5f6a7b8",
+    fromWorktree: true,
+  });
+  await endTurn(env, task, env.runner.sessions[0], "plan");
+  await decide(env, task, "approve");
+  await endTurn(env, task, env.runner.by({ role: "builder" })[0], "built");
+  await decide(env, task, "pick", { candidate: "build-1" });
+  assert.equal(task.gate.title, "Apply the winner to your files?");
+  await decide(env, task, "merge");
+  assert.deepEqual(env.workspace.merges, []);
+  assert.deepEqual(env.workspace.applies[0], {
+    root: "/w/shop",
+    base: "f0f0f0f0f0f0f0f0",
+    branch: `bayloob/${task.id}/build-1`,
+  });
+  assert.equal(task.merged.applied, true);
+  assert.equal(task.status, "done");
 });

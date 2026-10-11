@@ -270,6 +270,9 @@
     question: 'Question', questionPh: 'What should the analysts find out?',
     free: (f, m) => `${f} free of ${m}`, queue: n => `${n} will queue`, word: { builder: 'builder', reviewer: 'reviewer', analyst: 'analyst' },
     arbiterOk: 'A different agent — less likely to prefer its own work', arbiterSame: 'Same agent as one doing the work — it may prefer its own',
+    startFrom: 'Start from', fromFiles: n => `Your files now · ${n} uncommitted`, fromCommit: 'The last commit',
+    fromFilesHint: 'Builders get your files as they are now; the winner is applied to your files — nothing is committed.',
+    fromCommitHint: (n, b) => `Builders start from the last commit — your ${n} uncommitted change${n === 1 ? ' is' : 's are'} not in it. The winner is merged into ${b}.`,
     customize: 'Customize stages…', customizeTip: 'Opens the workflow builder in the Tasks window on a copy of these stages',
     customizeLater: 'This pattern arrives with a later step', yourTemplates: 'Your templates', nStages: n => `${n} stages`,
     tplRuns: name => `Runs your template <b>${name}</b>:`, tplProblems: 'Your template has problems — fix them in Customize stages…',
@@ -483,7 +486,7 @@
       this.el.next.disabled = this.el.back.disabled = true;
       this.#message(T.starting);
       clearTimeout(this.#saveTimer);
-      const res = await this.api.start?.({ ...this.cfg, id: this.draftId || undefined });
+      const res = await this.api.start?.({ ...this.cfg, id: this.draftId || undefined, workflow: { ...this.cfg.workflow, base: this.#base() } });
       this.busy = false;
       this.el.next.disabled = this.el.back.disabled = false;
       if (res?.ok) {
@@ -643,6 +646,23 @@
       return out;
     }
 
+    // Where builders start: the files as they are (default when there are uncommitted changes) or the last commit
+    #base(c = this.cfg) {
+      const changes = this.info?.git?.changes || 0;
+      return c.workflow.base || (changes ? 'worktree' : 'head');
+    }
+
+    #baseRow() {
+      const changes = this.info?.git?.changes || 0;
+      if (!changes) { return ''; }
+      const base = this.#base();
+      return `<div class="label">${T.startFrom}</div>
+        <div class="presets" role="radiogroup" aria-label="${T.startFrom}">
+          <button type="button" class="preset" role="radio" aria-checked="${base === 'worktree'}" aria-pressed="${base === 'worktree'}" data-base="worktree">${T.fromFiles(changes)}</button>
+          <button type="button" class="preset" role="radio" aria-checked="${base === 'head'}" aria-pressed="${base === 'head'}" data-base="head">${T.fromCommit}</button></div>
+        <p class="hintline${base === 'head' ? ' warn' : ''}">${base === 'head' ? T.fromCommitHint(changes, esc(this.info.git.branch || 'main')) : T.fromFilesHint}</p>`;
+    }
+
     #configWorkflow() {
       const w = this.cfg.workflow;
       const board = w.pattern === 'board';
@@ -659,7 +679,7 @@
         return `${presets}
           <p class="sentence" style="font-size:13px">${T.tplRuns(esc(tpl.name))} ${tpl.stages.map(s => `${esc(s.title)}${(s.agents || []).length ? ` ×${s.agents.reduce((a, x) => a + Number(x.count || 0), 0)}` : ''}`).join(' → ')}</p>
           ${tpl.issues?.length ? `<p class="hintline warn">${T.tplProblems}</p>` : ''}
-          ${text}${customize}`;
+          ${this.#baseRow()}${text}${customize}`;
       }
       return `${presets}
         ${board ? '' : this.#select('workflow.planner', w.planner, T.planner)}
@@ -667,7 +687,7 @@
         ${this.#agentRows(w.agents, board ? 'read-only' : 'writes', board ? T.word.reviewer : T.word.builder)}
         ${['pipeline', 'split'].includes(w.pattern) ? this.#select('workflow.reviewer', w.reviewer, T.reviewer) : ''}
         ${this.#select('workflow.arbiter', w.arbiter, T.arbiter, board ? [] : builders)}
-        ${text}${customize}`;
+        ${this.#baseRow()}${text}${customize}`;
     }
 
     #configAnalysis() {
@@ -717,7 +737,10 @@
           <div class="bar" role="img" aria-label="${busy} running, ${fit} new, ${q} queued of ${max}">${seg(busy, 'busy')}${seg(fit)}${q ? `<i class="q" style="width:${(q / max) * 100}%"></i>` : ''}</div>
           <span class="r">${busy + fit}/${max}${q ? ` · <span style="color:var(--working)">${T.queue(q)}</span>` : ''}</span></div>`;
       }).join('');
-      return `<p class="sentence">${this.#sentence(c)}</p>
+      const changes = this.info?.git?.changes || 0;
+      const baseNote = c.category === 'workflow' && changes
+        ? `<p class="hintline${this.#base(c) === 'head' ? ' warn' : ''}">${this.#base(c) === 'head' ? T.fromCommitHint(changes, esc(this.info.git.branch || 'main')) : T.fromFilesHint}</p>` : '';
+      return `<p class="sentence">${this.#sentence(c)}</p>${baseNote}
         <div class="diagram" role="img" aria-label="Stages: ${esc(stages.map(s => s.title).join(', '))}">${diagram}</div>
         <div class="label">${T.gatesCap}</div><ul class="glist">${this.#gates(c).map(g => `<li><span class="gate"></span>${esc(g)}</li>`).join('')}</ul>
         <div class="label">${T.load}</div>${loads}`;
@@ -832,6 +855,7 @@
         if (d.term) { c.single.terminal = d.term; return this.#changed(); }
         if (d.pattern) { c.workflow.pattern = d.pattern; c.workflow.template = null; return this.#changed(); }
         if (d.template) { c.workflow.template = d.template; return this.#changed(); }
+        if (d.base) { c.workflow.base = d.base; return this.#changed(); }
         if (d.customize !== undefined) {
           clearTimeout(this.#saveTimer);
           const r = await this.api.customize?.({ ...c, id: this.draftId || undefined }, this.draftId);

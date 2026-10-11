@@ -2,6 +2,7 @@
 // work, diffs, the project's tests, and the merge the owner asked for. Never deletes a worktree or branch.
 const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { Git, parseShortstat } = require("../../infrastructure/system/git");
 const { detectTests } = require("./project-info");
@@ -11,15 +12,32 @@ const TEST_LINES = 300; // the tail of the test output that's kept (and pasted i
 // Committing a snapshot on Bayloob's own task branch; the owner's identity when git has one
 const FALLBACK_IDENTITY = ["-c", "user.name=Bayloob", "-c", "user.email=bayloob@localhost"];
 
-const run = (cwd, args, timeout = 30_000) =>
+const run = (cwd, args, timeout = 30_000, env = undefined) =>
   new Promise((resolve, reject) => {
-    execFile("git", ["-C", cwd, ...args], { timeout, maxBuffer: 20e6 }, (err, out, errOut) =>
+    execFile("git", ["-C", cwd, ...args], { timeout, maxBuffer: 50e6, env }, (err, out, errOut) =>
       err
         ? reject(Object.assign(new Error(String(errOut || err.message).trim()), { code: err.code }))
         : resolve(String(out))
     );
   });
 const tryRun = (cwd, args) => run(cwd, args).catch(() => null);
+
+// git with `input` on stdin (a patch): → { code, out, err }
+const pipe = (cwd, args, input) =>
+  new Promise(resolve => {
+    const child = spawn("git", ["-C", cwd, ...args]);
+    let out = "";
+    let err = "";
+    child.stdout.on("data", d => {
+      out += d;
+    });
+    child.stderr.on("data", d => {
+      err += d;
+    });
+    child.on("error", e => resolve({ code: null, out, err: e.message }));
+    child.on("close", code => resolve({ code, out, err }));
+    child.stdin.end(input);
+  });
 
 class TaskWorkspace {
   constructor({ git = new Git(), shell = process.env.SHELL || "/bin/bash" } = {}) {
@@ -28,30 +46,68 @@ class TaskWorkspace {
   }
 
   /**
-   * The task's base (current commit and branch of the project) and its read-only worktree: detached at
-   * that commit, next to the repo, shared by planners and reviewers (no branch, so nothing to clean up).
+   * The task's base and its read-only worktree (detached at the base, next to the repo, shared by planners
+   * and reviewers — no branch, so nothing to clean up). from:
+   *   'head'     the project's last commit; the winner is merged into its branch
+   *   'worktree' the project's files as they are now, uncommitted and untracked ones included (.gitignore
+   *              respected), snapshotted into a commit of its own; the winner is applied to the files
    */
-  async prepare({ cwd, taskId }) {
+  async prepare({ cwd, taskId, from = "head" }) {
     const root = await this.git.toplevel(cwd);
     if (!root) {
       throw new Error(
         `Not a git repository: ${cwd} — workflows need git (one worktree per builder)`
       );
     }
-    const sha = (await run(root, ["rev-parse", "HEAD"]).catch(() => "")).trim();
-    if (!sha) {
-      throw new Error("The repository has no commit yet — commit once, then start the task");
-    }
-    const branch = (await run(root, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+    const head = (await run(root, ["rev-parse", "HEAD"]).catch(() => "")).trim() || null;
+    const branch = head
+      ? (await run(root, ["rev-parse", "--abbrev-ref", "HEAD"])).trim()
+      : (await tryRun(root, ["symbolic-ref", "--short", "HEAD"]))?.trim() || "main";
     if (branch === "HEAD") {
       throw new Error("The project is on a detached HEAD — check out a branch to merge into first");
     }
+    const fromWorktree = from === "worktree";
+    if (!head && !fromWorktree) {
+      throw new Error(
+        "The repository has no commit yet — commit once, or start from your files as they are"
+      );
+    }
+    const sha = fromWorktree ? await this.#snapshotFiles(root, taskId, head) : head;
     const roDir = path.join(path.dirname(root), `${path.basename(root)}-${taskId}-ro`);
     if (!fs.existsSync(roDir)) {
       await run(root, ["worktree", "add", "--detach", roDir, sha]);
     }
     await this.#shareDeps(root, roDir);
-    return { root, sha, branch, roDir };
+    return { root, sha, branch, roDir, head, fromWorktree };
+  }
+
+  // A commit of the project's files as they are, made through a temporary index: the owner's index, files and
+  // branches are untouched. A ref under refs/bayloob/ keeps it from being garbage-collected.
+  async #snapshotFiles(root, taskId, head) {
+    const index = path.join(os.tmpdir(), `bayloob-index-${taskId}-${process.pid}`);
+    const env = { ...process.env, GIT_INDEX_FILE: index };
+    try {
+      await run(root, head ? ["read-tree", head] : ["read-tree", "--empty"], 30_000, env);
+      await run(root, ["add", "-A"], 120_000, env);
+      const tree = (await run(root, ["write-tree"], 30_000, env)).trim();
+      const named = (await tryRun(root, ["config", "user.email"]))?.trim();
+      const message = `bayloob: the files as they were when task ${taskId} started`;
+      const parent = head ? ["-p", head] : [];
+      const args = [
+        ...(named ? [] : FALLBACK_IDENTITY),
+        "commit-tree",
+        tree,
+        ...parent,
+        "-m",
+        message,
+      ];
+      const sha = (await run(root, args)).trim();
+      await run(root, ["update-ref", `refs/bayloob/${taskId}/base`, sha]);
+      return sha;
+    } finally {
+      fs.rmSync(index, { force: true });
+      fs.rmSync(`${index}.lock`, { force: true });
+    }
   }
 
   /** A builder's worktree on its own branch `bayloob/<task>/<build>-<n>`, from the task's base commit. */
@@ -178,6 +234,36 @@ class TaskWorkspace {
         conflicts,
       };
     }
+  }
+
+  /**
+   * The winner's change (base → branch) applied to the project's files, uncommitted — for a task that started
+   * from the files as they were. Checked first: if the files changed since in a way that conflicts, nothing
+   * is touched and the files that don't apply are listed.
+   */
+  async apply({ root, base, branch }) {
+    const patch = await run(root, ["diff", "--binary", base, branch], 60_000);
+    if (!patch.trim()) {
+      return { ok: true, empty: true };
+    }
+    const check = await pipe(root, ["apply", "--check", "--whitespace=nowarn", "-"], patch);
+    if (check.code !== 0) {
+      // "error: patch failed: a.js:12", "error: a.js: patch does not apply", "error: b.js: already exists…"
+      const failed = [
+        ...check.err.matchAll(/patch failed: ([^\n]+?):\d+$/gm),
+        ...check.err.matchAll(
+          /^error: (?!patch failed)([^\n]+?): (?:patch does not apply|already exists|does not exist)/gm
+        ),
+      ].map(m => m[1].trim());
+      return {
+        ok: false,
+        error:
+          "Your files changed since the task started — the change doesn't apply cleanly; nothing was changed",
+        conflicts: [...new Set(failed)],
+      };
+    }
+    const r = await pipe(root, ["apply", "--whitespace=nowarn", "-"], patch);
+    return r.code === 0 ? { ok: true } : { ok: false, error: r.err.trim() || "git apply failed" };
   }
 
   // A fresh worktree has no installed dependencies: share the project's node_modules through a symlink

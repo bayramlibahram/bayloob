@@ -129,3 +129,60 @@ test("merge: only on the base branch with a clean tree; conflicts are undone and
     "module.exports = 'candidate';\n"
   );
 });
+
+test("from the files as they are: untracked and changed files are in the base; your index stays as it was", async () => {
+  const { root, ws } = repo();
+  fs.writeFileSync(path.join(root, "cart.js"), "module.exports = 1; // edited, not committed\n");
+  fs.mkdirSync(path.join(root, "src"));
+  fs.writeFileSync(path.join(root, "src", "new.js"), "untracked\n");
+  fs.mkdirSync(path.join(root, "node_modules"));
+  fs.writeFileSync(path.join(root, "node_modules", "dep.js"), "ignored\n");
+  g(root, "add", "cart.js"); // something staged by the owner
+  const statusBefore = g(root, "status", "--porcelain");
+  const r = await ws.prepare({ cwd: root, taskId: ID, from: "worktree" });
+  assert.equal(r.fromWorktree, true);
+  assert.equal(r.head, g(root, "rev-parse", "HEAD"));
+  assert.notEqual(r.sha, r.head);
+  assert.equal(g(root, "rev-parse", `refs/bayloob/${ID}/base`), r.sha);
+  assert.equal(fs.readFileSync(path.join(r.roDir, "src", "new.js"), "utf8"), "untracked\n");
+  assert.match(fs.readFileSync(path.join(r.roDir, "cart.js"), "utf8"), /edited/);
+  assert.equal(g(root, "ls-tree", "-r", "--name-only", r.sha).includes("node_modules"), false);
+  assert.equal(g(root, "status", "--porcelain"), statusBefore);
+  assert.equal(g(root, "rev-parse", "--abbrev-ref", "HEAD"), "main");
+});
+
+test("from the files as they are: the winner is applied to your files, uncommitted; a conflict changes nothing", async () => {
+  const { root, ws } = repo();
+  fs.writeFileSync(path.join(root, "notes.txt"), "line 1\n");
+  const { sha } = await ws.prepare({ cwd: root, taskId: ID, from: "worktree" });
+  const c = await ws.addCandidate({ root, taskId: ID, candidate: "build-1", sha });
+  fs.writeFileSync(path.join(c.dir, "notes.txt"), "line 1\nline 2\n");
+  fs.writeFileSync(path.join(c.dir, "added.js"), "new\n");
+  await ws.snapshot(c.dir, "candidate");
+  const headBefore = g(root, "rev-parse", "HEAD");
+  assert.deepEqual(await ws.apply({ root, base: sha, branch: c.branch }), { ok: true });
+  assert.equal(fs.readFileSync(path.join(root, "notes.txt"), "utf8"), "line 1\nline 2\n");
+  assert.equal(fs.readFileSync(path.join(root, "added.js"), "utf8"), "new\n");
+  assert.equal(g(root, "rev-parse", "HEAD"), headBefore); // nothing committed
+
+  // The owner changed the same line meanwhile: nothing is touched, the file is listed
+  fs.writeFileSync(path.join(root, "notes.txt"), "mine\n");
+  fs.rmSync(path.join(root, "added.js"));
+  const r = await ws.apply({ root, base: sha, branch: c.branch });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.conflicts, ["notes.txt"]);
+  assert.equal(fs.readFileSync(path.join(root, "notes.txt"), "utf8"), "mine\n");
+});
+
+test("a repository without commits can start from its files", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "ws-"));
+  const root = path.join(base, "fresh");
+  fs.mkdirSync(root);
+  g(root, "init", "-q", "-b", "main");
+  fs.writeFileSync(path.join(root, "index.js"), "x\n");
+  const ws = new TaskWorkspace({ shell: "/bin/sh" });
+  await assert.rejects(ws.prepare({ cwd: root, taskId: ID }), /no commit yet/);
+  const r = await ws.prepare({ cwd: root, taskId: ID, from: "worktree" });
+  assert.deepEqual([r.head, r.branch], [null, "main"]);
+  assert.equal(fs.readFileSync(path.join(r.roDir, "index.js"), "utf8"), "x\n");
+});

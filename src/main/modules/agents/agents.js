@@ -1,9 +1,10 @@
 // Coding agents Bayloob can launch, and how to start each one with an optional first prompt.
 // readOnly: flags that keep the agent from changing files (Gemini CLI has none; its prompt has to do).
 // taskReadOnly: the stricter set for workflow planners and reviewers, which run unattended: nothing that
-// would ask is allowed (Claude's dontAsk denies it) except reading the diff with git. Verified on Claude Code
-// 2.1.296: git log / diff / status run, Write and `touch` are denied. Ends with "--" because --allowedTools
-// takes several values and would swallow the prompt.
+// would ask is allowed (Claude's dontAsk denies it) except reading: git diff / log / show / status / ls-files,
+// ls, grep, rg, wc. Verified on Claude Code 2.1.296: those run; Write, `touch`, `grep … > file` and
+// `rg … && touch` are denied (redirects and compound commands are checked part by part). Ends with "--"
+// because --allowedTools takes several values and would swallow the prompt.
 // resume: the argv that continues an existing conversation by id (checked with --help; null = unknown).
 // color: accent of the agent's raster mascot pack; svgColor: the same for the SVG mascot.
 // Keep in sync with AGENTS in index.html.
@@ -21,6 +22,13 @@ const AGENTS = {
       "Bash(git log *)",
       "Bash(git show *)",
       "Bash(git status *)",
+      "Bash(git ls-files)",
+      "Bash(git ls-files *)",
+      "Bash(ls)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(wc *)",
       "--",
     ],
     resume: id => ["--resume", id],

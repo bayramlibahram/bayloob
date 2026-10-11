@@ -100,7 +100,9 @@ class TaskEngine extends EventEmitter {
     if (!config?.id || this.#tasks.has(config.id) || this.store.state(config.id)) {
       throw new Error("That task has already started");
     }
-    const ws = await this.workspace.prepare({ cwd: config.project.cwd, taskId: config.id });
+    // From the last commit, or from the project's files as they are (uncommitted ones included)
+    const from = config.workflow?.base === "worktree" ? "worktree" : "head";
+    const ws = await this.workspace.prepare({ cwd: config.project.cwd, taskId: config.id, from });
     const now = this.now();
     const task = {
       id: config.id,
@@ -109,7 +111,12 @@ class TaskEngine extends EventEmitter {
       category: config.category,
       template,
       project: { cwd: config.project.cwd, root: ws.root, name: config.project.name },
-      base: { sha: ws.sha, branch: ws.branch },
+      base: {
+        sha: ws.sha,
+        branch: ws.branch,
+        head: ws.head ?? ws.sha,
+        fromWorktree: !!ws.fromWorktree,
+      },
       roDir: ws.roDir,
       testCommand: await this.workspace.testCommand(ws.root),
       status: "running",
@@ -130,6 +137,7 @@ class TaskEngine extends EventEmitter {
       template: template.id,
       base: ws.sha,
       branch: ws.branch,
+      fromWorktree: !!ws.fromWorktree,
       tests: task.testCommand,
     });
     await this.#serial(task.id, () => this.#runStage(task));
@@ -384,7 +392,11 @@ class TaskEngine extends EventEmitter {
     if (st.action === "run-tests") {
       await this.#runTests(task, only);
     } else if (st.action === "merge") {
-      this.#openGate(task, "merge", "Merge the winner?");
+      this.#openGate(
+        task,
+        "merge",
+        task.base.fromWorktree ? "Apply the winner to your files?" : "Merge the winner?"
+      );
     } else if (st.role === "arbiter") {
       // Command 06 brings the Arbiter; until then the owner picks between the candidates
       this.#openGate(task, "pick", "Pick the candidate to keep");
@@ -804,22 +816,27 @@ class TaskEngine extends EventEmitter {
     if (!c?.branch) {
       return { ok: false, error: "Pick a winner first" };
     }
-    const r = await this.workspace
-      .merge({
-        root: task.project.root,
-        branch: c.branch,
-        into: task.base.branch,
-        message: `Merge ${c.branch}: ${task.title}`,
-      })
-      .catch(e => ({ ok: false, error: e.message }));
-    this.#log(task, "engine", r.ok ? "merged" : "merge-failed", {
+    // A task that started from the files as they were gives its change back to those files (uncommitted);
+    // one that started from a commit is merged into its branch
+    const applied = task.base.fromWorktree;
+    const r = await (applied
+      ? this.workspace.apply({ root: task.project.root, base: task.base.sha, branch: c.branch })
+      : this.workspace.merge({
+          root: task.project.root,
+          branch: c.branch,
+          into: task.base.branch,
+          message: `Merge ${c.branch}: ${task.title}`,
+        })
+    ).catch(e => ({ ok: false, error: e.message }));
+    const into = applied ? "your files" : task.base.branch;
+    this.#log(task, "engine", r.ok ? (applied ? "applied" : "merged") : "merge-failed", {
       branch: c.branch,
-      into: task.base.branch,
+      into,
       error: r.error || null,
       conflicts: r.conflicts || null,
     });
     if (r.ok) {
-      task.merged = { branch: c.branch, into: task.base.branch, at: this.now() };
+      task.merged = { branch: c.branch, into, applied, at: this.now() };
     }
     return r;
   }

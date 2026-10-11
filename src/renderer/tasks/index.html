@@ -339,7 +339,7 @@
     noCands: 'No candidates yet', noCandsHint: 'Builders start after the plan is approved.',
     testsPass: 'Tests pass', testsFail: 'Tests fail', testsSkip: 'No test command — skipped', testsNot: 'Not tested yet',
     diff: 'Diff', review: 'Review', status2: 'Status', findings: n => n ? `${n} finding${n === 1 ? '' : 's'}` : 'no findings', files: n => `${n} file${n === 1 ? '' : 's'}`,
-    out: 'Out', active: 'In the race', winner: 'Chosen', mergedInto: b => `Chosen · merged into ${b}`, choose: 'Choose this one', chosen: 'Picked',
+    out: 'Out', active: 'In the race', winner: 'Chosen', mergedInto: (b, applied) => `Chosen · ${applied ? 'applied to' : 'merged into'} ${b}`, choose: 'Choose this one', chosen: 'Picked',
     answer: 'Builder’s answer', reviewText: 'Review', noOutput: 'No output yet',
     loading: 'Loading…', noLog: 'Nothing logged yet',
     gate: {
@@ -351,13 +351,13 @@
       violation: { continue: 'Continue anyway', abort: 'Abort' },
       failed: { retry: 'Try again', abort: 'Abort' },
     },
-    mergeInto: b => `Merge into ${b}`, pickFirst: 'Pick a candidate first (Candidates tab)',
+    mergeInto: b => `Merge into ${b}`, applyFiles: 'Apply to my files', yourFiles: b => `your files on ${b} (uncommitted included)`, pickFirst: 'Pick a candidate first (Candidates tab)',
     notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
     send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
-    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'Until the Arbiter (command 06), you pick the candidate', merge: 'Nothing is merged until you click', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
+    gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'Until the Arbiter (command 06), you pick the candidate', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
     ago: at => timeAgo(at),
     log: {
-      started: e => `Task started from ${String(e.base || '').slice(0, 8)} on ${e.branch || '?'}`,
+      started: e => e.fromWorktree ? `Task started from your files as they were (on ${e.branch || '?'})` : `Task started from ${String(e.base || '').slice(0, 8)} on ${e.branch || '?'}`,
       stage: e => `${e.stage[0].toUpperCase()}${e.stage.slice(1)} started${e.round > 1 ? ` · round ${e.round}` : ''}${e.only ? ` · ${e.only.join(', ')}` : ''}`,
       launched: e => `${Agent.displayName(e.adapter)} ${e.reused ? 'continues' : 'started'} · ${instName(e.instance)}`,
       worktree: e => `Worktree for ${e.candidate}: ${e.branch}`,
@@ -368,6 +368,7 @@
       loop: e => `Back to ${e.to} (loop ${e.loop}) for ${(e.candidates || []).join(', ')}`,
       gate: e => `Waiting for you: ${e.title}`,
       merged: e => `Merged ${e.branch} into ${e.into}`,
+      applied: e => `Applied ${e.branch} to your files (uncommitted)`,
       'merge-failed': e => `Merge failed: ${e.error}`,
       finished: e => `Finished: ${e.status} — ${e.why}`,
       interrupted: e => `${instName(e.instance)} was interrupted`,
@@ -538,7 +539,7 @@
       const queued = t.instances.filter(i => i.status === 'queued' && i.stage === st?.id).length;
       const live = t.instances.filter(i => LIVE.has(i.status)).length;
       const color = { needs: 'var(--waiting)', failed: t.status === 'stopped' ? 'var(--idle)' : 'var(--waiting)', done: 'var(--done)', review: 'var(--cat-workflow)', running: 'var(--thinking)', queued: 'var(--idle)' }[col];
-      const stageText = t.status === 'done' ? (t.merged ? `Merged into ${t.merged.into}` : 'Done')
+      const stageText = t.status === 'done' ? (t.merged ? `${t.merged.applied ? 'Applied to' : 'Merged into'} ${t.merged.into}` : 'Done')
         : t.status === 'stopped' ? 'Stopped' : `${st?.title || ''}${queued && !live ? ` — ${T.queuedN(queued)}` : ''}`;
       const builders = t.template.stages.find(s => s.role === 'builder')?.agents || [];
       const best = this.#bestDiff(t);
@@ -614,7 +615,7 @@
         <div class="card md">${renderMarkdown(t.text)}</div>
         <div class="facts">
           <div><span class="label">${T.the.project}</span><b title="${esc(t.project.root)}">${esc(tilde(t.project.root, home))}</b></div>
-          <div><span class="label">${T.the.base}</span><b class="mono">${esc(t.base.branch)} @ ${esc(t.base.sha.slice(0, 8))}</b></div>
+          <div><span class="label">${T.the.base}</span><b class="mono">${t.base.fromWorktree ? esc(T.yourFiles(t.base.branch)) : `${esc(t.base.branch)} @ ${esc(t.base.sha.slice(0, 8))}`}</b></div>
           <div><span class="label">${T.the.ro}</span><b title="${esc(t.roDir)}">${esc(tilde(t.roDir, home))}</b></div>
           <div><span class="label">${T.the.tests}</span><b class="mono">${esc(t.testCommand || T.the.noTests)}</b></div>
         </div>
@@ -646,7 +647,7 @@
           <div class="strip" style="--c:${tests[0]}">${tests[0] === 'var(--done)' ? ICON.check : tests[0] === 'var(--waiting)' ? ICON.x : ''}${esc(tests[1])}</div>
           <dl class="kv"><dt>${T.diff}</dt><dd>${c.diff ? `<span class="diff"><span class="a">+${c.diff.added}</span> <span class="r">−${c.diff.deleted}</span></span> · ${T.files(c.diff.files)}` : '—'}</dd>
             ${review !== null && review !== undefined ? `<dt>${T.review}</dt><dd style="color:${n ? 'var(--working)' : 'var(--done)'}">${T.findings(n)}</dd>` : ''}
-            <dt>${T.status2}</dt><dd>${win ? (t.merged ? T.mergedInto(esc(t.merged.into)) : T.winner) : c.status === 'out' ? esc(c.out || T.out) : T.active}</dd></dl>
+            <dt>${T.status2}</dt><dd>${win ? (t.merged ? T.mergedInto(esc(t.merged.into), t.merged.applied) : T.winner) : c.status === 'out' ? esc(c.out || T.out) : T.active}</dd></dl>
           ${review ? `<details class="more"><summary>${T.reviewText}</summary><div class="md">${renderMarkdown(review)}</div></details>` : ''}
           ${answer ? `<details class="more"><summary>${T.answer}</summary><div class="md">${renderMarkdown(answer)}</div></details>` : ''}
           <div class="row">${builder?.handle && t.status !== 'done' && t.status !== 'stopped' ? `<button class="btn sm" type="button" data-term="${esc(builder.id)}" title="${T.terminalTip}">${ICON_TERM} ${T.terminal}</button>` : ''}
@@ -702,13 +703,13 @@
         if (a === 'pick') {
           return `<button class="btn primary" type="button" data-decide="pick" ${picked ? '' : `disabled title="${T.pickFirst}"`}>${ICON.check} ${picked ? `${labels.pick} ${esc(picked)}` : labels.pick} <kbd>Alt A</kbd></button>`;
         }
-        const text = a === 'merge' ? T.mergeInto(esc(t.base.branch)) : labels[a] || a;
+        const text = a === 'merge' ? (t.base.fromWorktree ? T.applyFiles : T.mergeInto(esc(t.base.branch))) : labels[a] || a;
         const cls = a === primary ? 'btn primary' : a === 'abort' ? 'btn danger' : 'btn';
         return `<button class="${cls}" type="button" data-decide="${a}">${a === primary ? `${ICON.check} ` : ''}${text}${a === primary ? ' <kbd>Alt A</kbd>' : ''}</button>`;
       };
       // Primary last (bottom right), abort first
       const order = [...g.actions].sort((a, b) => (a === 'abort' ? -1 : b === 'abort' ? 1 : 0) || (a === primary ? 1 : b === primary ? -1 : 0));
-      return `<div class="actions"><span class="msg"><b>${esc(g.title)}</b><small>${esc(T.gateHint[g.kind] || '')}</small>
+      return `<div class="actions"><span class="msg"><b>${esc(g.title)}</b><small>${esc((g.kind === 'merge' && t.base.fromWorktree ? T.gateHint.apply : T.gateHint[g.kind]) || '')}</small>
           ${g.detail ? `<small>${esc(g.detail)}</small>` : ''}${g.error ? `<small class="err">${esc(g.error)}</small>` : ''}</span>
         ${order.map(btn).join('')}</div>`;
     }

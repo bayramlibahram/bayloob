@@ -51,6 +51,8 @@
         pattern: pick(w.pattern, Object.keys(PATTERNS), "bestofn"),
         // One of the owner's templates (workflow builder) instead of the pattern's preset, or null
         template: /^[a-z][a-z0-9-]{0,23}$/.test(String(w.template || "")) ? w.template : null,
+        // Where builders start: the last commit, or the project's files as they are (null: the dialog decides)
+        base: pick(w.base, ["head", "worktree"], null),
         planner: agentOr(w.planner),
         agents: counts(w.agents, agents),
         reviewer: agentOr(w.reviewer),

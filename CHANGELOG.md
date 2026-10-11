@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- Workflows can **start from your files as they are** (found in the first real run: a project whose code was
+  never committed gave the builders an empty worktree). New task → Start from: "Your files now · N
+  uncommitted" (the default when there are uncommitted changes) or "The last commit". The files — changed,
+  staged and untracked, `.gitignore` respected — are snapshotted through a temporary index into a commit kept
+  under `refs/bayloob/<task>/base`; your index, files and branches are untouched. The winner is then
+  **applied to your files**, uncommitted ("Apply to my files"), after a dry check: if your files changed
+  meanwhile in a conflicting way nothing is touched and the files are listed. A repository without commits
+  can start this way too.
+- Read-only planners and reviewers may also run `ls`, `git ls-files`, `grep`, `rg` and `wc` (verified:
+  redirects like `grep … > file` and compound commands like `rg … && touch` are still denied).
 - **Workflow builder** (command 04c), in the Tasks window → Templates: built-in Pipeline and Best-of-N
   (read-only, Duplicate) and your own templates (Edit, Duplicate, Delete — asks first), saved to
   `<config>/Bayloob/workflows/<id>.json`. Each stage: title, role, parallel / sequential, gate, move up/down
