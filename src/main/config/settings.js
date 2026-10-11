@@ -15,6 +15,7 @@ const clampInt = (v, lo, hi, fb) =>
 
 const DEFAULTS = {
   mascot: "novi", // 'novi' (layered raster) or 'svg' (the original flat one)
+  pillSize: "l", // the pill's mascot tile: 's' 28 px, 'm' 36 px, 'l' 46 px (the pill's height follows)
   theme: "system", // 'system' (follows GNOME), 'light' or 'dark'
   shortcut: "CommandOrControl+Alt+Space", // global shortcut for the launcher; '' turns it off
   terminal: "", // '' = auto-detect, or e.g. 'kitty' / 'gnome-terminal --'
@@ -31,6 +32,7 @@ const DEFAULTS = {
 // How each environment variable maps onto a setting
 const ENV = {
   mascot: () => process.env.BAYLOOB_MASCOT,
+  pillSize: () => undefined,
   theme: () => process.env.BAYLOOB_THEME,
   shortcut: () => process.env.BAYLOOB_SHORTCUT,
   terminal: () => process.env.BAYLOOB_TERMINAL,
@@ -46,6 +48,7 @@ const ENV = {
 
 const VALIDATE = {
   mascot: v => (v === "svg" ? "svg" : "novi"),
+  pillSize: v => (["s", "m"].includes(v) ? v : "l"),
   theme: v => (["light", "dark"].includes(v) ? v : "system"),
   shortcut: v => String(v ?? "").trim(),
   terminal: v => String(v ?? "").trim(),

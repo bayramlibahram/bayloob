@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Changed
+- **Pill** (step D of the UI deep dive): Settings → Pill size S / M / L (the mascot's tile 28 / 36 / 46 px; the
+  bar's height and the name follow; L is the original and the default). Open, the bar keeps the microphone,
+  the panel and a new **⋯** button; mute and full view moved into the ⋯ row with their names. A muted pill
+  still shows the red sound icon on the bar.
+
+### Fixed
+- Workflow tasks noticed a Codex builder finish only through Codex's `notify`, which interactive Codex 0.162
+  no longer calls (`codex exec` still does) — found in the first real Best-of-N run, where two finished Codex
+  builders kept the task waiting. The end of a Codex turn now also comes from its rollout's `task_complete`
+  (with the answer), and only if it's newer than the turn the engine waits for.
 - **Workspace window** (step C of the UI deep dive): the workspace now also opens as a window of its own —
   the popup's ↗ button, or anything that opens Tasks. Resizable, maximizable, remembers its size and place;
   splitters between the columns (sidebar 180–280 px, detail 320–640 px, double-click resets), the sidebar

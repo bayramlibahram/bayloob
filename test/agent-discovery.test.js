@@ -132,10 +132,12 @@ test("Codex follows task lifecycle events appended to its rollout", () => {
 
     fs.appendFileSync(
       rollout,
-      `${JSON.stringify({ timestamp: doneAt, type: "event_msg", payload: { type: "task_complete" } })}\n`
+      `${JSON.stringify({ timestamp: doneAt, type: "event_msg", payload: { type: "task_complete", last_agent_message: "All 409 tests pass." } })}\n`
     );
     const done = discovery.find()[0];
     assert.equal(done.state, "done");
+    assert.equal(done.message, "All 409 tests pass."); // the turn's answer, for a workflow task
+    assert.equal(active.message, null);
     assert.equal(store.adopt([done], Date.parse(doneAt) + 10), true);
     assert.equal(store.get("codex:x-1").state, "done");
   } finally {

@@ -182,10 +182,13 @@ class TaskEngine extends EventEmitter {
 
   // ---------- events from agents ----------
 
-  /** An agent's turn ended (Claude Stop / Codex agent-turn-complete) in `paneId`; `message` = its final answer. */
-  turnEnded(paneId, message) {
+  /**
+   * An agent's turn ended (Claude Stop / Codex agent-turn-complete, or Codex's rollout) in `paneId`; `message`
+   * = its final answer. `at`: when it ended, if known — an end from before this turn started is ignored.
+   */
+  turnEnded(paneId, message, { at = null } = {}) {
     const found = this.#findByPane(paneId, "running");
-    if (!found) {
+    if (!found || (at && found.inst.startedAt && at < found.inst.startedAt)) {
       return false;
     }
     const { task, inst } = found;

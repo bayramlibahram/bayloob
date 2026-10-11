@@ -309,6 +309,7 @@ class BayloobApp {
           this.overlay.send("sessions", this.server.store.list());
           this.overlay.send("health", this.#lastHealth);
           this.overlay.send("task-gates", this.#taskGates());
+          this.overlay.send("appearance", { pillSize: this.settings.get("pillSize") });
           this.#sendSoundConfig();
         });
         if (open === "launcher") {
@@ -419,6 +420,9 @@ class BayloobApp {
     }
     if (keys.includes("mascot")) {
       this.overlay.setMascot(this.mascot);
+    }
+    if (keys.includes("pillSize")) {
+      this.overlay.send("appearance", { pillSize: this.settings.get("pillSize") });
     }
     if (keys.includes("terminal")) {
       this.launcher.terminal.setOverride(this.settings.get("terminal"));
@@ -1187,7 +1191,16 @@ class BayloobApp {
   #discover() {
     try {
       const store = this.server.store;
-      const adopted = store.adopt(this.discovery.find());
+      const found = this.discovery.find();
+      const adopted = store.adopt(found);
+      // Interactive Codex (0.162) doesn't call `notify`, so a task's Codex instance can't report the end of
+      // its turn by hook: its rollout's task_complete (seen here) does it instead — only if it's newer than
+      // the turn the engine is waiting for
+      for (const a of found) {
+        if (a.agent === "codex" && a.state === "done" && a.term?.tmux && a.statusAt) {
+          this.engine?.turnEnded(a.term.tmux, a.message || "", { at: a.statusAt });
+        }
+      }
       const removed = store.removeDead(pid => fs.existsSync(`/proc/${pid}`));
       if (adopted || removed) {
         store.changed();
