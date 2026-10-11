@@ -30,6 +30,7 @@
     "analyst",
     "arbiter",
     "discussion",
+    "mother",
     "you",
   ];
   const DISCUSSION_FORMATS = ["round-robin", "debate", "critique", "consensus", "war-room"];
@@ -555,6 +556,48 @@
         { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
       ],
     },
+    // Mother (28.2): the mother starts its own workers as it goes (docs/orchestration/MOTHER.md); its writers'
+    // parts are integrated — that branch is the mother's, so it fixes what fails the tests — and you merge
+    mother: {
+      id: "mother",
+      name: "Mother",
+      description:
+        "One agent leads and starts its own workers as it goes (you approve its first batch; then it stays within the budget) → the parts are integrated and tested → you merge",
+      builtin: true,
+      stages: [
+        {
+          id: "lead",
+          title: "Mother",
+          role: "mother",
+          mode: "read-only",
+          agents: [{ adapter: "claude", count: 1 }],
+          allow: { agents: ["claude", "codex"], writers: true },
+          // what the mother is told to get done (the protocol and its limits come before it)
+          prompt: "{{task}}",
+          budget: { workers: 6, turns: 8, minutes: 60, perTurn: 3 },
+          gate: "always",
+        },
+        {
+          id: "integrate",
+          title: "Integrate",
+          role: "you",
+          action: "integrate",
+          by: "mother",
+          gate: "always",
+        },
+        {
+          id: "tests",
+          title: "Tests",
+          role: "tester",
+          action: "run-tests",
+          perCandidate: true,
+          gate: "tests-pass",
+          // the integrated branch is the mother's: it fixes what fails, there and only there
+          onFail: { goto: "lead", prompt: FIX_TESTS_PROMPT, maxLoops: 2 },
+        },
+        { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
+      ],
+    },
     lead: {
       id: "lead",
       name: "Lead + team",
@@ -749,6 +792,9 @@
    */
   // A text-only agent (a local model through Ollama) has no tools: only the Arbiter or a discussion's voice
   const TEXT_AGENTS = ["ollama"];
+  // Agents on a local model: workers or the Arbiter, not the mother (small models plan poorly — the owner, 2026-10-12)
+  const LOCAL_AGENTS = ["ollama", "codex-local"];
+  const MOTHER_BUDGET = { workers: [1, 20], turns: [1, 30], minutes: [5, 480], perTurn: [1, 6] };
   function templateIssues(
     t,
     { capacity = { claude: 4, codex: 2, "codex-local": 1, gemini: 2, ollama: 1 } } = {}
@@ -937,6 +983,33 @@
         for (const v of unknownVariables(s.onFail.prompt || "")) {
           add(`${name}: the "on fail" prompt uses {{${v}}}, which doesn't exist`);
         }
+      }
+      if (s.role === "mother") {
+        const agents = Array.isArray(s.agents) ? s.agents : [];
+        if (agents.length !== 1 || Number(agents[0]?.count) !== 1) {
+          add(`${name}: the mother is exactly one agent`);
+        } else if (LOCAL_AGENTS.includes(agents[0].adapter)) {
+          add(`${name}: a local model can't be the mother — it can be a worker or the Arbiter`);
+        }
+        if (s.mode !== "read-only") {
+          add(`${name}: the mother only reads (its workers write) — its mode must be "read-only"`);
+        }
+        const may = Array.isArray(s.allow?.agents) ? s.allow.agents : [];
+        if (!may.length) {
+          add(`${name}: pick the agents the mother may start`);
+        }
+        for (const a of may.filter(x => !capacity[x] || TEXT_AGENTS.includes(x))) {
+          add(`${name}: "${a}" can't be a worker`);
+        }
+        for (const [k, [lo, hi]] of Object.entries(MOTHER_BUDGET)) {
+          const v = s.budget?.[k];
+          if (v !== undefined && !(Number.isInteger(v) && v >= lo && v <= hi)) {
+            add(`${name}: the budget's ${k} must be ${lo}–${hi}`);
+          }
+        }
+        // its writers are the parts integrate merges, and what tests and merge work on
+        builders = true;
+        splitBuild = true;
       }
       if (s.role === "builder") {
         builders = true;

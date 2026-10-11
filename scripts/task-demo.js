@@ -119,6 +119,44 @@ class StubRunner {
       return "## Decision\nCursor pagination on created_at.\n## Why\nIt scales.\n## Dissent\nNone left.\n## Open risks\nThe index.";
     }
     // Lead + team: the lead asks once for a change to the docs part, then it's right; it sums up at the end
+    // Mother (28.2): its first turn starts two writers (cart.js, DISCOUNTS.md) and a reader; then it's done
+    if (role === "mother") {
+      this.motherTurns = (this.motherTurns || 0) + 1;
+      const json = obj => `\`\`\`json\n${JSON.stringify(obj)}\n\`\`\``;
+      return this.motherTurns === 1
+        ? `Two parts and a check.\n${json({
+            actions: [
+              {
+                do: "start",
+                id: "discount",
+                agent: "codex",
+                mode: "writes",
+                files: ["cart.js"],
+                prompt: "Add discount()",
+              },
+              {
+                do: "start",
+                id: "docs",
+                agent: "claude",
+                mode: "writes",
+                files: ["DISCOUNTS.md"],
+                prompt: "Document it",
+              },
+              {
+                do: "start",
+                id: "check",
+                agent: "claude",
+                mode: "read-only",
+                prompt: "How is total() used?",
+              },
+            ],
+            next: "wait",
+          })}`
+        : `All in.\n${json({ actions: [], next: "done" })}`;
+    }
+    if (role === "worker") {
+      return "total() is used once, in checkout.";
+    }
     if (role === "reviewer" && prompt.includes("You lead this task")) {
       const docs = /Its subtask[^\n]*\n[\s\S]*Document the rule[\s\S]*Your plan:/.test(prompt);
       this.leadReviews = (this.leadReviews || 0) + 1;
@@ -140,7 +178,10 @@ class StubRunner {
         ? "1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is"
         : "1. Add discount(amount) to cart.js";
     }
-    const owns = prompt.match(/Files you own: (.+)/)?.[1].split(", ");
+    const owns = (
+      prompt.match(/Files you own: (.+)/)?.[1] ||
+      prompt.match(/Change only these files: (.+)\./)?.[1]
+    )?.split(", ");
     if (role === "builder" && owns && !owns.includes("cart.js")) {
       fs.writeFileSync(path.join(cwd, owns[0]), "# Discounts\n\n10% off orders over 100.\n");
       return `Wrote ${owns[0]}`;
@@ -211,6 +252,7 @@ const OWNER = {
   decision: ["accept"],
   merge: ["merge"],
   "discussion-end": ["adopt"],
+  delegation: ["approve"], // the mother's first batch of workers
 };
 
 // A discussion (orchestration 14) and the plan that takes its decision
@@ -496,6 +538,20 @@ const reported = task =>
           ? "the read-only worktree isn't clean"
           : null;
       },
+    }
+  );
+  await run(
+    "Mother (it asks: Codex writes cart.js, Claude DISCOUNTS.md, Claude reads; you approve; integrated, tested, merged)",
+    { category: "workflow", workflow: { pattern: "pipeline" } },
+    {
+      template: require("../src/shared/workflow-templates").builtin("mother"),
+      expect: (task, root) =>
+        merged(task, root) ||
+        (!fs.existsSync(path.join(root, "DISCOUNTS.md"))
+          ? "DISCOUNTS.md missing after merge"
+          : task.mother?.workers.length !== 3
+            ? `${task.mother?.workers.length} workers`
+            : null),
     }
   );
   await run(
