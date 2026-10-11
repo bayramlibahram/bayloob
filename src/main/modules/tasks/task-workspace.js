@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { Git, parseShortstat } = require("../../infrastructure/system/git");
 const { detectTests } = require("./project-info");
+const { collectLogs, dependencyAudit } = require("./log-sources");
 
 const TEST_TIMEOUT_MS = 10 * 60_000;
 const ENV_FILE = /^\.env(\..+)?$/;
@@ -157,6 +158,17 @@ class TaskWorkspace {
 
   async diffstat(root, sha, branch) {
     return parseShortstat(await run(root, ["diff", "--shortstat", `${sha}...${branch}`]));
+  }
+
+  /**
+   * Analysis inputs, read-only: the log sources' tails (paths relative to the project) and, when asked, the
+   * project's own dependency audit, run in the read-only worktree so the project itself is untouched.
+   */
+  async collect({ root, dir, sources = [], audit = false }) {
+    return {
+      logs: sources.length ? await collectLogs(sources, { cwd: root }) : null,
+      audit: audit ? await dependencyAudit(dir || root) : null,
+    };
   }
 
   /** The candidate's whole change against the base (for the Arbiter's input). */

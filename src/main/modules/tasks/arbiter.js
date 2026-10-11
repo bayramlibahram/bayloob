@@ -18,17 +18,29 @@ const fence = (text, lang = "") => `\`\`\`${lang}\n${String(text).replace(/```/g
  * The input, as Markdown. candidates: [{ id, adapter, branch, diffstat, diff, tests: { ok, code, skipped }, testOutput,
  * reviews: [text], minutes }]; reviews (Review board): [{ reviewer, text }].
  */
-function arbiterInput({ goal, plan, candidates = [], reviews = null, range = null }) {
+function arbiterInput({
+  goal,
+  plan,
+  candidates = [],
+  reviews = null,
+  range = null,
+  label = "Reviewer",
+  extra = [],
+}) {
   const parts = [`# Goal\n\n${clip(goal, TEXT_MAX)}`];
   if (plan) {
     parts.push(`# Approved plan\n\n${clip(plan, TEXT_MAX * 2)}`);
   }
   if (reviews) {
-    parts.push(
-      `# Under review\n\n${range ? `\`git diff ${range.from}..${range.to}\` — ${range.label}` : ""}`
-    );
+    if (range) {
+      parts.push(`# Under review\n\n\`git diff ${range.from}..${range.to}\` — ${range.label}`);
+    }
+    // An analysis also hands over what Bayloob collected (logs, the dependency audit)
+    for (const e of extra.filter(Boolean)) {
+      parts.push(clip(e, TEXT_MAX * 4));
+    }
     for (const r of reviews) {
-      parts.push(`## Reviewer: ${r.reviewer}\n\n${clip(r.text, TEXT_MAX * 2)}`);
+      parts.push(`## ${label}: ${r.reviewer}\n\n${clip(r.text, TEXT_MAX * 2)}`);
     }
   }
   for (const c of candidates) {
@@ -191,12 +203,53 @@ function parseReport(text) {
       file: f.file ? String(f.file) : null,
       line: Number.isInteger(Number(f.line)) && f.line !== null ? Number(f.line) : null,
       problem: String(f.problem).trim(),
+      // Analysis: what it rests on (file:line or a log line), what to do, how sure
+      evidence: f.evidence ? String(f.evidence).trim() : null,
+      recommendation: f.recommendation ? String(f.recommendation).trim() : null,
+      confidence:
+        Number.isFinite(Number(f.confidence)) && f.confidence !== null
+          ? Math.min(1, Math.max(0, Number(f.confidence)))
+          : null,
       reviewers: (Array.isArray(f.reviewers) ? f.reviewers : []).map(String),
     });
   }
   const rank = s => SEVERITIES.indexOf(s);
   findings.sort((a, b) => rank(a.severity) - rank(b.severity));
   return { ok: true, report: { summary: String(data.summary || "").trim(), findings } };
+}
+
+/** A report as Markdown, for export: title, summary, then the findings by severity. */
+function reportMarkdown({ title, project, when, report }) {
+  const lines = [`# ${title}`, "", `${project} · ${when}`, ""];
+  if (report.summary) {
+    lines.push(report.summary, "");
+  }
+  for (const sev of SEVERITIES) {
+    const list = report.findings.filter(f => f.severity === sev);
+    if (!list.length) {
+      continue;
+    }
+    lines.push(`## ${sev[0].toUpperCase()}${sev.slice(1)} (${list.length})`, "");
+    for (const f of list) {
+      const where = f.file ? `\`${f.file}${f.line ? `:${f.line}` : ""}\` — ` : "";
+      lines.push(`- ${where}${f.problem}`);
+      if (f.evidence && f.evidence !== `${f.file}:${f.line}`) {
+        lines.push(`  - Evidence: ${f.evidence}`);
+      }
+      if (f.recommendation) {
+        lines.push(`  - Recommendation: ${f.recommendation}`);
+      }
+      const meta = [
+        f.confidence != null ? `confidence ${f.confidence}` : "",
+        f.reviewers.length ? `found by ${f.reviewers.join(", ")}` : "",
+      ].filter(Boolean);
+      if (meta.length) {
+        lines.push(`  - ${meta.join(" · ")}`);
+      }
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
 }
 
 /** Why a valid decision still goes to the owner (null = it can go on). */
@@ -213,4 +266,12 @@ function needsOwner(d, threshold) {
   return null;
 }
 
-module.exports = { arbiterInput, parseDecision, parseReport, needsOwner, DECISIONS, INPUT_MAX };
+module.exports = {
+  arbiterInput,
+  parseDecision,
+  parseReport,
+  reportMarkdown,
+  needsOwner,
+  DECISIONS,
+  INPUT_MAX,
+};

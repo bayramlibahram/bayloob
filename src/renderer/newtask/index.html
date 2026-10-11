@@ -254,11 +254,11 @@
     startFrom: 'Start from', fromFiles: n => `Your files now · ${n} uncommitted`, fromCommit: 'The last commit',
     fromFilesHint: 'Builders get your files as they are now; the winner is applied to your files — nothing is committed.',
     fromCommitHint: (n, b) => `Builders start from the last commit — your ${n} uncommitted change${n === 1 ? ' is' : 's are'} not in it. The winner is merged into ${b}.`,
-    customize: 'Customize stages…', customizeTip: 'Opens the workflow builder in the Tasks window on a copy of these stages',
+    customize: 'Customize stages…', customizeTipAnalysis: 'Opens the workflow builder on a copy: edit the analysts’ prompt, their agents and the Arbiter', customizeTip: 'Opens the workflow builder in the Tasks window on a copy of these stages',
     customizeLater: 'This pattern arrives with a later step', yourTemplates: 'Your templates', nStages: n => `${n} stages`,
     tplRuns: name => `Runs your template <b>${name}</b>:`, tplProblems: 'Your template has problems — fix them in Customize stages…',
     sources: 'Log sources · collected read-only into the task', sourcePh: 'e.g. journalctl -u php8.3-fpm --since "-6h"', add: 'Add',
-    opsPlan: 'Also prepare an operations plan', opsSub: 'commands are only proposed; each runs when you click',
+    opsPlan: 'Also prepare an operations plan', opsSub: 'arrives with operations (a later step) — for now the run ends with the report',
     gatesCap: 'Gates — where you’ll be asked', load: 'Parallel load',
     rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rTerminal: 'Terminal', rPrompt: 'Prompt', rFiles: 'Files', edit: 'Edit',
     inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
@@ -284,7 +284,7 @@
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   // Configurations the workflow engine can run so far (command 04): Pipeline and Best-of-N
   const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board'];
-  const runnable = c => c.category === 'workflow' && (!!c.workflow.template || RUNNABLE.includes(c.workflow.pattern));
+  const runnable = c => c.category === 'analysis' || (c.category === 'workflow' && (!!c.workflow.template || RUNNABLE.includes(c.workflow.pattern)));
   // One of the owner's templates as the dialog's stage list (the shape TaskShape.stages gives)
   const templateStages = t => t.stages.map(s => ({
     id: s.id, title: s.title, role: s.role === 'tester' ? 'action' : s.role,
@@ -691,7 +691,8 @@
         ${a.preset === 'incident' ? `<div class="label">${T.sources}</div>
           <ul class="sources">${a.logSources.map((s, i) => `<li><span>${esc(s)}</span><button type="button" class="iconbtn" data-unsource="${i}" aria-label="Remove">${I('x')}</button></li>`).join('')}</ul>
           <div class="field"><input id="source" placeholder="${esc(T.sourcePh)}" spellcheck="false" aria-label="Log source" class="mono"><button type="button" class="btn sm" data-addsource>${I('plus')}${T.add}</button></div>` : ''}
-        <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}</small></span></button>`;
+        <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}</small></span></button>
+        <span title="${T.customizeTipAnalysis}"><button type="button" class="expander" data-customize>${I('edit')}${T.customize}</button></span>`;
     }
 
     #confirm() {
@@ -742,7 +743,7 @@
       if (c.category === 'analysis') {
         const a = c.analysis;
         const n = TaskShape.total(a.agents);
-        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report.${a.opsPlan ? ' Then it proposes an <b>operations plan</b> — each command runs only when you click.' : ''}`;
+        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ' The operations plan comes with a later step; this run ends with the report.' : ''}`;
       }
       const tpl = this.#template(c);
       if (tpl) {

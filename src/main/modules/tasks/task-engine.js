@@ -18,7 +18,8 @@
 //               merge({ root, branch, into, message }) → { ok, error?, conflicts? },
 //               integrate({ root, taskId, sha, candidate, branches }) → { ok, dir, branch, head, error?, conflicts? },
 //               reviewRange({ root, sha, head, fromWorktree }) → { from, to, label },
-//               diff(root, sha, branch) → text }
+//               diff(root, sha, branch) → text,
+//               collect({ root, dir, sources, audit }) → { logs: { markdown, results } | null, audit: { markdown, ran } | null } }
 // Nothing destructive or outward-facing happens without decide() from the human: merging is a gate action,
 // worktrees and branches are never deleted here.
 const { EventEmitter } = require("node:events");
@@ -161,7 +162,7 @@ class TaskEngine extends EventEmitter {
       },
       roDir: ws.roDir,
       // No builders (Review board): what the reviewers look at
-      review: template.stages.some(s => s.role === "builder")
+      review: template.stages.some(s => s.role === "builder" || s.role === "analyst")
         ? null
         : ((await this.workspace.reviewRange?.({ root: ws.root, ...ws }).catch(() => null)) ??
           null),
@@ -463,6 +464,8 @@ class TaskEngine extends EventEmitter {
       await this.#runTests(task, only);
     } else if (st.action === "integrate") {
       await this.#integrate(task);
+    } else if (st.action === "collect") {
+      await this.#collect(task, st);
     } else if (st.action === "merge") {
       this.#openGate(task, "merge", this.#mergeTitle(task), this.#mergeExtra(task));
     } else if (st.role === "arbiter" && !st.agents?.length) {
@@ -903,12 +906,23 @@ class TaskEngine extends EventEmitter {
     let input;
     if (!builders) {
       const reviews = task.instances
-        .filter(i => i.role === "reviewer" && i.status === "done" && i.artifact)
+        .filter(
+          i => (i.role === "reviewer" || i.role === "analyst") && i.status === "done" && i.artifact
+        )
         .map(i => ({
           reviewer: `${i.adapter} (${i.artifact})`,
           text: this.#readArtifact(task, i.artifact) || "",
         }));
-      input = arbiterInput({ goal: task.text, reviews, range: task.review });
+      const analysis = task.template.stages.some(s => s.role === "analyst");
+      input = arbiterInput({
+        goal: task.text,
+        reviews,
+        range: task.review,
+        label: analysis ? "Analyst" : "Reviewer",
+        extra: analysis
+          ? [this.#readArtifact(task, "logs.md"), this.#readArtifact(task, "audit.md")]
+          : [],
+      });
     } else {
       const candidates = [];
       for (const c of this.#active(task)) {
@@ -981,6 +995,11 @@ class TaskEngine extends EventEmitter {
     state.reasked = false;
     if (board) {
       task.report = parsed.report;
+      this.store.writeArtifact(
+        task.id,
+        "findings.json",
+        JSON.stringify(parsed.report.findings, null, 2)
+      );
       this.#log(task, "agent", "report", { findings: parsed.report.findings.length });
       await this.#advance(task);
       return;
@@ -1051,6 +1070,35 @@ class TaskEngine extends EventEmitter {
   // At the merge gate you can still choose another candidate than the Arbiter's
   #mergeExtra(task) {
     return this.#active(task).length > 1 ? { actions: ["merge", "keep", "pick", "abort"] } : {};
+  }
+
+  // Analysis: what the analysts read besides the code — log tails and the dependency audit, collected read-only.
+  // A source that can't be read is listed in the artifact and the log; the analysis goes on without it.
+  async #collect(task, st) {
+    const r = await this.workspace
+      .collect({
+        root: task.project.root,
+        dir: task.roDir,
+        sources: st.sources || [],
+        audit: !!st.audit,
+      })
+      .catch(e => ({ error: e.message }));
+    if (r.logs) {
+      this.store.writeArtifact(task.id, "logs.md", r.logs.markdown);
+    }
+    if (r.audit) {
+      this.store.writeArtifact(
+        task.id,
+        "audit.md",
+        r.audit.markdown || "# Dependency audit\n\nNo lock file with an audit tool here."
+      );
+    }
+    this.#log(task, "engine", "collected", {
+      sources: r.logs?.results || [],
+      audit: r.audit?.ran || null,
+      error: r.error || null,
+    });
+    await this.#advance(task);
   }
 
   // Split work: the parts' branches merged into one candidate (in its own worktree), which the later stages

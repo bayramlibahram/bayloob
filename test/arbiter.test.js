@@ -126,3 +126,56 @@ test("the input has every candidate's diff, tests and review, and stays under th
   assert.match(text, /# Candidate build-2[\s\S]*Tests: fail \(exit 1\)[\s\S]*more characters/);
   assert.ok(text.length <= INPUT_MAX + 100);
 });
+
+test("an analysis report keeps evidence, recommendation and confidence; it exports as Markdown", () => {
+  const { reportMarkdown } = require("../src/main/modules/tasks/arbiter");
+  const r = parseReport(
+    "```json\n" +
+      JSON.stringify({
+        summary: "One secret, one injection.",
+        findings: [
+          {
+            severity: "medium",
+            file: "src/db.js",
+            line: 9,
+            evidence: "src/db.js:9",
+            problem: "SQL built by string concat",
+            recommendation: "Use placeholders",
+            confidence: 0.7,
+            reviewers: ["codex"],
+          },
+          {
+            severity: "high",
+            file: ".env.production",
+            line: null,
+            evidence: "STRIPE_KEY=sk_live_…",
+            problem: "A live key is committed",
+            recommendation: "Rotate it",
+            confidence: 1.4,
+            reviewers: ["claude", "codex"],
+          },
+        ],
+      }) +
+      "\n```"
+  );
+  assert.equal(r.ok, true);
+  const [first] = r.report.findings;
+  assert.deepEqual(
+    [first.severity, first.evidence, first.recommendation, first.confidence],
+    ["high", "STRIPE_KEY=sk_live_…", "Rotate it", 1]
+  );
+  const md = reportMarkdown({
+    title: "Security review",
+    project: "shop",
+    when: "2026-10-11 13:30",
+    report: r.report,
+  });
+  assert.match(
+    md,
+    /^# Security review\n\nshop · 2026-10-11 13:30\n\nOne secret, one injection\.\n\n## High \(1\)\n\n- `\.env\.production` — A live key is committed\n {2}- Evidence: STRIPE_KEY=sk_live_…\n {2}- Recommendation: Rotate it\n {2}- confidence 1 · found by claude, codex/
+  );
+  assert.match(
+    md,
+    /## Medium \(1\)\n\n- `src\/db\.js:9` — SQL built by string concat\n {2}- Recommendation: Use placeholders/
+  );
+});

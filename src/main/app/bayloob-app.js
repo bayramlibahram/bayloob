@@ -7,6 +7,7 @@ const {
   Menu,
   nativeTheme,
   shell,
+  dialog,
 } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
@@ -55,6 +56,7 @@ const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
 const { Scheduler } = require("../modules/tasks/scheduler");
 const { TaskEngine } = require("../modules/tasks/task-engine");
+const { reportMarkdown } = require("../modules/tasks/arbiter");
 const { TaskRunner } = require("../modules/tasks/task-runner");
 const { TaskWorkspace } = require("../modules/tasks/task-workspace");
 const { builtin, templateFor } = require("../../shared/workflow-templates");
@@ -865,19 +867,20 @@ class BayloobApp {
   async #customize(config, draftId) {
     const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
     const base = templateFor(saved, id => this.templates.get(id));
-    const template = builtin(base.id)
-      ? {
-          ...base,
-          builtin: false,
-          id: this.templates.idFor(`${base.name} copy`),
-          name: `${base.name} (copy)`,
-        }
-      : base;
+    const template =
+      builtin(base.id) || base.id.startsWith("analysis-")
+        ? {
+            ...base,
+            builtin: false,
+            id: this.templates.idFor(`${base.name} copy`),
+            name: `${base.name} (copy)`,
+          }
+        : base;
     this.newTask.hide();
     await this.openTasks(null, {
       template,
       draftId: saved.id || draftId || null,
-      copyOf: builtin(base.id) ? base.id : null,
+      copyOf: builtin(base.id) || base.id.startsWith("analysis-") ? base.id : null,
     });
   }
 
@@ -1452,8 +1455,8 @@ class BayloobApp {
     ipcMain.handle("newtask:start", async (_e, config) => {
       try {
         const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
-        if (saved.category !== "workflow") {
-          throw new Error("Only workflows can start as tasks so far");
+        if (saved.category !== "workflow" && saved.category !== "analysis") {
+          throw new Error("Only workflows and analyses can start as tasks so far");
         }
         const task = await this.engine.start(
           saved,
@@ -1484,6 +1487,40 @@ class BayloobApp {
       })
     );
     ipcMain.handle("tasks:stop", (_e, id) => this.engine.stop(String(id)));
+    // A report as Markdown, saved where the owner picks (nothing leaves the machine)
+    ipcMain.handle("tasks:export-report", async (e, id) => {
+      const task = this.engine.get(String(id));
+      if (!task?.report?.findings) {
+        return { ok: false, error: "This task has no report" };
+      }
+      const name = `${
+        task.title
+          .replace(/[^\w-]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 60) || "report"
+      }-report.md`;
+      const win = BrowserWindow.fromWebContents(e.sender);
+      const r = await dialog.showSaveDialog(win, {
+        defaultPath: path.join(task.project.root || os.homedir(), name),
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (r.canceled || !r.filePath) {
+        return { ok: false, canceled: true };
+      }
+      fs.writeFileSync(
+        r.filePath,
+        reportMarkdown({
+          title: task.title,
+          project: task.project.name,
+          when: new Date(task.endedAt || task.updatedAt)
+            .toISOString()
+            .slice(0, 16)
+            .replace("T", " "),
+          report: task.report,
+        })
+      );
+      return { ok: true, path: r.filePath };
+    });
     // Open terminal on one instance: attach to its tmux session (it runs in the background)
     ipcMain.handle("tasks:terminal", async (_e, id, instanceId) => {
       const inst = this.engine.get(String(id))?.instances.find(i => i.id === String(instanceId));
@@ -1511,8 +1548,13 @@ class BayloobApp {
       if (r.ok && opts?.draftId) {
         const draft = this.tasks.get(String(opts.draftId));
         if (draft?.status === "draft") {
+          // The owner's templates run from the Workflow category (an analysis one too: its analysts make it one)
           this.tasks.saveDraft(
-            { ...draft, workflow: { ...draft.workflow, template: r.template.id } },
+            {
+              ...draft,
+              category: "workflow",
+              workflow: { ...draft.workflow, template: r.template.id },
+            },
             Object.keys(AGENTS)
           );
           this.openLauncher();

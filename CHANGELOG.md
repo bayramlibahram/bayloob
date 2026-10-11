@@ -3,6 +3,27 @@
 ## Unreleased
 
 ### Added
+- **Analysis** (orchestration 07): the New task dialog's Analysis category now runs. It is read-only from start to
+  finish.
+  - **Presets:** Code audit, Security review, Incident / log analysis, Performance review, Dependency upgrade
+    report. Each has its own prompt, editable through *Customize stages…*.
+  - **Before the analysts start, Bayloob collects their inputs, reading only:**
+    - for an incident, the last 400 lines of each log source: a file (relative to the project or `~`),
+      `journalctl …`, `pm2 logs … --nostream` or `docker logs …`;
+    - for a security review, the project's own dependency audit: `npm`, `bun`, `pnpm`, `yarn` or `composer
+      audit`, or `pip-audit`, whichever matches its lock file and is installed.
+
+    Commands run as an argv, without a shell. Anything else, or anything that changes state (such as
+    `journalctl --vacuum…`), is refused rather than run.
+  - **Analysts:** they work in parallel, read-only three times over: the CLI mode, the hook's read-only roles,
+    and the post-turn `git status` check.
+  - **Report:** the Arbiter merges their findings into one report: severity, evidence (`file:line` or a log
+    line), recommendation, confidence, and who found each. It is saved as `report.md` and `findings.json`.
+  - **Report tab:** filter by severity, export as Markdown (a save dialog), and see what was collected.
+  - **Checked with real agents on a toy repo:** a security review with Claude and Codex as analysts and Claude as
+    the Arbiter found both SQL injections, the missing authorization, the hard-coded admin password and the
+    committed key style. That is 9 findings, 5 of them high, each with a recommendation and a confidence.
+  - The "operations plan" option is still there; its runbook comes with operations (08).
 - **Arbiter** (orchestration 06): one read-only agent decides between the candidates.
   - **Agent:** Codex by default, or the one picked in New task. The New task dialog suggests one that isn't
     building.

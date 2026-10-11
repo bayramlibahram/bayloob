@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld("tasksAPI", {
   decide: (id, gateId, action, opts) =>
     ipcRenderer.invoke("tasks:decide", id, gateId, action, opts),
   stop: id => ipcRenderer.invoke("tasks:stop", id),
+  // Saves a task's report as Markdown (a save dialog) → { ok, path } | { ok: false, canceled | error }
+  exportReport: id => ipcRenderer.invoke("tasks:export-report", id),
   // Opens a terminal attached to one instance's tmux session
   terminal: (id, instanceId) => ipcRenderer.invoke("tasks:terminal", id, instanceId),
   newTask: () => ipcRenderer.send("open-launcher"),

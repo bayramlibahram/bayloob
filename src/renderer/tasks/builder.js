@@ -58,8 +58,10 @@
       builder: "Builder",
       tester: "Built-in: run tests",
       reviewer: "Reviewer",
+      analyst: "Analyst",
       arbiter: "Arbiter",
       integrate: "Built-in: integrate parts",
+      collect: "Built-in: collect logs / audit",
       you: "You merge",
     },
     gates: {
@@ -71,6 +73,8 @@
     },
     modes: { plan: "plan", "read-only": "read-only", writes: "writes" },
     testerNote: "Runs the project’s own test command in every candidate’s worktree.",
+    collectNote:
+      "Reads the log sources listed in New task (and, for a security review, the project’s dependency audit) before the analysts start. Nothing is changed.",
     integrateNote:
       "Merges the split build’s parts into one branch in its own worktree; a conflict between parts stops for you.",
     arbiterNote: "No Arbiter agent: you pick the winner here.",
@@ -86,6 +90,7 @@
       tests: "Tests",
       review: "Review",
       integrate: "Integrate",
+      analyse: "Analysts",
       decide: "Decide",
       merge: "Merge",
     },
@@ -134,6 +139,20 @@
       gate: "always",
       prompt: WorkflowTemplates.builtin("pipeline").stages[3].prompt,
     }),
+    analyse: () => ({
+      ...WorkflowTemplates.analysisTemplate({ preset: "audit", agents: { claude: 1 } }).stages.find(
+        s => s.role === "analyst"
+      ),
+    }),
+    collect: () => ({
+      id: "collect",
+      title: "Collect logs",
+      role: "you",
+      action: "collect",
+      sources: [],
+      audit: false,
+      gate: "always",
+    }),
     integrate: () => ({
       id: "integrate",
       title: "Integrate",
@@ -147,7 +166,7 @@
     }),
     merge: () => ({ id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" }),
   };
-  const AGENT_ROLES = new Set(["planner", "builder", "reviewer"]);
+  const AGENT_ROLES = new Set(["planner", "builder", "reviewer", "analyst"]);
   const I = d => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
   const ICO = {
     up: I('<path d="m6 15 6-6 6 6"/>'),
@@ -271,7 +290,13 @@
           <select class="sel" data-s="role" data-i="${i}" aria-label="Role">${Object.entries(
             B.roles
           )
-            .map(([r, n]) => opt(r, n, (s.action === "integrate" ? "integrate" : s.role) === r))
+            .map(([r, n]) =>
+              opt(
+                r,
+                n,
+                (s.action === "integrate" || s.action === "collect" ? s.action : s.role) === r
+              )
+            )
             .join("")}</select>
           ${
             agentStage && (s.role === "builder" || total > 1)
@@ -305,6 +330,8 @@
         body += `<p class="hint">${B.arbiterNote} <button class="btn sm ghost" type="button" data-arbiter="${i}">${ICO.plus} ${B.addArbiter}</button></p>`;
       } else if (s.action === "integrate") {
         body += `<p class="hint">${B.integrateNote}</p>`;
+      } else if (s.action === "collect") {
+        body += `<p class="hint">${B.collectNote}</p>`;
       } else {
         body += `<p class="hint">${B.mergeNote}</p>`;
       }
@@ -404,6 +431,8 @@
         reviewer: "review",
         arbiter: "decide",
         integrate: "integrate",
+        analyst: "analyse",
+        collect: "collect",
         you: "merge",
       }[role];
       const fresh = KINDS[kind]();

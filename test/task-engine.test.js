@@ -820,3 +820,80 @@ test("Review board: the Arbiter merges the findings into one ranked report", asy
   assert.equal(task.report.findings.length, 1);
   assert.equal(task.report.summary, "One bug, found twice.");
 });
+
+// ---------- Analysis ----------
+
+test("Analysis: logs collected read-only → analysts in parallel → the Arbiter's report and findings.json", async () => {
+  const env = setup();
+  env.workspace.collect = opts => {
+    env.workspace.collected = opts;
+    return Promise.resolve({
+      logs: {
+        markdown: "# Logs\n\n## app.log\n\nERROR timeout at 12:03",
+        results: [{ source: "app.log", ok: true }],
+      },
+      audit: null,
+    });
+  };
+  const config = env.store.saveDraft({
+    category: "analysis",
+    project: { cwd: "/w/shop", name: "shop" },
+    text: "Why did checkout fail at noon?",
+    analysis: {
+      preset: "incident",
+      agents: { claude: 2, codex: 1 },
+      arbiter: "codex",
+      logSources: ["storage/logs/app.log"],
+    },
+  });
+  await env.engine.start(config, templateFor(config));
+  await env.engine.settled(config.id);
+  const task = env.engine.get(config.id);
+  assert.deepEqual(env.workspace.collected.sources, ["storage/logs/app.log"]);
+  assert.equal(task.review, null); // nothing to diff in an analysis
+  const analysts = env.runner.by({ role: "analyst" });
+  assert.deepEqual(
+    analysts.map(a => [a.adapter, a.mode, a.cwd]),
+    [
+      ["claude", "read-only", "/w/shop-ro"],
+      ["claude", "read-only", "/w/shop-ro"],
+      ["codex", "read-only", "/w/shop-ro"],
+    ]
+  );
+  assert.match(
+    analysts[0].prompt,
+    /Find the cause of this incident[\s\S]*Why did checkout fail at noon\?[\s\S]*ERROR timeout at 12:03/
+  );
+  for (const [i, a] of analysts.entries()) {
+    await endTurn(env, task, a, `high — app.log:12:03 — timeout ${i} — raise the pool size`);
+  }
+  const [arb] = env.runner.by({ role: "arbiter" });
+  assert.match(arb.prompt, /## Analyst: claude \(analysis\.md\)[\s\S]*## Analyst: codex/);
+  assert.match(arb.prompt, /# Logs[\s\S]*ERROR timeout/); // the Arbiter sees the logs too
+  await endTurn(
+    env,
+    task,
+    arb,
+    "```json\n" +
+      JSON.stringify({
+        summary: "The DB pool ran out.",
+        findings: [
+          {
+            severity: "high",
+            evidence: "ERROR timeout at 12:03",
+            problem: "Pool exhausted",
+            recommendation: "Raise the pool size",
+            confidence: 0.8,
+            reviewers: ["claude", "codex"],
+          },
+        ],
+      }) +
+      "\n```"
+  );
+  assert.equal(task.status, "done");
+  assert.equal(task.report.findings[0].recommendation, "Raise the pool size");
+  assert.equal(
+    JSON.parse(env.store.readArtifact(task.id, "findings.json"))[0].problem,
+    "Pool exhausted"
+  );
+});

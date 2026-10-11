@@ -19,10 +19,12 @@
 // Arbiter: a stage with role arbiter and one read-only agent decides between the candidates (gate "arbiter") or,
 // without builders, merges the reviewers' findings. Bayloob writes its input to the artifact arbiter-input.md.
 // An arbiter stage without agents leaves the pick to the owner.
+// Analysis (category "analysis"): an optional `collect` action gathers log sources and, for a security review, the
+// project's dependency audit (artifacts logs.md, audit.md); analysts read in parallel; the Arbiter writes the report.
 (root => {
-  const ROLES = ["planner", "builder", "tester", "reviewer", "arbiter", "you"];
+  const ROLES = ["planner", "builder", "tester", "reviewer", "analyst", "arbiter", "you"];
   const MODES = ["writes", "read-only", "plan"];
-  const ACTIONS = ["run-tests", "integrate", "merge"];
+  const ACTIONS = ["run-tests", "integrate", "merge", "collect"];
   const GATES = ["always", "human", "tests-pass", "arbiter", "no-findings"];
   const ID = /^[a-z][a-z0-9-]{0,23}$/;
   const MAX_STAGES = 12;
@@ -41,6 +43,8 @@
     parts: "How many builders the plan may be split between (Split work)",
     diff: "The git command that shows the change under review (Review board)",
     rubric: "What the Arbiter judges by (its stage's rubric)",
+    "artifact:logs.md": "The log sources Bayloob collected (Incident analysis)",
+    "artifact:audit.md": "The project's own dependency audit (Security review)",
     "artifact:arbiter-input.md":
       "Everything the Arbiter decides on: goal, plan, each candidate's diff, tests and reviews",
     "artifact:plan.md": "The approved plan",
@@ -148,6 +152,107 @@
     "",
     "{{artifact:arbiter-input.md}}"
   );
+
+  // Analysis: one prompt per preset (editable in the workflow builder), the same answer form for all
+  const ANALYSIS_FOCUS = {
+    audit: "Audit this codebase: bugs, risky code, dead code, missing tests, unclear structure.",
+    security: lines(
+      "Do a security review of this codebase: secrets committed to the repo, injection points (SQL, shell, path, templates),",
+      "missing authorization checks, unsafe deserialization, weak crypto, and known-vulnerable dependencies",
+      "(the project's own audit output is below when it has one)."
+    ),
+    incident: lines(
+      "Find the cause of this incident from the logs below and the code: what failed, when, why, and what would fix it.",
+      "Quote the log lines you rely on."
+    ),
+    perf: "Do a performance review: slow paths, N+1 queries, needless work in loops, blocking I/O, memory growth, missing caching or indexes.",
+    deps: "Write a dependency upgrade report: outdated or risky dependencies in the manifests and lock files, what an upgrade would break, and the order to upgrade in.",
+  };
+  const ANALYSIS_INPUT = { incident: "{{artifact:logs.md}}", security: "{{artifact:audit.md}}" };
+  const analystPrompt = preset =>
+    lines(
+      ANALYSIS_FOCUS[preset] || ANALYSIS_FOCUS.audit,
+      "Read what you need (git ls-files, grep, rg, git log). Do not change any file and do not run the project.",
+      "Answer with findings, one per line as `severity — path:line (or the log line) — problem — recommendation`,",
+      'most severe first; severity is high, medium or low. If there are none, answer "No findings".',
+      "",
+      "The owner's question:",
+      "{{task}}",
+      ...(ANALYSIS_INPUT[preset] ? ["", ANALYSIS_INPUT[preset]] : [])
+    );
+
+  const ANALYSIS_ARBITER_PROMPT = lines(
+    "You are the Arbiter of an analysis. Merge the analysts' findings below into one report: remove duplicates",
+    "(the same problem in other words), drop findings that are wrong (check the code with read-only commands if you",
+    "need to), and rank them by severity. Do not change any file.",
+    "Answer with a short summary, then end with exactly one JSON block:",
+    "```json",
+    '{"summary": "Two or three sentences.", "findings": [{"severity": "high", "file": "src/a.js", "line": 12, "evidence": "src/a.js:12 or the log line", "problem": "...", "recommendation": "...", "confidence": 0.8, "reviewers": ["claude", "codex"]}]}',
+    "```",
+    "severity: high, medium or low. confidence: 0 to 1, how sure you are the finding is real.",
+    "",
+    "{{artifact:arbiter-input.md}}"
+  );
+
+  const ANALYSIS_NAMES = {
+    audit: "Code audit",
+    security: "Security review",
+    incident: "Incident / log analysis",
+    perf: "Performance review",
+    deps: "Dependency upgrade report",
+  };
+
+  /** An analysis configuration as a template: collect (when there is something to collect) → analysts → Arbiter. */
+  function analysisTemplate(a) {
+    const preset = ANALYSIS_NAMES[a.preset] ? a.preset : "audit";
+    const analysts = Object.entries(a.agents || {})
+      .filter(([, n]) => n > 0)
+      .map(([adapter, count]) => ({ adapter, count }));
+    const sources = preset === "incident" ? (a.logSources || []).slice(0, 10) : [];
+    const collect = sources.length || preset === "security";
+    return {
+      id: `analysis-${preset}`,
+      name: ANALYSIS_NAMES[preset],
+      description:
+        "Analysts read in parallel, nothing is written; the Arbiter merges their findings into one report",
+      stages: [
+        ...(collect
+          ? [
+              {
+                id: "collect",
+                title: preset === "security" ? "Audit" : "Collect logs",
+                role: "you",
+                action: "collect",
+                sources,
+                audit: preset === "security",
+                gate: "always",
+              },
+            ]
+          : []),
+        {
+          id: "analyse",
+          title: "Analysts",
+          role: "analyst",
+          mode: "read-only",
+          agents: analysts.length ? analysts : [{ adapter: "claude", count: 1 }],
+          parallel: true,
+          prompt: analystPrompt(preset),
+          artifact: "analysis.md",
+          gate: "always",
+        },
+        {
+          id: "report",
+          title: "Arbiter",
+          role: "arbiter",
+          mode: "read-only",
+          agents: [{ adapter: a.arbiter || "codex", count: 1 }],
+          prompt: ANALYSIS_ARBITER_PROMPT,
+          artifact: "report.md",
+          gate: "always",
+        },
+      ],
+    };
+  }
 
   const CODE_RUBRIC =
     "correctness against the task and the plan; tests passing; size and scope of the diff; risk; readability; review findings resolved";
@@ -537,6 +642,9 @@
    * dialog put into the planner, builder and reviewer slots.
    */
   function templateFor(config, own = () => null) {
+    if (config?.category === "analysis") {
+      return analysisTemplate(config.analysis || {});
+    }
     const w = config?.workflow || {};
     // One of the owner's templates runs as saved: its stages say which agents run where
     if (w.template) {
@@ -580,6 +688,7 @@
 
   const api = {
     CODE_RUBRIC,
+    analysisTemplate,
     ROLES,
     MODES,
     ACTIONS,

@@ -178,6 +178,11 @@
   .rank .sc { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; font-size: 12.5px; }
   .rank ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--soft); }
   .sev { display: inline-block; min-width: 58px; text-align: center; }
+  .rfilter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .rfilter .sp { flex: 1; }
+  .rfilter .chip { cursor: pointer; border: 1px solid transparent; }
+  .rfilter .chip[aria-pressed="true"] { border-color: var(--c, var(--text)); }
+  .rfilter .chip:disabled { opacity: .45; cursor: default; }
   /* Split work: the planner's subtasks and the files each owns */
   .subs { display: flex; flex-direction: column; gap: 8px; max-width: 980px; }
   .sub { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 14px; padding: 10px 12px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); }
@@ -363,6 +368,8 @@
     confidence: 'confidence', risks: 'Risks', score: s => `${s}/10`, arbiterAnswer: 'The Arbiter’s answer',
     noReport: 'No report yet', noReportHint: 'The Arbiter merges the reviews when they are all in.', reportBad: 'The Arbiter’s report couldn’t be read — see each review in Reviews',
     sev: { high: 'High', medium: 'Medium', low: 'Low' },
+    analystsTab: 'Analysts', all: 'All', filterSev: 'Show findings of', exportMd: 'Export Markdown', exported: p => `Saved ${p}`, collected: 'What Bayloob collected for the analysts (read-only)',
+    col: { sev: 'Severity', where: 'Where', problem: 'Problem', rec: 'Recommendation', conf: 'Confidence', by: 'Found by' },
     notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
     send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
     gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
@@ -404,6 +411,7 @@
     flow: I('<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 6h7M6 8.5v3a4 4 0 0 0 4 4h5.5"/>', ' class="i ci"'),
     back: I('<path d="m15 6-6 6 6 6"/>', ' style="width:13px;height:13px"'),
     check: I('<path d="m5 12 5 5 9-10"/>'),
+    down: I('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
     x: I('<path d="M6 6l12 12M18 6 6 18"/>'),
     clock: I('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>', ' style="width:12px;height:12px"'),
     warn: I('<path d="M12 4 2.5 20h19Z"/><path d="M12 10v4M12 17h.01"/>', ' style="width:13px;height:13px"'),
@@ -451,6 +459,7 @@
     project = '';
     density = 'comfortable';
     picked = new Map(); // task id → candidate the owner selected for "Pick"
+    sevFilter = new Map(); // task id → the Report's severity filter (null: all)
     composing = null; // { action } while a note / confirmation is being written
     #art = new Map(); // `${task}:${name}` → text | null (artifacts and logs, refreshed when the task changes)
     #toastTimer = null;
@@ -591,7 +600,7 @@
       }).join('');
       const board = !t.template.stages.some(s => s.role === 'builder');
       const arb = t.template.stages.some(s => s.role === 'arbiter' && s.agents?.length);
-      const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ['reviews', t.instances.filter(i => i.role === 'reviewer' && i.status === 'done').length || ''], ['log']]
+      const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ['reviews', t.instances.filter(i => (i.role === 'reviewer' || i.role === 'analyst') && i.status === 'done').length || ''], ['log']]
         : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['decision'], ['tests'], ['log']];
       if (!tabs.some(([k]) => k === this.tab)) { this.tab = 'overview'; }
       const pane = { overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), log: () => this.#log(t) }[this.tab]();
@@ -607,7 +616,7 @@
         </div>
         <nav class="stepbar" aria-label="Stages">${steps}</nav>
         ${t.status === 'stopped' ? `<div class="banner" style="--c:var(--idle)">${T.stopped}</div>` : ''}
-        <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${T.tabs[k]}${n ? `<em>${n}</em>` : ''}</button>`).join('')}</div>
+        <div class="tabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" class="tab" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${k === 'reviews' && t.template.stages.some(x => x.role === 'analyst') ? T.analystsTab : T.tabs[k]}${n ? `<em>${n}</em>` : ''}</button>`).join('')}</div>
         <div class="pane" id="pane">${pane}</div>
         ${t.gate ? this.#actions(t) : ''}`;
     }
@@ -724,19 +733,32 @@
     // Review board: the Arbiter's one list, duplicates merged, by severity
     #report(t) {
       const r = t.report;
-      if (!r) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noReport}</b>${T.noReportHint}</div>`; }
-      if (r.error) { return `<div class="banner" style="--c:var(--waiting);margin:0">${ICON.warn}<span><b>${T.reportBad}</b><br>${esc(r.error)}</span></div>`; }
+      const inputs = ['logs.md', 'audit.md'].map(n => [n, this.#artifact(t.id, n)]).filter(([, x]) => x);
+      const collected = inputs.length ? `<details class="more"><summary>${T.collected}</summary>${inputs.map(([, x]) => `<div class="md">${renderMarkdown(x)}</div>`).join('')}</details>` : '';
+      if (!r) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noReport}</b>${T.noReportHint}</div>${collected}`; }
+      if (r.error) { return `<div class="banner" style="--c:var(--waiting);margin:0">${ICON.warn}<span><b>${T.reportBad}</b><br>${esc(r.error)}</span></div>${collected}`; }
       const col = { high: 'var(--waiting)', medium: 'var(--working)', low: 'var(--idle)' };
+      const only = this.sevFilter.get(t.id) || null;
+      const count = sev => r.findings.filter(f => f.severity === sev).length;
+      const shown = r.findings.filter(f => !only || f.severity === only);
+      const rich = r.findings.some(f => f.recommendation || f.evidence || f.confidence != null);
       return `<div class="cards">${r.summary ? `<div class="card md">${renderMarkdown(r.summary)}</div>` : ''}
-        <table class="tbl"><thead><tr><th>Severity</th><th>Where</th><th>Problem</th><th>Found by</th></tr></thead><tbody>
-        ${r.findings.map(f => `<tr><td><span class="chip c sev" style="--c:${col[f.severity]}">${T.sev[f.severity]}</span></td>
-          <td class="mono">${esc(f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : '—')}</td><td>${esc(f.problem)}</td><td>${esc(f.reviewers.join(', '))}</td></tr>`).join('')}
-        </tbody></table></div>`;
+        <div class="rfilter" role="group" aria-label="${T.filterSev}">
+          <button type="button" class="chip" data-sev="" aria-pressed="${!only}">${T.all} · ${r.findings.length}</button>
+          ${['high', 'medium', 'low'].map(sv => `<button type="button" class="chip c" style="--c:${col[sv]}" data-sev="${sv}" aria-pressed="${only === sv}" ${count(sv) ? '' : 'disabled'}>${T.sev[sv]} · ${count(sv)}</button>`).join('')}
+          <span class="sp"></span><button type="button" class="btn sm" data-act="export">${ICON.down || ''}${T.exportMd}</button></div>
+        <table class="tbl"><thead><tr><th>${T.col.sev}</th><th>${T.col.where}</th><th>${T.col.problem}</th>${rich ? `<th>${T.col.rec}</th><th>${T.col.conf}</th>` : ''}<th>${T.col.by}</th></tr></thead><tbody>
+        ${shown.map(f => `<tr><td><span class="chip c sev" style="--c:${col[f.severity]}">${T.sev[f.severity]}</span></td>
+          <td class="mono" title="${esc(f.evidence || '')}">${esc(f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : f.evidence || '—')}</td>
+          <td>${esc(f.problem)}${f.evidence && f.file && f.evidence !== `${f.file}:${f.line}` ? `<br><small class="mono" style="color:var(--muted)">${esc(f.evidence)}</small>` : ''}</td>
+          ${rich ? `<td>${esc(f.recommendation || '—')}</td><td class="num">${f.confidence == null ? '—' : f.confidence.toFixed(2)}</td>` : ''}
+          <td>${esc(f.reviewers.join(', '))}</td></tr>`).join('')}
+        </tbody></table>${collected}</div>`;
     }
 
     // Review board: every reviewer's answer on its own, with its findings count (the Arbiter merges them from 06)
     #reviews(t) {
-      const done = t.instances.filter(i => i.artifact && i.role === 'reviewer');
+      const done = t.instances.filter(i => i.artifact && (i.role === 'reviewer' || i.role === 'analyst'));
       if (!done.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noReviews}</b>${T.noReviewsHint}</div>`; }
       return `<div class="cands">${done.map(i => {
         const text = this.#artifact(t.id, i.artifact);
@@ -927,6 +949,8 @@
           if (!r?.ok) { this.toast(r?.error || 'Could not open a terminal', true); }
           return;
         }
+        const sev = e.target.closest('[data-sev]');
+        if (sev && t) { this.sevFilter.set(t.id, sev.dataset.sev || null); return this.render(); }
         const pick = e.target.closest('[data-pick]');
         if (pick && t) { this.picked.set(t.id, pick.dataset.pick); return this.render(); }
         const decide = e.target.closest('[data-decide]');
@@ -951,6 +975,11 @@
         if (act === 'send-note' && t?.gate) { return this.#decide(t, this.composing.action, { note: this.composing.note || '' }); }
         if (act === 'abort-yes' && t?.gate) { return this.#decide(t, 'abort'); }
         if (act === 'stop' && t) { this.composing = { gate: null, action: 'stop' }; return this.render(); }
+        if (act === 'export' && t) {
+          const r = await this.api.exportReport?.(t.id);
+          if (r?.ok) { this.toast(T.exported(r.path)); } else if (r && !r.canceled) { this.toast(r.error, true); }
+          return;
+        }
         if (act === 'stop-yes' && t) {
           const r = await this.api.stop(t.id);
           this.composing = null;

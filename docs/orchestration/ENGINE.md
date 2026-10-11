@@ -8,6 +8,7 @@ section of the Workspace window (04b) with the workflow builder (04c).
 |---|---|
 | `src/shared/workflow-templates.js` | Stage schema, validation (plain-language errors), built-ins Pipeline, Best-of-N, Split work and Review board, prompt variables |
 | `src/main/modules/tasks/arbiter.js` | The Arbiter: its input (goal, plan, per candidate: diff, tests, reviews, metrics), the decision / report schema, when the owner decides |
+| `src/main/modules/tasks/log-sources.js` | Analysis inputs: log sources (file / journalctl / pm2 / docker, read-only argv) and the project's dependency audit |
 | `src/main/modules/tasks/subtasks.js` | Split work: the planner's subtasks (JSON block), file disjointness, what each builder is told |
 | `src/main/modules/tasks/task-engine.js` | State machine: stages, instances, candidates, gates, loops, restart recovery |
 | `src/main/modules/tasks/task-store.js` | `tasks/<id>/config.json`, `state.json` (atomic), `log.jsonl`, `artifacts/` |
@@ -60,6 +61,14 @@ section of the Workspace window (04b) with the workflow builder (04c).
   - **Review board:** the Arbiter instead merges the reviews into one report `{summary, findings: [{severity, file,
     line, problem, reviewers}]}`, sorted by severity.
   - An `arbiter` stage without an agent still means the owner picks.
+- **Analysis** (command 07): `analysisTemplate()` turns an Analysis configuration into stages:
+  `collect` (only when there is something to collect) → `analyst` × N in parallel → Arbiter report.
+  - `collect` writes the artifacts `logs.md` (the tail of each log source) and `audit.md` (the project's dependency
+    audit), both through `log-sources.js`. They go into the analysts' prompts and the Arbiter's input; a read-only
+    Claude can't read files outside its worktree.
+  - Log sources are parsed into an argv. Only files, `journalctl` (without its write options), `pm2 logs --nostream`
+    and `docker logs` are allowed; follow flags are dropped.
+  - The report also writes `findings.json`. The Report tab exports it as Markdown with `reportMarkdown()`.
 - **Loops**: `onFail: { goto, prompt, maxLoops }`. Failing tests send only the failing candidates back,
   into their own sessions. After `maxLoops` such a candidate drops out. If none is left, the owner decides.
 
