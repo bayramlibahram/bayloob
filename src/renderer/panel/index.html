@@ -158,6 +158,7 @@
   .empty.small { padding: 12px 0; text-align: left; display: flex; align-items: center; gap: 10px; }
   .empty.small .ei { width: 30px; height: 30px; margin: 0; border-radius: 9px; flex: none; }
   .empty.small .ei .i { width: 15px; height: 15px; }
+  .empty .btn { display: inline-flex; margin-top: 12px; padding: 6px 12px; font-size: 12.5px; }
 
   /* detail */
   .detailcol { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
@@ -548,7 +549,9 @@
     wsPickAgent: 'Select an AI agent to open its folder', wsNoFolder: "This agent's folder isn't known", wsOpen: "Open the selected agent's folder",
     focusNoExt: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows', focusNoWindows: 'This app has no open windows',
     noActivity: 'No activity yet', noActivityHint: 'Windows opened, focus changes and new tabs show up here',
-    noMatchHint: 'Try another word, or clear the search (Esc)',
+    noMatchHint: 'Try another word, or clear the search (Esc)', clearSearch: 'Clear search',
+    noContainers: 'No containers', noContainersHint: 'docker run or docker compose up starts one — it shows up here',
+    emptyAction: { newTask: 'New task…', ask: 'Ask Bayloob', launch: 'Launch an app' },
     countTip: {
       inbox: n => `${n} waiting for you`, tasks: n => `${n} tasks`,
       overview: n => `${n} running apps and agents`, agents: n => `${n} agent sessions`, browsers: n => `${n} browsers running`,
@@ -585,8 +588,11 @@
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const FINISHED_RECENT_MS = 10 * 60 * 1000;
   const RESUMABLE = new Set(['claude', 'codex']); // agents Bayloob can continue in tmux (--resume / resume)
-  const emptyHtml = (icon, line, hint, size = '') =>
-    `<div class="empty ${size}"><span class="ei">${icon || ''}</span><span><b>${line}</b><small>${hint}</small></span></div>`;
+  // action: { label, act } → a button with data-empty="<act>" (handled in the list's click handler)
+  const emptyHtml = (icon, line, hint, size = '', action = null) =>
+    `<div class="empty ${size}"><span class="ei">${icon || ''}</span><span><b>${line}</b><small>${hint}</small>${action ? `<button type="button" class="btn" data-empty="${action.act}">${action.label}</button>` : ''}</span></div>`;
+  // What the empty list of each section offers to do
+  const EMPTY_ACTION = { tasks: 'newTask', overview: 'ask', agents: 'ask', browsers: 'launch', ides: 'launch', applications: 'launch' };
   const HISTORY_MAX = 30;
   const COOL_MS = 3000; // like the pill: Allow waits this long on a request that resembles a denied one, or after rapid approvals
   // Prompt shortcuts: "/" in the agent's prompt box; the text goes into the box, to edit or send
@@ -966,8 +972,9 @@
       const items = this.#visible();
       if (!items.length) {
         this.el.rows.innerHTML = this.query
-          ? emptyHtml(ICONS.search, T.noMatch(esc(this.query)), T.noMatchHint)
-          : emptyHtml(ICONS[this.section], T.emptyIn[this.section], T.emptyHint[this.section]);
+          ? emptyHtml(ICONS.search, T.noMatch(esc(this.query)), T.noMatchHint, '', { label: T.clearSearch, act: 'clear' })
+          : emptyHtml(ICONS[this.section], T.emptyIn[this.section], T.emptyHint[this.section], '',
+            EMPTY_ACTION[this.section] && { label: T.emptyAction[EMPTY_ACTION[this.section]], act: EMPTY_ACTION[this.section] });
         return;
       }
       const sel = this.current?.key;
@@ -1028,7 +1035,7 @@
       if (!this.launchable) { this.el.rows.innerHTML = stateHtml({ kind: 'loading', line: T.loading }); return; }
       const q = this.query.trim().toLowerCase();
       const list = this.launchable.filter(a => !q || a.name.toLowerCase().includes(q)).slice(0, 80);
-      if (!list.length) { this.el.rows.innerHTML = `<div class="empty">${T.noMatch(esc(this.query))}</div>`; return; }
+      if (!list.length) { this.el.rows.innerHTML = emptyHtml(ICONS.search, T.noMatch(esc(this.query)), T.noMatchHint, '', { label: T.clearSearch, act: 'clear' }); return; }
       this.el.rows.innerHTML = list.map(a => `
         <div class="row" data-launch="${esc(a.id)}">
           ${iconHtml({ kind: 'app', data: a })}
@@ -1256,7 +1263,7 @@
           <div class="tile">${ICONS.play}${running} running</div>
           <div class="tile">${unhealthy ? ICONS.restart : ICONS.check}${unhealthy ? T.unhealthyN(unhealthy) : T.allHealthy}</div>
         </div>
-        <h3>${T.containers}</h3><div class="items">${rows}</div>
+        <h3>${T.containers}</h3>${rows ? `<div class="items">${rows}</div>` : emptyHtml(ICONS.box, T.noContainers, T.noContainersHint, 'small')}
         ${logs}
         <h3>${T.recent}</h3>${this.#history(a.history)}`;
     }
@@ -1886,6 +1893,11 @@
       });
       this.el.rows.addEventListener('click', async e => {
         if (e.target.closest('[data-retry-launch]')) { await this.#loadLaunchable(); return this.render(); }
+        const empty = e.target.closest('[data-empty]')?.dataset.empty;
+        if (empty === 'clear') { this.query = ''; this.el.search.value = ''; this.render(); return this.el.search.focus(); }
+        if (empty === 'newTask') { return this.api?.newSession(); }
+        if (empty === 'ask') { return this.el.askText.focus(); }
+        if (empty === 'launch') { return this.#toggleLaunch(); }
         const launch = e.target.closest('[data-launch]');
         if (launch) {
           const app = this.launchable?.find(a => a.id === launch.dataset.launch);

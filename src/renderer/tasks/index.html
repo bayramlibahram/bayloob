@@ -372,7 +372,8 @@
     diff: 'Diff', review: 'Review', status2: 'Status', findings: n => n ? `${n} finding${n === 1 ? '' : 's'}` : 'no findings', files: n => `${n} file${n === 1 ? '' : 's'}`,
     out: 'Out', active: 'In the race', winner: 'Chosen', mergedInto: (b, applied) => `Chosen · ${applied ? 'applied to' : 'merged into'} ${b}`, choose: 'Choose this one', chosen: 'Picked',
     answer: 'Builder’s answer', reviewText: 'Review', noOutput: 'No output yet',
-    loading: 'Loading…', noLog: 'Nothing logged yet', retry: 'Retry', noInstances: 'No agent has started yet',
+    loading: 'Loading…', noLog: 'Nothing logged yet', noLogHint: 'Every stage, agent and decision is written here as it happens.',
+    noSteps: 'The plan has no steps', noStepsHint: 'Nothing will run on the host. Stop the plan, or retry the task with a note.', retry: 'Retry', noInstances: 'No agent has started yet',
     loadFailed: name => `Couldn’t load ${name === '#log' ? 'the log' : name}`,
     gate: {
       approve: { approve: 'Approve', changes: 'Request changes', abort: 'Abort' },
@@ -797,6 +798,7 @@
     #runbook(t) {
       const rb = t.runbook;
       if (rb.status === 'unusable') { return `<div class="banner" style="--c:var(--waiting);margin:0">${ICON.warn}<span><b>${T.ops.over.unusable}</b><br>${esc(rb.error || '')}</span></div>`; }
+      if (!rb.steps.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noSteps}</b>${T.noStepsHint}</div>`; }
       const open = rb.status === 'open';
       const next = rb.steps.find(x => x.status !== 'done' && x.status !== 'skipped');
       const q = a => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`);
@@ -917,7 +919,7 @@
       const entries = this.#artifact(t.id, '#log');
       const loading = this.#loadState(t.id, '#log');
       if (loading) { return loading; }
-      if (!entries?.length) { return `<div class="empty">${T.noLog}</div>`; }
+      if (!entries?.length) { return `<div class="empty">${novi(MANAGER, 'l')}<b>${T.noLog}</b>${T.noLogHint}</div>`; }
       return `<ul class="timeline">${[...entries].reverse().map(e => {
         const text = (T.log[e.event] || (x => x.event.startsWith('gate:') ? `You: ${x.event.slice(5)}${x.candidate ? ` ${x.candidate}` : ''}${x.note ? ` — “${x.note}”` : ''}` : x.event))(e);
         const icon = e.actor === 'you' ? ICON.you : e.actor === 'agent' ? ICON.agent : ICON.engine;

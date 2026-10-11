@@ -242,6 +242,7 @@
   const TAB_KEY = 'bayloob.settings.tab';
   const H = {
     name: 'Name', alias: 'SSH alias (~/.ssh/config)', env: 'Environment', allow: 'Allowed commands — one pattern per line; * is one word, a final * the rest',
+    noHosts: 'No hosts yet. Operations tasks run their steps only on hosts listed here — add one below.',
     notes: 'Notes', test: 'Test connection', testing: 'Connecting…', remove: 'Remove', unknownAlias: 'not in your SSH config',
     testAsk: alias => `Test connects once: ssh -o BatchMode=yes ${alias} true — go on?`, ok: ms => `Connected (${ms} ms)`,
     allowPh: 'systemctl status *\njournalctl *\ndocker logs *',
@@ -402,6 +403,10 @@
       const list = document.getElementById('hostList');
       if (!list) { return; }
       const known = a => !this.aliases || this.aliases.includes(a);
+      if (!this.hosts.length) {
+        list.innerHTML = `<p class="none">${H.noHosts}</p>`;
+        return;
+      }
       list.innerHTML = this.hosts.map((h, i) => {
         const st = this.hostStatus[i];
         return `<div class="host${h.env === 'prod' ? ' prod' : ''}" data-host="${i}">
