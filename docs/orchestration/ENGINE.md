@@ -113,8 +113,9 @@ Start in the New task dialog for Pipeline, Best-of-N and the owner's templates. 
 validation (`templateIssues`, per stage) runs in the builder, on save and when a task starts.
 
 ## Not yet / limitations
-- Codex `-s read-only` does not hold with this machine's config (#34). The post-turn `git status` check catches
-  it and stops the task at a `violation` gate.
+- Read-only Codex runs with `--sandbox read-only --ask-for-approval never` (#34). With the default on-request
+  policy, a config with `approvals_reviewer = "auto_review"` approved the write. The post-turn `git status`
+  check stays as the backstop and stops the task at a `violation` gate.
 - After a restart, a turn that ended while Bayloob was down stays "running" until the session is gone. The Stop
   event was missed, and its answer isn't read back from the transcript yet.
 - Only `node_modules` is shared into worktrees. Other ecosystems (venv, vendor) need the builder to install.

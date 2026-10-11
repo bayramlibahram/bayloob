@@ -5,6 +5,9 @@
 // ls, grep, rg, wc. Verified on Claude Code 2.1.296: those run; Write, `touch`, `grep … > file` and
 // `rg … && touch` are denied (redirects and compound commands are checked part by part). Ends with "--"
 // because --allowedTools takes several values and would swallow the prompt.
+// Codex's readOnly also sets approvals to never: with the default on-request policy, a user config with
+// approvals_reviewer = "auto_review" approves the escalation and the write goes through (#34; checked on
+// codex-cli 0.162.1 with `codex exec`: on-request wrote the file, never blocked it).
 // resume: the argv that continues an existing conversation by id (checked with --help; null = unknown).
 // color: accent of the agent's raster mascot pack; svgColor: the same for the SVG mascot.
 // Keep in sync with AGENTS in index.html.
@@ -39,7 +42,7 @@ const AGENTS = {
     name: "Codex",
     bin: "codex",
     withPrompt: p => [p],
-    readOnly: ["--sandbox", "read-only"],
+    readOnly: ["--sandbox", "read-only", "--ask-for-approval", "never"],
     resume: id => ["resume", id],
     color: "#22b8cf",
     svgColor: "#3fd3b6",

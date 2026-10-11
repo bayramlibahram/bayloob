@@ -21,6 +21,8 @@ test("challengers start read-only and are told not to edit", () => {
     "codex",
     "--sandbox",
     "read-only",
+    "--ask-for-approval",
+    "never",
     "x",
   ]);
   assert.deepEqual(agentCommand("claude", "x"), ["claude", "x"]);
@@ -48,6 +50,8 @@ test("workflow read-only runs: Claude asks nothing (dontAsk) but may read the di
     "codex",
     "--sandbox",
     "read-only",
+    "--ask-for-approval",
+    "never",
     "x",
   ]);
 });
