@@ -565,8 +565,7 @@ node scripts/task-demo.js  # every workflow preset, an incident analysis and Ana
 
 ## 🗺 Next up
 
-Agent **discussions** (a debate stage, with a Discussion view) · minimize a window to the pill ·
-Windows and macOS.
+A **mother agent** that leads a task and hands out the work · Windows and macOS.
 
 <div align="center">
 <br>

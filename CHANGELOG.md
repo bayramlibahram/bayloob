@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-10-11
 
 ### Added
 - **Minimize to the pill** (orchestration 13): the Workspace window's Minimize shrinks it up toward the pill and
@@ -59,7 +59,20 @@
 - **Expand** in the Workspace window (the button in the detail's header, or Ctrl+Shift+E): the detail or an
   agent's console takes the list's place too.
 
+### Changed
+- **Prompt boxes** (the agent's box, Ask Bayloob, the launcher, New task):
+  - a chat-style composer: a round bar, **+** (attach) on the left, the response format as plain text, a round send;
+  - the agent's box gives the text the full width and grows; Ask Bayloob is a textarea (Enter goes on,
+    Shift+Enter a new line) and Esc while picking the agent keeps what you wrote;
+  - **drafts**: what you were writing (text, format, files, pasted text) comes back when you return to that agent,
+    or after a restart — files are checked again;
+  - a **large paste** (1 200+ characters or 20+ lines) becomes a chip: preview, put back in the box, or remove;
+  - Send says why it's disabled; the `/` menu filters by command or description; ↑ walks history from the start.
+
 ### Fixed
+- The whole test suite passes: the event server read its port when the file first loaded, so under `bun test`
+  eight tests (event server, hook, demo) talked to the wrong port.
+- **+** (attach) did nothing in the Workspace window: the file picker only opened over the popups.
 - The Workspace window at a large UI scale or its smallest size (orchestration 12):
   - the sidebar scrolls instead of running under the prompt box (it did even at 960 × 600 and 100 %);
   - the header stays on one line: "Workspace control", then the status text, give way; the window controls never
