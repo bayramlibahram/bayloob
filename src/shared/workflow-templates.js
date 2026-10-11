@@ -383,6 +383,14 @@
     "{{artifact:test-output}}"
   );
 
+  // A Design debate's review checks the change against what the discussion decided (not against your guess of it)
+  const DEBATE_REVIEW_PROMPT = lines(
+    REVIEW_PROMPT,
+    "",
+    "The design the discussion settled on — the change should follow it; say so if it doesn't, not if it does:",
+    "{{artifact:design.md}}"
+  );
+
   // Design debate: who's who in the discussion, in the order the agents were picked
   const DEBATE_ROLES = [
     "Architect",
@@ -690,7 +698,7 @@
           mode: "read-only",
           agents: [{ adapter: "codex", count: 1 }],
           perCandidate: true,
-          prompt: REVIEW_PROMPT,
+          prompt: DEBATE_REVIEW_PROMPT,
           artifact: "review.md",
           gate: "always",
         },

@@ -209,3 +209,9 @@ test("Lead + team: the planner leads (plans, reviews each part, sums up); the te
     false
   );
 });
+
+test("Design debate: the reviewer gets the design the discussion settled on", () => {
+  const { builtin } = require("../src/shared/workflow-templates");
+  const review = builtin("debate").stages.find(s => s.id === "review");
+  assert.match(review.prompt, /Try to break it[\s\S]*settled on[\s\S]*\{\{artifact:design\.md\}\}/);
+});
