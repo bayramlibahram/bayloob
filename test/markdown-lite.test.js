@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { renderMarkdown } = require("../src/renderer/shared/markdown-lite");
+const { renderMarkdown, plainMarkdown } = require("../src/renderer/shared/markdown-lite");
 
 test("everything is escaped; markup comes only from Markdown", () => {
   assert.equal(
@@ -54,4 +54,28 @@ test("nested lists stay inside their item, so numbering continues", () => {
     "<ol><li><b>#33</b>: next:<ul><li>commit</li><li>merge</li></ul></li><li><b>#26</b></li>" +
       "<li><b>#34 Codex <code>read-only</code> bug</b></li></ol>"
   );
+});
+
+test("plain text: a folded one-line message loses its markers, keeps its words", () => {
+  assert.equal(
+    plainMarkdown("- **Commit edildi:** - `41494a1`: popup crash in [overlay](https://x.y)"),
+    "Commit edildi: 41494a1: popup crash in overlay"
+  );
+  assert.equal(
+    plainMarkdown("## Done\n1. Fixed the *flaky* test\n2. ~~old~~ new"),
+    "Done Fixed the flaky test old new"
+  );
+  assert.equal(
+    plainMarkdown("> reviewing `a **b** c`\n```js\nx()\n```\n---"),
+    "reviewing a **b** c x()"
+  );
+});
+
+test("plain text: ordinary punctuation, snake_case and maths are left alone", () => {
+  assert.equal(
+    plainMarkdown("ran foo_bar_baz - 2 * 3 * 4 passed"),
+    "ran foo_bar_baz - 2 * 3 * 4 passed"
+  );
+  assert.equal(plainMarkdown(""), "");
+  assert.equal(plainMarkdown(null), "");
 });

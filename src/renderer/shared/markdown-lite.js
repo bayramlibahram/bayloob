@@ -121,6 +121,33 @@ function renderMarkdown(text) {
   return out.join("");
 }
 
+// The same Markdown as plain text, for one-line previews (the pill's session rows): markers dropped,
+// code and link text kept. Main already folds a message into one line, so a list that was split over
+// lines arrives as "Done: - one - two"; a marker right after a sentence or a colon is a list item too.
+const BLOCK_MARK = /^\s*(?:#{1,6}|>+|[-*+•]\s+\[[ xX]\]|[-*+•]|\d+[.)])\s+/;
+const FOLDED_MARK = /([:.;!?)])\s+(?:[-*+•]|\d+[.)]|#{1,6}|>)\s+(?=\S)/g;
+
+function plainMarkdown(text) {
+  const codes = [];
+  const lines = String(text ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/`([^`\n]+)`/g, (_, c) => `${codes.push(c) - 1}`)
+    .split("\n")
+    .filter(line => !FENCE.test(line) && !RULE.test(line))
+    .map(line => line.replace(BLOCK_MARK, ""));
+  return lines
+    .join(" ")
+    .replace(/!?\[([^\]\n]*)\]\([^)\s]*\)/g, "$1")
+    .replace(/(\*\*|__|~~)(?=\S)(.+?)\1/g, "$2")
+    .replace(/(^|[^\w*])\*(?=\S)([^*]+?)\*(?![\w*])/g, "$1$2")
+    .replace(/(^|[^\w])_(?=\S)([^_]+?)_(?!\w)/g, "$1$2")
+    .replace(FOLDED_MARK, "$1 ")
+    .replace(/^\s*(?:[-*+•]|\d+[.)]|#{1,6}|>)\s+/, "")
+    .replace(/(\d+)/g, (_, n) => codes[n])
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { renderMarkdown };
+  module.exports = { renderMarkdown, plainMarkdown };
 }
