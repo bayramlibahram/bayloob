@@ -1,6 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { overlayPosition, GNOME_TOP_BAR } = require("../src/main/windows/overlay-position");
+const {
+  overlayPosition,
+  GNOME_TOP_BAR,
+  clearOfPill,
+} = require("../src/main/windows/overlay-position");
 
 const screen = { bounds: { x: 1920, y: 480, width: 3440, height: 1440 } };
 
@@ -42,4 +46,21 @@ test("windows dropping from the top use the top bar the overlay learned", () => 
   rememberTopBar({ x: 0, y: 0, width: 1920, height: 40, visible: true });
   assert.deepEqual(belowTopBar(display, 1080, true), { x: 420, y: 40 });
   rememberTopBar(null);
+});
+
+test("a centred popup opens below the pill's cards, not under them", () => {
+  const work = { x: 0, y: 32, width: 1920, height: 1048 };
+  const pill = { x: 660, y: 32, width: 600, height: 260 }; // the pill with a done card open
+  const box = { x: 720, y: 220, width: 480, height: 460 };
+  assert.equal(clearOfPill(box, pill, work), 32 + 260 + 12);
+  // nothing known yet, or the pill is elsewhere: the wanted place stays
+  assert.equal(clearOfPill(box, null, work), 220);
+  assert.equal(clearOfPill({ ...box, x: 100 }, pill, work), 220);
+  // already below it
+  assert.equal(clearOfPill({ ...box, y: 400 }, pill, work), 400);
+  // never pushed off the bottom of the screen
+  assert.equal(
+    clearOfPill({ ...box, height: 700 }, { ...pill, height: 400 }, work),
+    32 + 1048 - 700
+  );
 });

@@ -1,12 +1,20 @@
 const { Notification } = require("electron");
 const { AGENTS } = require("../modules/agents/agents");
 
-/** Shows a desktop notification when a session starts waiting for approval or finishes. */
+/**
+ * Shows a desktop notification when a session starts waiting for approval or finishes — only while the
+ * pill isn't on screen: the pill has its own card for both, and the desktop's popup would cover it.
+ */
 class Notifier {
   #prev = new Map(); // session id -> last seen state
 
+  /** pillShown: () => true while the pill is on screen */
+  constructor({ pillShown = () => false } = {}) {
+    this.pillShown = pillShown;
+  }
+
   update(list) {
-    if (Notification.isSupported()) {
+    if (Notification.isSupported() && !this.pillShown()) {
       for (const s of list) {
         this.#notify(s, this.#prev.get(s.id));
       }

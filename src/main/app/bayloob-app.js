@@ -138,7 +138,8 @@ class BayloobApp {
   uploads = new UploadStore();
   settingsWindow = new SettingsWindow();
   server = new EventServer();
-  notifier = new Notifier();
+  // The pill shows its own card (and sound) for done / waiting: no second, desktop copy over it
+  notifier = new Notifier({ pillShown: () => !!this.overlay.win?.isVisible() });
   windows = new WindowService();
   extension = new GnomeExtension(EXTENSION_DIR);
   focuser = new TerminalFocuser(TOOLS_DIR, this.windows);
@@ -1297,6 +1298,12 @@ class BayloobApp {
         );
 
     // Overlay
+    // The pill's cards grow and shrink: centred popups (Settings, the launcher, New task) stay clear of them
+    this.overlay.onPillMove = () => {
+      for (const w of [this.settingsWindow, this.launcherWindow, this.newTask]) {
+        w.clearPill();
+      }
+    };
     ipcMain.on("pill-rect", (_e, rect) => this.overlay.fitShape(rect));
     ipcMain.on("mouse-over-ui", (_e, over) => {
       this.overlay.setMouseOver(over);

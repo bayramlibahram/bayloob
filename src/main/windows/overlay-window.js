@@ -1,7 +1,7 @@
 const { app, BrowserWindow, screen } = require("electron");
 const paths = require("../app/paths");
 const { overlayFocusOptions } = require("./overlay-focus");
-const { overlayPosition, rememberTopBar } = require("./overlay-position");
+const { overlayPosition, rememberTopBar, rememberPill } = require("./overlay-position");
 
 const IS_LINUX = process.platform === "linux";
 // Electron replaces XDG_CURRENT_DESKTOP for itself; the original value says whether this is GNOME
@@ -132,8 +132,15 @@ class OverlayWindow {
   }
 
   // Linux: resize the clickable/visible shape to the pill's bounds reported by the renderer
+  // Every platform: remember where the pill and its cards are, so popups open clear of them (onPillMove)
   fitShape(rect) {
-    if (!this.win || !IS_LINUX) {
+    if (!this.win) {
+      return;
+    }
+    const b = this.win.getBounds();
+    rememberPill({ x: b.x + rect.x, y: b.y + rect.y, width: rect.w, height: rect.h });
+    this.onPillMove?.();
+    if (!IS_LINUX) {
       return;
     }
     const pad = 2;

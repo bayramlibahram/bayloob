@@ -1,6 +1,6 @@
 const { BrowserWindow, dialog, screen } = require("electron");
 const paths = require("../app/paths");
-const { belowTopBar } = require("./overlay-position");
+const { belowTopBar, belowPill } = require("./overlay-position");
 const { uiScale } = require("./ui-scale");
 
 // Electron replaces XDG_CURRENT_DESKTOP for itself; the original value says whether this is GNOME
@@ -40,12 +40,25 @@ class PopupWindow {
       const { x, y } = belowTopBar(display, width, IS_GNOME);
       return { width, height, x, y: y + 6 };
     }
-    return {
+    const box = {
       width,
       height,
       x: Math.round(workArea.x + (workArea.width - width) / 2),
       y: Math.round(workArea.y + workArea.height * 0.18),
     };
+    return { ...box, y: belowPill(box, workArea) };
+  }
+
+  /** A centred popup moves down when the pill's cards grow over it (the pill stays on top of everything). */
+  clearPill() {
+    if (!this.visible || this.opts.placement !== "center") {
+      return;
+    }
+    const b = this.win.getBounds();
+    const y = belowPill(b, screen.getDisplayMatching(b).workArea);
+    if (y !== b.y) {
+      this.win.setPosition(b.x, y);
+    }
   }
 
   #create() {
@@ -94,6 +107,10 @@ class PopupWindow {
     }
     await this.#ready;
     this.win.webContents.send(`${this.opts.name}:show`, state);
+    if (!this.visible && this.opts.placement === "center") {
+      const { x, y } = this.#bounds();
+      this.win.setPosition(x, y); // the pill may have grown since the popup was made
+    }
     this.win.show();
     this.win.focus();
   }

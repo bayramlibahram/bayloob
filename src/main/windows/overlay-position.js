@@ -40,4 +40,41 @@ function belowTopBar(display, width, gnome) {
   return overlayPosition(display, knownTopBar, { width, gnome });
 }
 
-module.exports = { overlayPosition, belowTopBar, rememberTopBar, GNOME_TOP_BAR };
+// Where the pill (with its open cards) is on screen right now: { x, y, width, height } in screen pixels
+let knownPill = null;
+const rememberPill = rect => {
+  knownPill = rect || null;
+};
+const PILL_GAP = 12;
+
+/**
+ * The y for a popup that should open at `y` but must not hide under the pill (always on top, so it would
+ * cover the popup's header): pushed below the pill when they share columns, kept inside the work area.
+ * @param box  { x, y, width, height } the popup's wanted bounds
+ * @param pill { x, y, width, height } or null (nothing known yet)
+ */
+function clearOfPill(box, pill, workArea) {
+  if (!pill || box.x >= pill.x + pill.width || box.x + box.width <= pill.x) {
+    return box.y;
+  }
+  const below = pill.y + pill.height + PILL_GAP;
+  if (box.y >= below || box.y + box.height <= pill.y) {
+    return box.y;
+  }
+  return Math.max(box.y, Math.min(below, workArea.y + workArea.height - box.height));
+}
+
+/** clearOfPill() with the pill last reported by the overlay. */
+function belowPill(box, workArea) {
+  return clearOfPill(box, knownPill, workArea);
+}
+
+module.exports = {
+  overlayPosition,
+  belowTopBar,
+  rememberTopBar,
+  rememberPill,
+  clearOfPill,
+  belowPill,
+  GNOME_TOP_BAR,
+};
