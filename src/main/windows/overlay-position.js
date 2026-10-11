@@ -61,7 +61,8 @@ function clearOfPill(box, pill, workArea) {
   if (box.y >= below || box.y + box.height <= pill.y) {
     return box.y;
   }
-  return Math.max(box.y, Math.min(below, workArea.y + workArea.height - box.height));
+  // Whole pixels: the pill's rect comes from the page in fractional CSS pixels, setPosition wants integers
+  return Math.round(Math.max(box.y, Math.min(below, workArea.y + workArea.height - box.height)));
 }
 
 /** clearOfPill() with the pill last reported by the overlay. */

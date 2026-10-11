@@ -64,3 +64,14 @@ test("a centred popup opens below the pill's cards, not under them", () => {
     32 + 1048 - 700
   );
 });
+
+test("the popup's new y is a whole pixel even when the pill's rect isn't", () => {
+  const work = { x: 0, y: 32, width: 1920, height: 1048 };
+  const y = clearOfPill(
+    { x: 720, y: 220, width: 480, height: 460 },
+    { x: 660.5, y: 32.25, width: 600, height: 259.6 },
+    work
+  );
+  assert.equal(y, Math.round(32.25 + 259.6 + 12));
+  assert.ok(Number.isInteger(y));
+});

@@ -1301,7 +1301,11 @@ class BayloobApp {
     // The pill's cards grow and shrink: centred popups (Settings, the launcher, New task) stay clear of them
     this.overlay.onPillMove = () => {
       for (const w of [this.settingsWindow, this.launcherWindow, this.newTask]) {
-        w.clearPill();
+        try {
+          w.clearPill();
+        } catch (err) {
+          console.error("[bayloob] moving a popup clear of the pill failed:", err.message); // never an error dialog
+        }
       }
     };
     ipcMain.on("pill-rect", (_e, rect) => this.overlay.fitShape(rect));
