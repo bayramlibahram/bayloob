@@ -271,6 +271,15 @@ class BayloobApp {
       title: "Bayloob · Workspace",
       query: { mode: "window" },
     });
+    // A task's discussion in a wide window of its own (14): the Tasks page showing only that discussion
+    this.discussionWindow = new AppWindow({
+      name: "tasks",
+      file: path.join(data, "discussion-window.json"),
+      title: "Bayloob · Discussion",
+      query: { mode: "discussion" },
+      size: { width: 1440, height: 900 },
+      min: { width: 1100, height: 700 },
+    });
     // Minimize (and close, by default) sends it to the pill, which shows that it's there
     this.workspaceWindow.onPill = minimized => this.overlay.send("workspace", { minimized });
     this.workspaceWindow.onCloseRequest = () => {
@@ -513,6 +522,7 @@ class BayloobApp {
         this.settingsWindow,
         this.launcherWindow,
         this.workspaceWindow,
+        this.discussionWindow,
       ]) {
         w?.applyScale();
       }
@@ -929,13 +939,25 @@ class BayloobApp {
         id: t.id,
         title: t.title,
         project: t.project.name,
-        stage: t.template.stages[t.stage]?.title || "",
+        stage: this.#stageLine(t),
         stageNo: t.stage + 1,
         stages: t.template.stages.length,
         live: t.instances.filter(i => i.status === "starting" || i.status === "running").length,
         queued: t.instances.filter(i => i.status === "queued").length,
         needsYou: t.status === "needs-you",
       }));
+  }
+
+  // The pill's line for a task's stage: a discussion says how far it is ("Discussing · Round 2/3 · 1 of 2 agree")
+  #stageLine(t) {
+    const st = t.template.stages[t.stage];
+    const d = t.discussion;
+    if (st?.role !== "discussion" || d?.stage !== st.id) {
+      return st?.title || "";
+    }
+    const rounds = Math.min(10, (Number(st.rounds) || 3) + (d.extraRounds || 0));
+    const agree = d.agreement?.of ? ` · ${d.agreement.agree} of ${d.agreement.of} agree` : "";
+    return `Discussing · Round ${d.round}/${rounds}${agree}`;
   }
 
   #tasksOpen = null; // { focus, builder } for the Tasks page the next time it's shown
@@ -967,8 +989,21 @@ class BayloobApp {
     };
   }
 
-  // Live updates for the Tasks page embedded in the Workspace window
+  /** A task's discussion in its own window (back from the pill as it was, if it's that task). */
+  async openDiscussion(taskId) {
+    if (this.discussionWindow.minimized && this.#discussionTask === taskId) {
+      this.discussionWindow.restore();
+      return;
+    }
+    this.#discussionTask = taskId;
+    await this.discussionWindow.show(await this.#tasksState({ focus: taskId }));
+  }
+
+  #discussionTask = null;
+
+  // Live updates for the Tasks page embedded in the Workspace window (and the discussion window)
   #tasksSend(channel, payload) {
+    this.discussionWindow?.send(channel, payload);
     this.workspaceWindow?.embedded("tasks")?.send(channel, payload);
   }
 
@@ -1820,7 +1855,19 @@ class BayloobApp {
       this.launcher.attach(inst.handle.name);
       return { ok: true };
     });
-    ipcMain.on("open-tasks", (_e, id) => this.openTasks(id ? String(id) : null));
+    // The pill's task rows: a discussion minimized to the pill comes back; anything else opens Tasks
+    ipcMain.on("open-tasks", (_e, id) =>
+      id && this.discussionWindow?.minimized && this.#discussionTask === String(id)
+        ? this.openDiscussion(String(id))
+        : this.openTasks(id ? String(id) : null)
+    );
+    ipcMain.on("tasks:open-discussion", (_e, id) => this.openDiscussion(String(id)));
+    // The discussion window's own controls (minimize goes to the pill, like the Workspace window)
+    ipcMain.on("tasks:window", (e, action) => {
+      if (e.sender === this.discussionWindow?.win?.webContents) {
+        this.discussionWindow.control(String(action));
+      }
+    });
     // Ctrl + / Ctrl − / Ctrl 0 in any workspace window: one step of the UI scale (0 = back to 100 %)
     ipcMain.on("ui-scale", (_e, step) => {
       this.settings.save({ uiScale: stepScale(uiScale.factor, Math.sign(Number(step) || 0)) });

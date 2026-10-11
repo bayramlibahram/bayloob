@@ -265,6 +265,9 @@
   .actions .confirm { color: var(--waiting); font-weight: 600; }
   .rowacts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .rowacts .confirm { color: var(--waiting); font-weight: 600; font-size: 12px; }
+  /* The discussion window (?mode=discussion): the header keeps the logo and the window controls only */
+  .discussion-mode .whead .wnav, .discussion-mode #newTask, .discussion-mode .dhead .crumb, .discussion-mode .tabs[role=tablist] { display: none; }
+  .discussion-mode .disc { grid-template-columns: 240px minmax(0, 1fr) 360px; }
   /* Embedded in the Workspace window (?embedded=1): its header already has the logo, usage and window controls */
   .embedded .whead { -webkit-app-region: no-drag; height: 46px; padding-left: 12px; }
   .embedded .whead .logo, .embedded .whead > b, .embedded .whead .sep, .embedded .usage, .embedded .wctl { display: none; }
@@ -496,6 +499,7 @@
       pin: 'Pin', unpin: 'Unpin', send: 'Send', ask: 'Ask', pause: 'Pause after this round', unpause: 'Don’t pause', end: 'End & decide',
       composerPh: 'Write to everyone, or pick one above to ask a question — it goes into the next turn', keys: 'Ctrl+Enter send',
       search: 'Search the thread…', all: 'All participants', showAll: 'Show all', save: 'Save thread.md',
+      window: 'Open in a window', windowTip: 'The discussion in a wide window of its own — minimize sends it to the pill',
       agreement: 'Agreement', matrixHead: 'Row supports column', supports: 'supports', opposes: 'opposes', neutral: 'neutral',
       proposals: 'Proposals', noProposals: 'No proposal yet', support: n => `${n} support`, by: (who, r) => `by ${who}, round ${r}`,
       open: 'Open points', none: 'None', decision: 'Decision', decidedBy: who => `Written by ${who === 'you' ? 'you' : who}`,
@@ -577,6 +581,9 @@
     agent: I('<rect x="4" y="7" width="16" height="11" rx="4"/><path d="M9 12h.01M15 12h.01"/>'),
   };
   if (new URLSearchParams(location.search).get('embedded') === '1') { document.documentElement.classList.add('embedded'); }
+  // The discussion window (?mode=discussion): one task's discussion, full size — no board, no other tabs
+  const DISCUSSION_MODE = new URLSearchParams(location.search).get('mode') === 'discussion';
+  if (DISCUSSION_MODE) { document.documentElement.classList.add('discussion-mode'); }
   const COLS = ['queued', 'running', 'needs', 'review', 'done', 'failed'];
   const PATTERN = { pipeline: 'Pipeline', bestofn: 'Best-of-N', split: 'Split work', board: 'Review board' };
   const LIVE = new Set(['starting', 'running']);
@@ -813,6 +820,7 @@
       const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ...(t.runbook ? [['runbook', t.runbook.steps.length || '']] : []), ['reviews', t.instances.filter(i => (i.role === 'reviewer' || i.role === 'analyst') && i.status === 'done').length || ''], ['log']]
         : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['decision'], ['tests'], ['log']];
       if (t.template.stages.some(s => s.role === 'discussion')) { tabs.splice(1, 0, ['discussion', t.discussion?.messages?.length || '']); }
+      if (DISCUSSION_MODE) { this.tab = 'discussion'; }
       if (!tabs.some(([k]) => k === this.tab)) { this.tab = 'overview'; }
       const pane = { discussion: () => this.#discussion(t), overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), runbook: () => this.#runbook(t), log: () => this.#log(t) }[this.tab]();
       return `<div class="dhead"><div class="t">
@@ -966,7 +974,8 @@
         <div class="dtools"><div class="seg" role="group" aria-label="View">${Object.entries(D.views).map(([k, n]) => `<button type="button" data-disc-view="${k}" aria-pressed="${this.disc.view === k}">${n}</button>`).join('')}</div>
           <input data-disc-q value="${esc(this.disc.q)}" placeholder="${esc(D.search)}" aria-label="${esc(D.search)}">
           ${this.disc.filter ? `<button type="button" class="btn ghost sm" data-disc-filter="">${D.showAll}</button>` : ''}
-          <button type="button" class="btn ghost sm" data-disc-save style="margin-left:auto">${D.save}</button></div>
+          <button type="button" class="btn ghost sm" data-disc-save style="margin-left:auto">${D.save}</button>
+          ${DISCUSSION_MODE || !this.api.openDiscussion ? '' : `<button type="button" class="btn sm" data-disc-window title="${esc(D.windowTip)}">${D.window}</button>`}</div>
         ${view}${composer}</section>`;
 
       // the summary: who backs whom now, the live proposals, open points, and the decision
@@ -1314,6 +1323,7 @@
     }
 
     #preferredTab(task) {
+      if (DISCUSSION_MODE) { return 'discussion'; }
       if (task?.gate?.kind === 'runbook') { return 'runbook'; }
       if (['discussion', 'discussion-end'].includes(task?.gate?.kind) || task?.template.stages[task.stage]?.role === 'discussion') { return 'discussion'; }
       if (task?.gate?.kind === 'decision' || (task?.gate?.kind === 'merge' && task.candidates.filter(x => x.status === 'active').length > 1)) { return 'decision'; }
@@ -1346,6 +1356,7 @@
 
     // Back to the board, with focus on the card of the task that was open
     #closeTask() {
+      if (DISCUSSION_MODE) { return; } // the discussion window shows one task; it has no board to go back to
       const id = this.open;
       this.view = 'board';
       this.open = null;
@@ -1449,6 +1460,7 @@
         const df = e.target.closest('[data-disc-filter]');
         if (df) { this.disc.filter = df.dataset.discFilter && this.disc.filter !== df.dataset.discFilter ? df.dataset.discFilter : null; return this.render(); }
         if (t && e.target.closest('[data-disc-save]')) { return this.#saveThread(t); }
+        if (t && e.target.closest('[data-disc-window]')) { return this.api.openDiscussion(t.id); }
         const dp = e.target.closest('[data-disc-pin]');
         if (t && dp) { return this.#discussionAct(t, 'pin', { message: dp.dataset.discPin, pinned: dp.getAttribute('aria-pressed') !== 'true' }); }
         const da = e.target.closest('[data-disc-act]');

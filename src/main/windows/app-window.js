@@ -25,8 +25,9 @@ class AppWindow {
    * file   where the bounds are kept (JSON)
    * query  added to the page's URL (e.g. { mode: 'window' })
    */
-  constructor({ name, file, title, query = null }) {
-    Object.assign(this, { name, file, title, query });
+  /** size / min: { width, height } in CSS pixels (defaults: DEFAULT and MIN above) */
+  constructor({ name, file, title, query = null, size = DEFAULT, min = MIN }) {
+    Object.assign(this, { name, file, title, query, size, min });
   }
 
   get visible() {
@@ -146,8 +147,8 @@ class AppWindow {
     ).workArea;
     const z = Math.max(1, uiScale.factor);
     return {
-      width: Math.min(Math.round(MIN.width * z), Math.round(area.width * 0.9)),
-      height: Math.min(Math.round(MIN.height * z), Math.round(area.height * 0.9)),
+      width: Math.min(Math.round(this.min.width * z), Math.round(area.width * 0.9)),
+      height: Math.min(Math.round(this.min.height * z), Math.round(area.height * 0.9)),
     };
   }
 
@@ -256,15 +257,15 @@ class AppWindow {
       return {
         bounds: {
           ...b,
-          width: Math.max(b.width, MIN.width),
-          height: Math.max(b.height, MIN.height),
+          width: Math.max(b.width, this.min.width),
+          height: Math.max(b.height, this.min.height),
         },
         maximized: !!saved.maximized,
       };
     }
     const { workArea: w } = screen.getPrimaryDisplay();
-    const width = Math.min(DEFAULT.width, w.width);
-    const height = Math.min(DEFAULT.height, w.height);
+    const width = Math.min(this.size.width, w.width);
+    const height = Math.min(this.size.height, w.height);
     return {
       bounds: {
         width,
