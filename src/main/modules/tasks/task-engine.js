@@ -1145,13 +1145,7 @@ class TaskEngine extends EventEmitter {
       this.#openGate(task, "discussion", `Paused after round ${d.round}`, this.#discussGate(task));
       return;
     }
-    const latest = {};
-    for (const m of d.messages) {
-      if (m.reply && d.active.includes(m.from)) {
-        latest[m.from] = m.reply;
-      }
-    }
-    d.agreement = Discussion.consensus(latest, d.active, this.arbiterThreshold());
+    d.agreement = this.#discussAgreement(d);
     const why = Discussion.stopReason({
       format: d.format,
       stop: { ...(st.stop || {}), maxRounds: this.#discussRounds(task, st) },
@@ -1343,9 +1337,21 @@ class TaskEngine extends EventEmitter {
   }
 
   // It stopped: the decider reads the thread, or the owner decides
+  // Where they stand now: each active participant's latest reply
+  #discussAgreement(d) {
+    const latest = {};
+    for (const m of d.messages) {
+      if (m.reply && d.active.includes(m.from)) {
+        latest[m.from] = m.reply;
+      }
+    }
+    return Discussion.consensus(latest, d.active, this.arbiterThreshold());
+  }
+
   async #discussEnd(task, st, why) {
     const d = task.discussion;
     d.ended = why;
+    d.agreement = this.#discussAgreement(d); // ended mid-round (by you): the replies since count too
     d.queue = [];
     const summary = Discussion.summary({
       participants: d.participants,

@@ -1772,3 +1772,23 @@ test("Discussion: End while the next turn only waits for a slot drops that turn 
   assert.equal(task.gate.kind, "discussion-end");
   assert.match(task.gate.title, /you ended it/);
 });
+
+test("Discussion: ended by you mid-round, the agreement counts the replies since the last round ended", async () => {
+  const env = setup();
+  const task = await startTalk(env, { rounds: 3 });
+  await speak(env, task, "claude-1", say("propose"));
+  await speak(env, task, "codex-1", say("propose", [], 0.8, "Offset"));
+  // round 2: claude comes round to codex's proposal, then you end it before codex speaks
+  await speak(env, task, "claude-1", say("support", ["codex-1"]));
+  await env.engine.discussionAction(task.id, "end");
+  const codex = task.instances.find(i => i.speaker === "codex-1" && i.status === "running");
+  await speak(env, task, "codex-1", say("revise", [], 0.9, "Offset, capped"));
+  assert.equal(task.gate.kind, "discussion-end");
+  assert.ok(codex);
+  assert.equal(task.gate.agreement.proposer, "codex-1");
+  await decide(env, task, "adopt");
+  assert.match(
+    env.store.readArtifact(task.id, "decision.md"),
+    /Codex · Skeptic's proposal \(2 of 2 agree\)/
+  );
+});
