@@ -565,7 +565,7 @@ node scripts/task-demo.js  # every workflow preset, an incident analysis and Ana
 
 ## 🗺 Next up
 
-A **mother agent** that leads a task and hands out the work · Windows and macOS.
+A **mother agent** that starts its own workers (with a safety design first) · Windows and macOS.
 
 <div align="center">
 <br>

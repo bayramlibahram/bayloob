@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 — 2026-10-12
 
 ### Added
 - **Ollama: a local model as the Arbiter** (or a voice in a discussion). Settings → Agents → Ollama: pick a model
@@ -16,6 +16,21 @@
   work; the team builds one part each in its own worktree; the lead reviews every part (read-only) and changes go
   back to that part's builder; the parts are integrated — that branch is the lead's, so it fixes what fails the
   tests — and the lead writes the summary you read before you merge.
+
+### Fixed
+Found by running tasks with real agents (Claude Code, Codex, Gemini CLI, Ollama):
+- **A task no longer waits forever on an agent that isn't signed in.** Gemini CLI sat on its login screen and the
+  task said nothing; now the session is stopped and the stage says "<agent> isn't signed in", with its screen and
+  how to fix it.
+- **A discussion no longer hangs on a lost turn.** A participant whose session crashed (or who can't sign in) is
+  skipped — go on, end, or stop; if the decider is lost, you decide (adopt the leading proposal, or another round).
+- **End & decide works while the next turn waits for a slot** — that turn is dropped and the discussion ends.
+- **Codex turns no longer wait for themselves.** Codex runs its turns in a shared daemon whose hook events can name
+  a long-closed tmux pane; those rows filled Codex's slots. A row whose pane is gone no longer counts.
+- **Ending a discussion mid-round** adopts the proposal they agree on now, not the one from the last full round.
+- **Design debate's reviewer** checks the change against the decided design (it flagged the agreed API as
+  "unexpected").
+- **Lead + team's summary** has the test results (it said the tests hadn't run).
 
 ## 0.8.0 — 2026-10-11
 
