@@ -88,3 +88,19 @@ test("soundToggles keeps only sound names with true/false; saving the same map i
   assert.deepEqual(s.save({ soundToggles: { tool: true, done: false } }), []);
   fs.rmSync(dir, { recursive: true });
 });
+
+test("agents and limits: defaults, clamping, unknown agents dropped", () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bayloob-set-")), "settings.json");
+  const s = new Settings(file);
+  assert.deepEqual(s.get("agents").claude, { enabled: true, max: 4, notes: "" });
+  assert.deepEqual(s.get("limits"), { total: 6, perProject: 4, minFreeGB: 2 });
+  s.save({
+    agents: { codex: { enabled: false, max: 99, notes: "plan" }, evil: { max: 3 } },
+    limits: { total: 0, perProject: "x" },
+  });
+  const again = new Settings(file);
+  assert.deepEqual(again.get("agents").codex, { enabled: false, max: 16, notes: "plan" });
+  assert.equal(again.get("agents").evil, undefined);
+  assert.equal(again.get("agents").gemini.max, 2);
+  assert.deepEqual(again.get("limits"), { total: 1, perProject: 4, minFreeGB: 2 });
+});

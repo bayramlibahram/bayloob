@@ -33,3 +33,29 @@ test("changes in a real repo count edits and new files; outside a repo it's null
   assert.equal(await new Git().changes(os.tmpdir()), null);
   fs.rmSync(dir, { recursive: true });
 });
+
+test("each task instance gets its own worktree on bayloob/<task>/<step>-<n>", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bayloob-task-wt-"));
+  const repo = path.join(dir, "shop");
+  fs.mkdirSync(repo);
+  const run = (...args) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  run("init", "-q", "-b", "main");
+  fs.writeFileSync(path.join(repo, "a.txt"), "1");
+  run("add", ".");
+  run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+  const git = new Git();
+  const task = "20261011-0930-a1b2";
+  const one = await git.addTaskWorktree(repo, { task, step: "build", n: 1 });
+  const two = await git.addTaskWorktree(repo, { task, step: "build", n: 2, base: "main" });
+  assert.equal(path.basename(one), `shop-${task}-build-1`);
+  assert.equal(await git.branch(two), `bayloob/${task}/build-2`);
+  await assert.rejects(git.addTaskWorktree(repo, { task, step: "build", n: 1 }), /Already exists/);
+  await assert.rejects(
+    git.addTaskWorktree(repo, { task: "../x", step: "build", n: 1 }),
+    /Not a usable/
+  );
+  await assert.rejects(
+    git.addTaskWorktree(repo, { task, step: "b", n: 3, base: "main..evil" }),
+    /Not a usable base/
+  );
+});

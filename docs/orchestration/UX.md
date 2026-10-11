@@ -166,7 +166,24 @@ straight to a screen: `index.html#s=detail-decision&t=light`. Re-shoot with `pro
 Demo data shows Gemini CLI as installed so the Arbiter examples work. On this machine it is not (see AUDIT.md §2).
 Token contrast (text on surface): ≥ 5.5:1 in both themes; white on primary 5.5:1 dark, 6.2:1 light.
 
-## 8. Open points for review
+## 8. Implementation notes (command 02) — real dialog vs prototype
+
+Screenshots of the real dialog, both themes: [`new-task/`](new-task/) (`scripts/shoot-new-task.js`).
+
+| Prototype | Real dialog | Why |
+|---|---|---|
+| Dialog over the workspace | Its own centred window (like Ask Bayloob) | Opens from the pill, tray and shortcut too, not only the panel |
+| Gemini CLI installed | Agents not installed are shown greyed with "Not installed" | Real detection |
+| Capacity from Settings → Agents | Fixed defaults (Claude Code 4, Codex 2, Gemini CLI 2, Grok 1); "free" = max − running sessions | Settings come with command 03 |
+| "Customize stages…" opens the builder | Disabled, tooltip "Available after step 04" | Builder is command 04 |
+| Start on Workflow / Analysis | Disabled, tooltip "Available after step 03/04 — the draft is saved" | No engine yet |
+| Log sources with a host chip | Plain commands | Hosts come with command 08 |
+| "Analyze files" preset | Not offered | Command 11 |
+| — | Single agent keeps the attach / paste-clipboard tools, terminal choice and worktree switch of the old dialog | Same behaviour as before |
+| — | A dialog opened from a voice prompt, a copied error or a "move to worktree" preset starts at ③ Single agent | They are prompts for one agent |
+| — | Pipeline and Split work also pick a Reviewer; Review board has reviewers instead of builders | Spec §3.2 patterns |
+
+## 9. Open points for review
 
 1. Single agent keeps today's 3-step launcher as well (pill voice → "Review & send" still opens it). Should the new dialog replace it there too, or only from the Ask Bayloob bar and `Ctrl+K`?
 2. Task detail as its own window (spec §6.4) — prototype shows it inside the workspace. Separate window later (command 12/13)?

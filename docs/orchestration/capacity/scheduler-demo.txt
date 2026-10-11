@@ -1,0 +1,58 @@
+t+ 0.0s requests: T1 shop Best-of-N claude×3 + codex×1 · T2 shop pipeline claude×2 · T3 api analysis codex×1 + gemini×2
+t+ 0.0s ▶ codex#i7 (T3, api) — this one will hit a rate limit
+t+ 0.0s ▶ claude#i1 (T1, shop)
+t+ 0.0s ▶ claude#i2 (T1, shop)
+t+ 0.0s ▶ claude#i3 (T1, shop)
+t+ 0.0s ▶ codex#i4 (T1, shop)
+t+ 0.0s ▶ gemini#i8 (T3, api)
+t+ 0.0s   usage: claude ●●●○ 3/4 +2 · codex ●● 2/2 · gemini ●○ 1/2 +1
+         held: 4/4 running in this project | 6/6 agents running
+t+ 0.5s   usage: claude ●●●○ 3/4 +2 · codex ●● 2/2 · gemini ●○ 1/2 +1
+         held: 6/6 agents running
+t+ 1.0s   usage: claude ●●●○ 3/4 +2 · codex ●● 2/2 · gemini ●○ 1/2 +1
+         held: 6/6 agents running
+t+ 1.5s   usage: claude ●●●○ 3/4 +2 · codex ●● 2/2 · gemini ●○ 1/2 +1
+         held: 6/6 agents running
+t+ 2.0s   usage: claude ●●●○ 3/4 +2 · codex ●● 2/2 · gemini ●○ 1/2 +1
+         held: 6/6 agents running
+t+ 2.0s ⚠ codex rate-limited — backing off until t+3.5s, then it runs again once (no retry loop)
+t+ 2.0s ▶ gemini#i9 (T3, api)
+t+ 2.0s   usage: claude ●●●○ 3/4 +2 · codex ●○ 1/2 +1 · gemini ●● 2/2
+         held: throttled until 2026-10-10T20:09:07.160Z | 4/4 running in this project
+t+ 2.0s ■ codex#i4 (T1) released: done
+t+ 2.0s ▶ claude#i5 (T2, shop)
+t+ 2.0s   usage: claude ●●●● 4/4 +1 · codex ○○ 0/2 +1 · gemini ●● 2/2
+         held: throttled until 2026-10-10T20:09:07.160Z | claude 4/4 running
+t+ 2.5s   usage: claude ●●●● 4/4 +1 · codex ○○ 0/2 +1 · gemini ●● 2/2
+         held: throttled until 2026-10-10T20:09:07.160Z | claude 4/4 running
+t+ 2.5s ■ gemini#i8 (T3) released: done
+t+ 2.5s   usage: claude ●●●● 4/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: throttled until 2026-10-10T20:09:07.160Z | claude 4/4 running
+t+ 2.6s (memory drops to 1 GB free for 2 s)
+t+ 3.0s   usage: claude ●●●● 4/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: throttled until 2026-10-10T20:09:07.160Z | claude 4/4 running
+t+ 3.0s ■ claude#i1 (T1) released: done
+t+ 3.0s   usage: claude ●●●○ 3/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: throttled until 2026-10-10T20:09:07.160Z | low memory: 1.0 GB free, 2 GB needed
+t+ 3.0s ■ claude#i2 (T1) released: done
+t+ 3.0s   usage: claude ●●○○ 2/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: throttled until 2026-10-10T20:09:07.160Z | low memory: 1.0 GB free, 2 GB needed
+t+ 3.0s ■ claude#i3 (T1) released: done
+t+ 3.0s   usage: claude ●○○○ 1/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: throttled until 2026-10-10T20:09:07.160Z | low memory: 1.0 GB free, 2 GB needed
+t+ 3.5s   usage: claude ●○○○ 1/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: throttled until 2026-10-10T20:09:07.160Z | low memory: 1.0 GB free, 2 GB needed
+t+ 4.0s   usage: claude ●○○○ 1/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: low memory: 1.0 GB free, 2 GB needed
+t+ 4.5s   usage: claude ●○○○ 1/4 +1 · codex ○○ 0/2 +1 · gemini ●○ 1/2
+         held: low memory: 1.0 GB free, 2 GB needed
+t+ 4.6s ■ gemini#i9 (T3) released: done
+t+ 4.6s   usage: claude ●○○○ 1/4 +1 · codex ○○ 0/2 +1 · gemini ○○ 0/2
+         held: low memory: 1.0 GB free, 2 GB needed
+t+ 5.0s ▶ codex#i7 (T3, api)
+t+ 5.0s ▶ claude#i6 (T2, shop)
+t+ 5.0s   usage: claude ●●○○ 2/4 · codex ●○ 1/2 · gemini ○○ 0/2
+t+ 5.1s ■ claude#i5 (T2) released: done
+t+ 7.0s ■ codex#i7 (T3) released: done
+t+ 8.0s ■ claude#i6 (T2) released: done
+t+ 8.0s ✓ all instances finished

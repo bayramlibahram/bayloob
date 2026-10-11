@@ -25,7 +25,10 @@
 
   .panel { margin: 10px; padding: 16px 18px; border-radius: 18px; background: var(--glass);
     border: 1px solid var(--line); box-shadow: 0 16px 40px rgb(var(--shade) / calc(.45 * var(--shade-k)));
-    display: flex; flex-direction: column; gap: 14px; animation: pop .18s cubic-bezier(.2,.9,.3,1.2); }
+    display: flex; flex-direction: column; gap: 14px; animation: pop .18s cubic-bezier(.2,.9,.3,1.2);
+    max-height: calc(100vh - 20px); overflow-y: auto; } /* the window stops growing at 900 px; then the form scrolls */
+  .panel > * { flex-shrink: 0; }
+  .foot { position: sticky; bottom: -16px; margin: 0 -18px -16px; padding: 10px 18px 14px; background: var(--surface-solid); border-top: 1px solid var(--line); }
   @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
   .title { display: flex; align-items: baseline; }
   .title b { font-size: 15px; font-weight: 650; }
@@ -76,7 +79,29 @@
   .btn:hover { background: rgb(var(--ink) / .14); }
   .btn.primary { background: var(--brand); color: #fff; }
   .btn:disabled { opacity: .5; cursor: progress; }
-  .foot { display: flex; align-items: center; gap: 8px; }
+  /* Settings → Agents: per agent on/off, max parallel instances, commands, notes; then the limits for all */
+  .agentsum { color: var(--soft); font-size: 12.5px; }
+  .agentgrid { grid-column: 1 / -1; display: flex; flex-direction: column; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
+  .agentgrid[hidden] { display: none; }
+  .arow { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 4px 10px; align-items: center; padding: 9px 12px; }
+  .arow + .arow, .limits { border-top: 1px solid var(--line); }
+  .arow.off .nm, .arow.off .m { opacity: .55; }
+  .arow .m { width: 28px; height: 28px; position: relative; }
+  .thumb { position: relative; width: 100%; height: 100%; }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .arow .nm { display: flex; flex-direction: column; min-width: 0; }
+  .arow .nm small { color: var(--muted); font-size: 11.5px; }
+  .arow .cmds { grid-column: 2 / -1; display: flex; flex-direction: column; gap: 2px; font: 11px/1.45 ui-monospace, "Ubuntu Mono", monospace; color: var(--muted); overflow-wrap: anywhere; }
+  .arow .cmds b { font-family: -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; font-weight: 600; margin-right: 4px; }
+  .arow input.notes { grid-column: 2 / -1; padding: 5px 8px; font: 12px -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
+  .stepper { display: inline-flex; align-items: center; border-radius: 9px; border: 1px solid var(--line); background: rgb(var(--ink) / .05); }
+  .stepper button { width: 26px; height: 26px; color: var(--soft); border-radius: 8px; }
+  .stepper button:hover:not(:disabled) { color: var(--text); background: rgb(var(--ink) / .09); }
+  .stepper button:disabled { opacity: .35; cursor: not-allowed; }
+  .stepper output { min-width: 22px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .limits { display: grid; grid-template-columns: 1fr auto; gap: 8px 10px; align-items: center; padding: 10px 12px; }
+  .limits small { display: block; color: var(--muted); font-size: 11.5px; }
+  .foot { display: flex; align-items: center; gap: 8px; z-index: 1; }
   .msg { flex: 1; font-size: 12px; color: var(--muted); }
   .msg.error { color: var(--error); }
   .msg.ok { color: var(--ok); }
@@ -135,6 +160,13 @@
       <div class="soundgrid" id="soundGrid" hidden></div>
     </div>
 
+    <div class="field">
+      <span class="label">Agents</span>
+      <span class="agentsum" id="agentSum"></span>
+      <button type="button" class="link" id="agentsMore" aria-expanded="false">Agents and limits…</button>
+      <div class="agentgrid" id="agentGrid" hidden></div>
+    </div>
+
     <div class="hooks" id="hooks"></div>
     <div class="hooks" id="extension" hidden></div>
     <div class="rules" id="rules" hidden></div>
@@ -172,7 +204,13 @@
     autoTerminal: name => name ? `Auto-detect (${name})` : 'Auto-detect',
     lockedEnv: keys => `Set by environment variable: ${keys.join(', ')}`,
     saved: 'Saved', hint: 'Ctrl+Enter to save',
+    agentOff: 'off', notInstalled: 'Not installed — install the CLI, then restart Bayloob', running: (n, max) => `${n} of ${max} running`,
+    enabledTip: name => `Use ${name} in tasks`, launch: 'Starts', readOnly: 'Read-only', noReadOnly: 'no read-only flag — Bayloob denies writes',
+    notesPh: 'Notes, e.g. subscription plan — rate limits apply',
+    total: 'Max parallel agents', totalSub: 'all tasks together', perProject: 'Per project', perProjectSub: 'at the same time',
+    memory: 'Hold launches below', memorySub: (gb) => `GB of free memory${gb ? ` · now ${gb} GB free` : ''}`,
   };
+  const LIMIT_RANGE = { total: [1, 32], perProject: [1, 32], minFreeGB: [0, 64] };
 
   /** The settings form. `state` = { values, locked, detectedTerminal, hooks, extension } from the main process. */
   class SettingsView {
@@ -184,6 +222,7 @@
       this.api = api;
       const $ = id => document.getElementById(id);
       this.el = { form: $('form'), mascot: $('mascot'), theme: $('theme'), shortcut: $('shortcut'), terminal: $('terminal'), editor: $('editor'),
+        agentSum: $('agentSum'), agentsMore: $('agentsMore'), agentGrid: $('agentGrid'),
         music: $('music'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
@@ -197,6 +236,8 @@
       this.watchClipboard = values.watchClipboard;
       this.sounds = values.sounds;
       this.soundToggles = { ...(values.soundToggles || {}) };
+      this.agents = JSON.parse(JSON.stringify(values.agents || {}));
+      this.limits = { ...(values.limits || {}) };
       this.el.volume.value = Math.round((values.soundVolume ?? 0.8) * 100);
       this.el.shortcut.value = values.shortcut;
       this.el.terminal.value = values.terminal;
@@ -210,6 +251,7 @@
       this.#renderWatch();
       this.#renderShell();
       this.#renderSounds();
+      this.#renderAgents();
       this.#renderHooks();
       this.#renderExtension();
       this.#renderRules(this.state.rules || []);
@@ -241,6 +283,36 @@
         return `<button type="button" data-sound="${esc(s.name)}" aria-pressed="${on}" ${this.sounds ? '' : 'disabled'}>${esc(T.soundNames[s.name] || s.name)}</button>`;
       }).join('');
     }
+
+    // One row per agent (Novi, name, running/max, on/off, max stepper, commands, notes), then the limits
+    #renderAgents() {
+      const info = this.state.agentInfo || {};
+      const usage = this.state.usage?.agents || {};
+      const name = k => info[k]?.name || k;
+      this.el.agentSum.textContent = Object.keys(this.agents).filter(k => info[k]?.installed)
+        .map(k => `${name(k)} ${this.agents[k].enabled ? this.agents[k].max : T.agentOff}`).join(' · ');
+      const stepper = (key, value, lo, hi, label, off = false) => `<span class="stepper" role="group" aria-label="${esc(label)}">
+          <button type="button" data-step="${key}:-1" ${off || value <= lo ? 'disabled' : ''} aria-label="Less">−</button><output>${value}</output>
+          <button type="button" data-step="${key}:1" ${off || value >= hi ? 'disabled' : ''} aria-label="More">+</button></span>`;
+      const rows = Object.entries(this.agents).map(([k, a]) => {
+        const i = info[k] || {};
+        const on = a.enabled && i.installed;
+        return `<div class="arow${on ? '' : ' off'}"><span class="m">${Agent.thumb(k === 'grok' ? 'other' : k)}</span>
+          <span class="nm"><b>${esc(name(k))}</b><small>${i.installed ? T.running(usage[k]?.running || 0, a.max) : T.notInstalled}</small></span>
+          <button type="button" class="switch" role="switch" aria-checked="${!!a.enabled && !!i.installed}" data-enable="${k}" ${i.installed ? '' : 'disabled'} title="${esc(T.enabledTip(name(k)))}" aria-label="${esc(T.enabledTip(name(k)))}"></button>
+          ${stepper(`agent.${k}`, a.max, 1, 16, `${name(k)} max parallel`, !i.installed)}
+          ${i.launch ? `<span class="cmds"><span><b>${T.launch}</b>${esc(i.launch)}</span><span><b>${T.readOnly}</b>${esc(i.readOnly || T.noReadOnly)}</span></span>
+          <input type="text" class="notes" data-notes="${k}" value="${esc(a.notes)}" placeholder="${esc(T.notesPh)}" aria-label="${esc(name(k))} notes">` : ''}</div>`;
+      }).join('');
+      const freeGB = this.state.freeGB;
+      const l = this.limits;
+      this.el.agentGrid.innerHTML = `${rows}<div class="limits">
+          <span>${T.total}<small>${T.totalSub}</small></span>${stepper('limit.total', l.total, ...LIMIT_RANGE.total, T.total)}
+          <span>${T.perProject}<small>${T.perProjectSub}</small></span>${stepper('limit.perProject', l.perProject, ...LIMIT_RANGE.perProject, T.perProject)}
+          <span>${T.memory}<small>${T.memorySub(freeGB)}</small></span>${stepper('limit.minFreeGB', l.minFreeGB, ...LIMIT_RANGE.minFreeGB, T.memory)}</div>`;
+    }
+
+    #fit() { this.api?.resize(Math.ceil(this.el.form.getBoundingClientRect().height) + 20); }
 
     #play(file) {
       const a = new Audio(`../../assets/sounds/${file}`);
@@ -320,6 +392,7 @@
     async #save() {
       this.el.save.disabled = true;
       const res = await this.api?.save({
+        agents: this.agents, limits: this.limits,
         mascot: this.mascot, theme: this.theme, music: this.music, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
@@ -350,6 +423,27 @@
         this.#renderShell(on
           ? T.shellOn(this.state.shell.rc, r.backup)
           : T.shellOff(this.state.shell.rc));
+      });
+      this.el.agentsMore.addEventListener('click', () => {
+        const open = this.el.agentGrid.hidden;
+        this.el.agentGrid.hidden = !open;
+        this.el.agentsMore.setAttribute('aria-expanded', String(open));
+        this.#fit();
+      });
+      this.el.agentGrid.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b || b.disabled) { return; }
+        if (b.dataset.enable) { const a = this.agents[b.dataset.enable]; a.enabled = !a.enabled; return this.#renderAgents(); }
+        if (b.dataset.step) {
+          const [key, delta] = b.dataset.step.split(':');
+          const [kind, name] = key.split('.');
+          if (kind === 'agent') { const a = this.agents[name]; a.max = Math.max(1, Math.min(16, a.max + Number(delta))); }
+          else { const [lo, hi] = LIMIT_RANGE[name]; this.limits[name] = Math.max(lo, Math.min(hi, this.limits[name] + Number(delta))); }
+          this.#renderAgents();
+        }
+      });
+      this.el.agentGrid.addEventListener('input', e => {
+        if (e.target.dataset.notes) { this.agents[e.target.dataset.notes].notes = e.target.value; }
       });
       this.el.watchClipboard.addEventListener('click', () => { this.watchClipboard = !this.watchClipboard; this.#renderWatch(); });
       this.el.sounds.addEventListener('click', () => { this.sounds = !this.sounds; this.#renderSounds(); });

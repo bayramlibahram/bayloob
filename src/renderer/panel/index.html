@@ -50,6 +50,16 @@
   .head .brand { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
   .head .sep { width: 1px; height: 22px; background: var(--line); }
   .head .sub { color: var(--muted); }
+  /* Live usage per agent: Claude ●●●○ 3/4 (running of max, from Settings → Agents) */
+  .usage { margin-left: auto; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; }
+  .usage[hidden] { display: none; }
+  .usage span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .usage b { color: var(--soft); font-variant-numeric: tabular-nums; }
+  .usage .dots { display: inline-flex; gap: 2px; }
+  .usage .dots i { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--c); }
+  .usage .dots i.on { background: var(--c); }
+  .usage em { font-style: normal; color: var(--working); }
+  .usage:not([hidden]) ~ .status { margin-left: 0; }
   .status { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--idle)); flex: none; }
   .status .dot { box-shadow: 0 0 8px var(--c); }
@@ -308,6 +318,7 @@
     <header class="head">
       <div class="ic agent" id="managerMascot"></div>
       <span class="brand">bayloob</span><span class="sep"></span><span class="sub">Workspace control</span>
+      <div class="usage" id="usage" hidden title="Agents running"></div>
       <div class="status" id="status"></div>
       <button type="button" class="square" id="settings" title="Settings">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
@@ -413,7 +424,7 @@
     readFirst: 'Scroll to the end of the command first', antibody: cmd => `You denied something like this before: ${cmd}`,
     cooling: s => `Read it first — Allow unlocks in ${s}s`,
     palNoMatch: 'Nothing matches', palGo: 'Go to', palAgent: 'Agent', palAction: 'Action',
-    palAsk: 'Ask Bayloob — start a new session', palLaunch: 'Launch an app', palSettings: 'Open Settings',
+    palAsk: 'Ask Bayloob — start a new session', palNewTask: 'New task… — project, category, agents', palLaunch: 'Launch an app', palSettings: 'Open Settings',
     palTerminal: name => `Open ${name}’s terminal`, palWorkspace: name => `Open ${name}’s folder`,
     launchTitle: 'Launch app', searchApps: 'Search apps…', searchInstalled: 'Search installed apps…',
     status: { active: 'Active', running: 'Running', healthy: 'Healthy', unhealthy: 'Unhealthy', stopped: 'Stopped',
@@ -677,6 +688,19 @@
     setCollisions(map) { this.collisions = map || {}; this.render(); }
     setStats(stats) { this.stats = stats; this.#renderMeters(); }
     setStatus(status) { this.status = status; this.#renderStatus(); }
+
+    // Claude ●●●○ 3/4 · Codex ●○ 1/2 — enabled, installed agents only; "+n" when instances wait in the queue
+    setUsage(usage) {
+      const box = document.getElementById('usage');
+      const rows = Object.entries(usage?.agents || {}).filter(([, u]) => u.enabled);
+      box.hidden = !rows.length;
+      box.innerHTML = rows.map(([a, u]) => {
+        const dots = Array.from({ length: Math.min(u.max, 8) }, (_, i) => `<i class="${i < u.running ? 'on' : ''}"></i>`).join('');
+        const name = Agent.displayName(a).split(' ')[0];
+        const tip = `${Agent.displayName(a)}: ${u.running} of ${u.max} running${u.queued ? `, ${u.queued} queued` : ''}${u.throttledUntil ? ' — rate-limited' : ''}`;
+        return `<span title="${esc(tip)}">${esc(name)} <span class="dots" style="--c:${Agent.color(a)}">${dots}</span><b>${u.running}/${u.max}</b>${u.queued ? `<em>+${u.queued}</em>` : ''}</span>`;
+      }).join('');
+    }
 
     // ---------- model ----------
 
@@ -1422,6 +1446,7 @@
           run: () => this.#goSection('agents', `agent:${s.id}`),
         })),
         { icon: ICONS.spark, label: T.palAsk, meta: T.palAction, run: () => this.el.askText.focus() },
+        { icon: ICONS.plus, label: T.palNewTask, meta: T.palAction, run: () => this.api?.newSession() },
         { icon: ICONS.plus, label: T.palLaunch, meta: T.palAction, run: () => { if (!this.launchMode) { this.#toggleLaunch(); } } },
         ...(cur ? [{ icon: ICON_TERM, label: T.palTerminal(curName), meta: T.palAction, run: () => this.api?.focus(cur.id) }] : []),
         ...(cur?.cwd ? [{ icon: FOLDER, label: T.palWorkspace(curName), meta: T.palAction, run: () => this.api?.openWorkspace(cur.id) }] : []),
@@ -1646,6 +1671,7 @@
     panelAPI.onWorkspace(snap => view.setWorkspace(snap));
     panelAPI.onBlocked?.(info => view.setBlocked(info));
     panelAPI.onCollisions?.(map => view.setCollisions(map));
+    panelAPI.onUsage?.(usage => view.setUsage(usage));
   } else {
     window.__demo = view; // opened in a plain browser: drive it from the console
   }

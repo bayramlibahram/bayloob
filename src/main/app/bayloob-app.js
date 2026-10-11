@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { HOOKS_DIR, TOOLS_DIR, EXTENSION_DIR, ASSETS_DIR } = require("./paths");
 const { Settings } = require("../config/settings");
-const { AGENTS } = require("../modules/agents/agents");
+const { AGENTS, agentCommand } = require("../modules/agents/agents");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
 const { pickChallenger, challengePrompt } = require("../modules/agents/challenge");
@@ -41,16 +41,29 @@ const { AgentConsole } = require("../modules/console/agent-console");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
 const { SpeechEngine } = require("../modules/voice/speech-engine");
 const { UploadStore } = require("../modules/uploads/upload-store");
+const { TaskStore } = require("../modules/tasks/task-store");
+const { ProjectInfo } = require("../modules/tasks/project-info");
+const { Scheduler } = require("../modules/tasks/scheduler");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
 const { LauncherWindow } = require("../windows/launcher-window");
+const { NewTaskWindow } = require("../windows/new-task-window");
 const { OverlayWindow } = require("../windows/overlay-window");
 const { PanelWindow } = require("../windows/panel-window");
 const { SettingsWindow } = require("../windows/settings-window");
 const { TrayMenu } = require("../windows/tray");
 
 const IS_LINUX = process.platform === "linux";
+// Bytes of memory the system can still give out (/proc/meminfo MemAvailable); Infinity when unknown
+const memAvailable = () => {
+  try {
+    const kb = /^MemAvailable:\s+(\d+)/m.exec(fs.readFileSync("/proc/meminfo", "utf8"))?.[1];
+    return kb ? Number(kb) * 1024 : Number.POSITIVE_INFINITY;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+};
 const DECISIONS = new Set(["allow", "deny", "terminal"]);
 const RECONCILE_MS = 5000;
 const HEALTH_MS = 30_000; // how often to check that Bayloob still hears the agents
@@ -97,6 +110,7 @@ function detectAgents() {
 class BayloobApp {
   overlay = new OverlayWindow({ topBar: () => this.windows.panel() });
   launcherWindow = new LauncherWindow();
+  newTask = new NewTaskWindow();
   panel = new PanelWindow();
   uploads = new UploadStore();
   settingsWindow = new SettingsWindow();
@@ -204,6 +218,19 @@ class BayloobApp {
     nativeTheme.themeSource = this.settings.get("theme");
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.uploads.prune();
+    this.tasks = new TaskStore(path.join(data, "tasks"));
+    this.projects = new ProjectInfo({ git: this.git });
+    // Which task instances may start: Settings → Agents limits, sessions already running, free memory
+    this.scheduler = new Scheduler({
+      capacity: () => this.#capacity(),
+      limits: () => this.settings.get("limits"),
+      freeMemory: () => memAvailable(),
+      external: () => this.server.store.list().map(s => ({ adapter: s.agent, project: s.cwd })),
+    });
+    this.installed.then(set => {
+      this.#installedSet = set;
+      this.#sendUsage();
+    });
     this.blocked = new BlockedClock({ file: path.join(data, "blocked-time.json") });
     this.server.immune = new ImmuneSystem({ file: path.join(data, "permissions.json") });
     // A rule allowed something without a card: say so briefly, so nothing passes unseen
@@ -256,6 +283,7 @@ class BayloobApp {
       this.#updateReceipts(list);
       this.overlay.send("progress", this.todos.snapshot(list.map(s => s.id)));
       this.#scheduleRadar();
+      this.#sendUsage();
     });
     this.server.http.on("error", e => {
       console.error(
@@ -325,6 +353,9 @@ class BayloobApp {
 
   // Apply saved settings right away, without a restart
   #applySettings(keys) {
+    if (keys.includes("agents") || keys.includes("limits")) {
+      this.#sendUsage();
+    }
     if (keys.includes("mascot")) {
       this.overlay.setMascot(this.mascot);
     }
@@ -393,6 +424,10 @@ class BayloobApp {
       hooks: this.hooks.status(),
       rules: this.server.immune?.rules() || [],
       denials: this.server.immune?.antibodies() || [],
+      // Settings → Agents: name, installed, the commands Bayloob runs (checked on this machine, AUDIT.md §2)
+      agentInfo: await this.#agentSettingsInfo(),
+      usage: this.scheduler.usage(),
+      freeGB: Number.isFinite(memAvailable()) ? (memAvailable() / 1024 ** 3).toFixed(1) : null,
       // "Run agents in tmux": whether the shell's rc file has Bayloob's block (read, not remembered)
       shell: (() => {
         const rc = shellIntegration.rcFile();
@@ -426,6 +461,7 @@ class BayloobApp {
       status: this.#status(),
       collisions: this.#collisions,
     });
+    this.#sendUsage();
     this.#startPanelUpdates();
   }
 
@@ -576,6 +612,59 @@ class BayloobApp {
 
   // ---------- sessions ----------
 
+  #installedSet = new Set();
+
+  // Settings → Agents, with agents that aren't installed counted as off
+  #capacity() {
+    const agents = this.settings.get("agents");
+    return Object.fromEntries(
+      Object.entries(agents).map(([k, a]) => [
+        k,
+        { enabled: a.enabled && !!AGENTS[k] && this.#installedSet.has(AGENTS[k].bin), max: a.max },
+      ])
+    );
+  }
+
+  async #agentSettingsInfo() {
+    const choices = await this.#agentChoices();
+    const cmd = argv => argv.map(a => (a === "{prompt}" || /\s/.test(a) ? `"${a}"` : a)).join(" ");
+    return Object.fromEntries(
+      Object.keys(this.settings.get("agents")).map(k => {
+        const def = AGENTS[k];
+        return [
+          k,
+          def
+            ? {
+                name: def.name,
+                installed: choices[k].installed,
+                color: choices[k].color,
+                launch: cmd(agentCommand(k, "{prompt}")),
+                readOnly: def.readOnly.length
+                  ? cmd(agentCommand(k, "{prompt}", { readOnly: true }))
+                  : null,
+              }
+            : {
+                name: k === "grok" ? "Grok" : k,
+                installed: false,
+                color: null,
+                launch: null,
+                readOnly: null,
+              },
+        ];
+      })
+    );
+  }
+
+  // Live usage per agent (running / max, queued) for the pill's and the panel's dots
+  #sendUsage() {
+    if (!this.scheduler) {
+      return;
+    }
+    const usage = this.scheduler.usage();
+    this.overlay.send("usage", usage);
+    this.panel.send("panel:usage", usage);
+  }
+
   // Agents to offer when starting a session: name, whether it's installed, mascot colour
   async #agentChoices() {
     const installed = await this.installed;
@@ -591,8 +680,33 @@ class BayloobApp {
     );
   }
 
-  // prefill: a first prompt to start from (e.g. "Fix this error:" with a copied stack trace)
+  // The New task dialog (Ask Bayloob): Single agent starts a session as before; Workflow / Analysis are
+  // stored as drafts until the engine exists. preset { agent, cwd, worktree } and prefill as for the launcher.
   async openLauncher(preset = null, prefill = "") {
+    const usage = this.scheduler.usage().agents;
+    const settings = this.settings.get("agents");
+    const running = Object.fromEntries(Object.keys(AGENTS).map(a => [a, usage[a]?.running || 0]));
+    const capacity = Object.fromEntries(Object.keys(AGENTS).map(a => [a, settings[a]?.max || 1]));
+    const disabled = Object.keys(AGENTS).filter(a => settings[a] && !settings[a].enabled);
+    // A preset or a prefilled prompt starts fresh; otherwise the dialog picks up the last draft
+    const draft = preset || prefill ? null : this.tasks.latestDraft();
+    const recent = this.recent.list();
+    this.newTask.show({
+      agents: await this.#agentChoices(),
+      capacity,
+      disabled,
+      running,
+      recent: recent.map(r => ({ ...r, category: this.tasks.lastCategory(r.cwd) })),
+      terminals: this.launcher.terminal.list(),
+      preset,
+      prefill,
+      draft,
+      home: os.homedir(),
+    });
+  }
+
+  // The earlier 3-step launcher for a new session (kept; the New task dialog replaced it as the entry point)
+  async openClassicLauncher(preset = null, prefill = "") {
     this.launcherWindow.show({
       mode: "new",
       agents: await this.#agentChoices(),
@@ -1080,7 +1194,7 @@ class BayloobApp {
 
     // Files attached to a prompt (launcher and panel): copied into the cache, the agent gets their paths
     const popupOf = sender =>
-      [this.launcherWindow, this.panel].find(p => p.win?.webContents === sender);
+      [this.launcherWindow, this.newTask, this.panel].find(p => p.win?.webContents === sender);
     ipcMain.handle("uploads:pick", async e => {
       const paths = await popupOf(e.sender)?.pickFiles();
       return this.uploads.addFiles(paths || []);
@@ -1100,6 +1214,35 @@ class BayloobApp {
       return looksLikeError(text) ? errorPrompt(text) : text;
     });
     ipcMain.on("launcher:resize", (_e, height) => this.launcherWindow.fitHeight(Number(height)));
+
+    // New task dialog
+    ipcMain.handle("newtask:project", (_e, cwd) => this.projects.read(expandHome(cwd)));
+    ipcMain.handle("newtask:save-draft", (_e, config) => {
+      try {
+        const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
+        this.tasks.rememberCategory(saved.project.cwd, saved.category);
+        return { ok: true, draft: saved };
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+    });
+    ipcMain.handle("newtask:discard-draft", (_e, id) => this.tasks.discard(String(id)));
+    ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
+      const cwd = expandHome(String(opts?.cwd || "").trim());
+      const res = await result(() => this.launch({ ...opts, cwd }));
+      if (res.ok) {
+        this.tasks.rememberCategory(cwd, "single");
+        if (draftId) {
+          this.tasks.discard(String(draftId));
+        }
+      }
+      return res;
+    });
+    ipcMain.handle("newtask:pick-folder", (_e, current) =>
+      this.newTask.pickFolder(current ? expandHome(current) : os.homedir())
+    );
+    ipcMain.on("newtask:close", () => this.newTask.hide());
+    ipcMain.on("newtask:resize", (_e, height) => this.newTask.fitHeight(Number(height)));
 
     // Workspace panel
     ipcMain.handle("panel:open-workspace", (_e, sessionId) =>
