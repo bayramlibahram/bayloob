@@ -1694,6 +1694,7 @@ test("Lead + team: the lead plans, reviews each part (changes go back to that bu
   assert.equal(integrated.adapter, "codex");
   const summary = env.runner.by({ role: "reviewer" }).at(-1);
   assert.match(summary.prompt, /You led this task[\s\S]*integrate-1/);
+  assert.match(summary.prompt, /run by Bayloob\):\n\S/); // the tests' output, not an empty slot
   await endTurn(env, task, summary, "## Built\n- api, ui");
   assert.equal(task.gate.kind, "merge");
   assert.equal(task.winner, "integrate-1"); // one candidate, no Arbiter: it's the one

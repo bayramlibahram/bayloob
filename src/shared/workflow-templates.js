@@ -353,6 +353,7 @@
     "one member's part, or (after integration) all parts together.",
     "Run `git diff {{base}}...{{branch}}` and read what you need. Do not change any file.",
     "Check that it does its subtask, stays in its own files, and fits the plan and the other parts.",
+    "You can't run the tests here (only git commands); Bayloob runs them after integration.",
     'Answer with findings, one per line as `path:line — problem — what to do`, most important first. If it is right, answer "No findings".',
     "",
     "Its subtask (empty after integration):",
@@ -373,10 +374,13 @@
   const LEAD_SUMMARY_PROMPT = lines(
     "You led this task. Write the summary for the owner, as Markdown: what was built (part by part), how it fits",
     "your plan, what the tests say, and what is left or risky. Run `git diff {{base}}...{{branch}}` if you need to.",
-    "Do not change any file.",
+    "Do not change any file. You can't run the tests: Bayloob ran them on this branch, their output is below.",
     "",
     "Your plan:",
-    "{{artifact:plan.md}}"
+    "{{artifact:plan.md}}",
+    "",
+    "The project's tests on this branch (run by Bayloob):",
+    "{{artifact:test-output}}"
   );
 
   // Design debate: who's who in the discussion, in the order the agents were picked
