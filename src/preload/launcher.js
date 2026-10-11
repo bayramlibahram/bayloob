@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("launcherAPI", {
+  // Ctrl + / Ctrl − / Ctrl 0: one step of Settings → UI scale (0 = 100 %)
+  uiScale: step => ipcRenderer.send("ui-scale", step),
   onShow: cb => ipcRenderer.on("launcher:show", (_e, state) => cb(state)),
   launch: opts => ipcRenderer.invoke("launcher:launch", opts),
   sendPrompt: (sessionId, text) => ipcRenderer.invoke("launcher:send-prompt", sessionId, text),

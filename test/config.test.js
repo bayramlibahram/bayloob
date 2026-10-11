@@ -114,3 +114,19 @@ test("pill size: s, m or l (anything else falls back to l, the original size)", 
   s.save({ pillSize: "xl" });
   assert.equal(s.get("pillSize"), "l");
 });
+
+test("UI scale: 0.9 … 1.4 in steps of 0.1 (100 % when it isn't a number)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
+  const s = new Settings(path.join(dir, "settings.json"));
+  assert.equal(s.get("uiScale"), 1);
+  for (const [given, kept] of [
+    [1.25, 1.3],
+    [2, 1.4],
+    [0.5, 0.9],
+    ["x", 1],
+    [1.1000000001, 1.1],
+  ]) {
+    s.save({ uiScale: given });
+    assert.equal(s.get("uiScale"), kept, String(given));
+  }
+});

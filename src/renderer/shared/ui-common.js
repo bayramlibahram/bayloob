@@ -140,3 +140,22 @@ function formatBytes(n) {
   }
   return n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`;
 }
+
+// Ctrl + / Ctrl − / Ctrl 0 in every workspace window: Settings → UI scale, one step at a time
+document.addEventListener("keydown", e => {
+  if (!e.ctrlKey || e.altKey || e.metaKey) {
+    return;
+  }
+  const step = { "=": 1, "+": 1, "-": -1, _: -1, 0: 0 }[e.key];
+  const api =
+    window.panelAPI ||
+    window.tasksAPI ||
+    window.newTaskAPI ||
+    window.settingsAPI ||
+    window.launcherAPI;
+  if (step === undefined || !api?.uiScale) {
+    return;
+  }
+  e.preventDefault();
+  api.uiScale(step);
+});

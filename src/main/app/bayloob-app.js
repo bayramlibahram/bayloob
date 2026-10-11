@@ -58,6 +58,7 @@ const { OverlayWindow } = require("../windows/overlay-window");
 const { PanelWindow } = require("../windows/panel-window");
 const { SettingsWindow } = require("../windows/settings-window");
 const { AppWindow } = require("../windows/app-window");
+const { uiScale } = require("../windows/ui-scale");
 const { TrayMenu } = require("../windows/tray");
 
 const IS_LINUX = process.platform === "linux";
@@ -221,6 +222,7 @@ class BayloobApp {
     const data = app.getPath("userData");
     this.settings = new Settings(path.join(data, "settings.json"));
     this.settings.on("change", keys => this.#applySettings(keys));
+    uiScale.set(this.settings.get("uiScale"));
     // Every window's CSS follows prefers-color-scheme, which follows this
     nativeTheme.themeSource = this.settings.get("theme");
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
@@ -422,6 +424,18 @@ class BayloobApp {
     }
     if (keys.includes("mascot")) {
       this.overlay.setMascot(this.mascot);
+    }
+    if (keys.includes("uiScale")) {
+      uiScale.set(this.settings.get("uiScale"));
+      for (const w of [
+        this.panel,
+        this.newTask,
+        this.settingsWindow,
+        this.launcherWindow,
+        this.workspaceWindow,
+      ]) {
+        w?.applyScale();
+      }
     }
     if (keys.includes("pillSize")) {
       this.overlay.send("appearance", { pillSize: this.settings.get("pillSize") });
@@ -1464,6 +1478,12 @@ class BayloobApp {
       return { ok: true };
     });
     ipcMain.on("open-tasks", (_e, id) => this.openTasks(id ? String(id) : null));
+    // Ctrl + / Ctrl − / Ctrl 0 in any workspace window: one step of the UI scale (0 = back to 100 %)
+    ipcMain.on("ui-scale", (_e, step) => {
+      const s = Number(step);
+      const next = s === 0 ? 1 : uiScale.factor + (s > 0 ? 0.1 : -0.1);
+      this.settings.save({ uiScale: next });
+    });
 
     // Workflow templates (the builder): the owner's own; built-ins are read-only
     ipcMain.handle("templates:list", () => this.templates.list({ capacity: this.#capacityMax() }));

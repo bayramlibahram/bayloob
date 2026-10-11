@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("newTaskAPI", {
+  // Ctrl + / Ctrl − / Ctrl 0: one step of Settings → UI scale (0 = 100 %)
+  uiScale: step => ipcRenderer.send("ui-scale", step),
   onShow: cb => ipcRenderer.on("newtask:show", (_e, state) => cb(state)),
   project: cwd => ipcRenderer.invoke("newtask:project", cwd),
   saveDraft: config => ipcRenderer.invoke("newtask:save-draft", config),

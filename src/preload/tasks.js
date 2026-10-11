@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("tasksAPI", {
+  // Ctrl + / Ctrl − / Ctrl 0: one step of Settings → UI scale (0 = 100 %)
+  uiScale: step => ipcRenderer.send("ui-scale", step),
   // { tasks, usage, focus: task id to open, home } when the window is shown
   onShow: cb => ipcRenderer.on("tasks:show", (_e, state) => cb(state)),
   onTask: cb => ipcRenderer.on("tasks:task", (_e, task) => cb(task)),

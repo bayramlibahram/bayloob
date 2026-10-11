@@ -1,6 +1,7 @@
 const { BrowserWindow, dialog, screen } = require("electron");
 const paths = require("../app/paths");
 const { belowTopBar } = require("./overlay-position");
+const { uiScale } = require("./ui-scale");
 
 // Electron replaces XDG_CURRENT_DESKTOP for itself; the original value says whether this is GNOME
 const IS_GNOME = /gnome/i.test(
@@ -29,7 +30,10 @@ class PopupWindow {
   #bounds() {
     const display = screen.getPrimaryDisplay();
     const { workArea } = display;
-    const { width, height, placement } = this.opts;
+    const z = uiScale.factor;
+    const width = Math.round(this.opts.width * z);
+    const height = Math.round(this.opts.height * z);
+    const { placement } = this.opts;
     if (placement === "top") {
       // Dropping from the top: below the desktop's top bar, like the pill (workArea alone doesn't know it
       // on GNOME under XWayland)
@@ -66,6 +70,22 @@ class PopupWindow {
       this.#ready = null;
     });
     this.#ready = this.win.loadFile(paths.page(this.opts.name));
+    this.win.webContents.on("did-finish-load", () =>
+      this.win?.webContents.setZoomFactor(uiScale.factor)
+    );
+  }
+
+  /** Settings → UI scale changed: zoom the page and size the popup with it. */
+  applyScale() {
+    if (!this.win) {
+      return;
+    }
+    const z = uiScale.factor;
+    this.win.webContents.setZoomFactor(z);
+    const [, h] = this.win.getSize();
+    this.win.setResizable(true);
+    this.win.setSize(Math.round(this.opts.width * z), h);
+    this.win.setResizable(false);
   }
 
   async show(state) {
@@ -98,8 +118,10 @@ class PopupWindow {
       return;
     }
     const [width] = this.win.getSize();
+    // The page measures itself in CSS pixels; the window is sized in screen pixels (× UI scale)
+    const max = Math.round(900 * Math.max(1, uiScale.factor));
     this.win.setResizable(true); // some window managers ignore setSize on non-resizable windows
-    this.win.setSize(width, Math.min(Math.max(Math.round(height), 120), 900));
+    this.win.setSize(width, Math.min(Math.max(Math.round(height * uiScale.factor), 120), max));
     this.win.setResizable(false);
   }
 

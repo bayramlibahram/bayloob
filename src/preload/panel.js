@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("panelAPI", {
+  // Ctrl + / Ctrl − / Ctrl 0: one step of Settings → UI scale (0 = 100 %)
+  uiScale: step => ipcRenderer.send("ui-scale", step),
   onShow: cb => ipcRenderer.on("panel:show", (_e, state) => cb(state)),
   onSessions: cb => ipcRenderer.on("panel:sessions", (_e, list) => cb(list)),
   onStats: cb => ipcRenderer.on("panel:stats", (_e, stats) => cb(stats)),

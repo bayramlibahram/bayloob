@@ -1,6 +1,7 @@
 const { BrowserWindow, WebContentsView, nativeTheme, screen } = require("electron");
 const fs = require("node:fs");
 const paths = require("../app/paths");
+const { uiScale } = require("./ui-scale");
 
 const DEFAULT = { width: 1280, height: 800 };
 const MIN = { width: 960, height: 600 };
@@ -67,18 +68,42 @@ class AppWindow {
       view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#121118" : "#ffffff");
       this.win.contentView.addChildView(view);
       v = { view, ready: view.webContents.loadFile(paths.page(name), query ? { query } : {}) };
+      view.webContents.on("did-finish-load", () => view.webContents.setZoomFactor(uiScale.factor));
       this.#views.set(name, v);
     }
-    const r = rect;
-    v.view.setBounds({
-      x: Math.round(r.x),
-      y: Math.round(r.y),
-      width: Math.max(0, Math.round(r.width)),
-      height: Math.max(0, Math.round(r.height)),
-    });
+    v.rect = rect;
+    AppWindow.#place(v);
     v.view.setVisible(true);
     await v.ready;
     return v.view.webContents;
+  }
+
+  // The rect comes from the hosting page in CSS pixels: × UI scale for the window's own pixels
+  static #place(v) {
+    const z = uiScale.factor;
+    const r = v.rect;
+    v.view.setBounds({
+      x: Math.round(r.x * z),
+      y: Math.round(r.y * z),
+      width: Math.max(0, Math.round(r.width * z)),
+      height: Math.max(0, Math.round(r.height * z)),
+    });
+  }
+
+  /** Settings → UI scale changed: zoom the page and the pages embedded in it. */
+  applyScale() {
+    if (!this.win) {
+      return;
+    }
+    this.win.webContents.setZoomFactor(uiScale.factor);
+    for (const v of this.#views.values()) {
+      if (!v.view.webContents.isDestroyed()) {
+        v.view.webContents.setZoomFactor(uiScale.factor);
+        if (v.rect) {
+          AppWindow.#place(v);
+        }
+      }
+    }
   }
 
   /** An embedded page's webContents while it exists (for live updates). */
@@ -131,6 +156,9 @@ class AppWindow {
       this.#ready = null;
     });
     this.#ready = this.win.loadFile(paths.page(this.name), this.query ? { query: this.query } : {});
+    this.win.webContents.on("did-finish-load", () =>
+      this.win?.webContents.setZoomFactor(uiScale.factor)
+    );
   }
 
   // The saved bounds when they're still on a screen; otherwise the default size, centred

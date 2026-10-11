@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { CAPACITY } = require("../../shared/task-shape");
+const { clampScale } = require("../windows/ui-scale");
 
 // Settings → Agents: per agent on/off, how many may run at once, and a note. Limits for all of them together.
 const AGENT_DEFAULTS = Object.fromEntries(
@@ -16,6 +17,7 @@ const clampInt = (v, lo, hi, fb) =>
 const DEFAULTS = {
   mascot: "novi", // 'novi' (layered raster) or 'svg' (the original flat one)
   pillSize: "l", // the pill's mascot tile: 's' 28 px, 'm' 36 px, 'l' 46 px (the pill's height follows)
+  uiScale: 1, // the workspace, its dialogs and Settings: 0.9 … 1.4 (Ctrl + / Ctrl − / Ctrl 0)
   theme: "system", // 'system' (follows GNOME), 'light' or 'dark'
   shortcut: "CommandOrControl+Alt+Space", // global shortcut for the launcher; '' turns it off
   terminal: "", // '' = auto-detect, or e.g. 'kitty' / 'gnome-terminal --'
@@ -33,6 +35,7 @@ const DEFAULTS = {
 const ENV = {
   mascot: () => process.env.BAYLOOB_MASCOT,
   pillSize: () => undefined,
+  uiScale: () => undefined,
   theme: () => process.env.BAYLOOB_THEME,
   shortcut: () => process.env.BAYLOOB_SHORTCUT,
   terminal: () => process.env.BAYLOOB_TERMINAL,
@@ -49,6 +52,7 @@ const ENV = {
 const VALIDATE = {
   mascot: v => (v === "svg" ? "svg" : "novi"),
   pillSize: v => (["s", "m"].includes(v) ? v : "l"),
+  uiScale: v => clampScale(v),
   theme: v => (["light", "dark"].includes(v) ? v : "system"),
   shortcut: v => String(v ?? "").trim(),
   terminal: v => String(v ?? "").trim(),

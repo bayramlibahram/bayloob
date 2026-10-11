@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- **UI scale** (step F of the UI deep dive): Settings → General → 90 … 140 %, and `Ctrl +` / `Ctrl −` /
+  `Ctrl 0` in the workspace (popup and window, Tasks inside it), New task, the launcher and Settings. Popups
+  grow with it; Tasks inside the Workspace window keeps its place. The pill keeps its own S / M / L size.
+- `scripts/contrast-check.js`: contrast of every colour token in both themes (text ≥ 4.5:1, state and brand
+  marks ≥ 3:1, button text ≥ 4.5:1). All pass today.
+
 ### Changed
 - **Settings in tabs** (step E of the UI deep dive): General (mascot, pill size, theme, shortcut, dance to music)
   · Integrations (hooks and the GNOME extension, terminal, editor, agents in tmux, clipboard) · Sounds (the sound
