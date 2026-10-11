@@ -1108,6 +1108,12 @@ class BayloobApp {
     if (!session?.stoppable) {
       return;
     }
+    // A task's agent: stopped through the engine, so it isn't taken for a crash ('interrupted')
+    const owner = this.engine.instanceOf(session.term?.tmux);
+    if (owner) {
+      await this.engine.stopInstance(owner.taskId, owner.instanceId);
+      return;
+    }
     if (session.managed) {
       await this.launcher.stop(session.managed).catch(() => {}); // already gone is fine
       this.server.store.untrackLaunch(session.managed);
@@ -1509,6 +1515,11 @@ class BayloobApp {
       })
     );
     ipcMain.handle("tasks:stop", (_e, id) => this.engine.stop(String(id)));
+    // One agent of a task, or the current stage's agents (§7): worktrees stay, the engine asks what's next
+    ipcMain.handle("tasks:stop-instance", (_e, id, instanceId) =>
+      this.engine.stopInstance(String(id), String(instanceId))
+    );
+    ipcMain.handle("tasks:stop-stage", (_e, id) => this.engine.stopStage(String(id)));
     // A runbook step: run · dry · rollback · skip · edit — the engine checks the confirmation again
     ipcMain.handle("tasks:runbook", (_e, id, stepId, action, opts) =>
       this.engine.runbookAction(String(id), String(stepId), String(action), {

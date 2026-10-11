@@ -396,6 +396,7 @@
       interrupted: { retry: 'Run again', abort: 'Abort' },
       violation: { continue: 'Continue anyway', abort: 'Abort' },
       failed: { retry: 'Try again', abort: 'Abort' },
+      stopped: { retry: 'Run them again', continue: 'Go on with what finished', abort: 'Stop the task' },
     },
     mergeInto: b => `Merge into ${b}`, applyFiles: 'Apply to my files', yourFiles: b => `your files on ${b} (uncommitted included)`, pickFirst: 'Choose a candidate first (Decision or Candidates tab)',
     noDecision: 'No decision yet', noDecisionHint: 'The Arbiter decides after the tests and reviews — its ranking appears here.',
@@ -425,6 +426,8 @@
       stage: e => `${e.stage[0].toUpperCase()}${e.stage.slice(1)} started${e.round > 1 ? ` · round ${e.round}` : ''}${e.only ? ` · ${e.only.join(', ')}` : ''}`,
       launched: e => `${Agent.displayName(e.adapter)} ${e.reused ? 'continues' : 'started'} · ${instName(e.instance)}`,
       worktree: e => `Worktree for ${e.candidate}: ${e.branch}`,
+      'stop-instance': e => `You stopped ${instName(e.instance)}${e.candidate ? ` (${e.candidate} out, its worktree kept)` : ''}`,
+      'stop-stage': e => `You stopped ${e.stage}${e.stopped?.length ? ` · ${e.stopped.length} agent${e.stopped.length === 1 ? '' : 's'}` : ''}`,
       'turn-ended': e => `${instName(e.instance)} answered${e.artifact ? ` → ${e.artifact}` : ''}`,
       candidate: e => `${e.candidate}: +${e.diff?.added ?? 0} −${e.diff?.deleted ?? 0}`,
       tests: e => `Tests on ${e.candidate}: ${e.ok ? 'pass' : `fail (exit ${e.code})`}`,
@@ -1178,7 +1181,7 @@
           const a = decide.dataset.decide;
           if (a === 'changes' || a === 'retry') {
             // An interrupted stage simply runs again; the others need a note
-            if (t.gate.kind === 'interrupted' || t.gate.kind === 'failed') { return this.#decide(t, a); }
+            if (['interrupted', 'failed', 'stopped'].includes(t.gate.kind)) { return this.#decide(t, a); }
             this.composing = { gate: t.gate.id, action: a, note: '' };
             return this.render();
           }

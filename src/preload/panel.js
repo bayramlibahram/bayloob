@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld("panelAPI", {
   onTask: cb => ipcRenderer.on("panel:task", (_e, task) => cb(task)),
   // The Tasks window: the board, or one task's detail
   openTasks: taskId => ipcRenderer.send("open-tasks", taskId || null),
+  // One agent of a task (the agent detail's Stop) → { ok, error? }
+  stopInstance: (taskId, instanceId) =>
+    ipcRenderer.invoke("tasks:stop-instance", taskId, instanceId),
   // The workspace in a resizable window of its own (from the popup), and that window's controls
   openWindow: section => ipcRenderer.send("panel:open-window", section || null),
   windowControl: action => ipcRenderer.send("panel:window", action),

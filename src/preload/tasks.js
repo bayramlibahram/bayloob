@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld("tasksAPI", {
   decide: (id, gateId, action, opts) =>
     ipcRenderer.invoke("tasks:decide", id, gateId, action, opts),
   stop: id => ipcRenderer.invoke("tasks:stop", id),
+  // One agent (queued or running) of a task, or the current stage's agents → { ok, error? }
+  stopInstance: (id, instanceId) => ipcRenderer.invoke("tasks:stop-instance", id, instanceId),
+  stopStage: id => ipcRenderer.invoke("tasks:stop-stage", id),
   // Saves a task's report as Markdown (a save dialog) → { ok, path } | { ok: false, canceled | error }
   exportReport: id => ipcRenderer.invoke("tasks:export-report", id),
   // A runbook step: run · dry · rollback · skip · edit (opts: confirmed, typed, dangerous, argv) → { ok, error? }

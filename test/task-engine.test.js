@@ -1157,3 +1157,131 @@ test("Retry after a cut-off session runs only that agent again; the others' answ
   const [arb] = env.runner.by({ role: "arbiter" });
   assert.match(arb.prompt, /a\.js:1 — bug[\s\S]*b\.js:2 — naming/);
 });
+
+// ---------- stopping one agent or a stage (§7) ----------
+
+async function toBuilders(env, workflow = BEST) {
+  const task = await startBest(env, workflow);
+  await endTurn(env, task, env.runner.sessions[0], "1. Edit cart.js");
+  await decide(env, task, "approve");
+  return task;
+}
+
+test("Stop one builder: its candidate drops out (worktree kept), the others go on to the pick", async () => {
+  const env = setup();
+  const task = await toBuilders(env);
+  const [b1, b2, b3] = env.runner.by({ role: "builder" });
+  const inst = task.instances.find(i => i.candidate === "build-1" && i.status === "running");
+
+  assert.deepEqual(await env.engine.stopInstance(task.id, inst.id), { ok: true });
+  await env.engine.settled(task.id);
+  assert.ok(env.runner.stopped.includes(b1.name));
+  const c1 = task.candidates.find(c => c.id === "build-1");
+  assert.equal(c1.status, "out");
+  assert.equal(c1.dir, "/w/shop-build-1"); // the worktree stays
+  // The session's end that follows is not a crash, and a late turn end is ignored
+  assert.equal(env.engine.sessionGone(b1.paneId), false);
+  assert.equal(env.engine.turnEnded(b1.paneId, "late"), false);
+  assert.equal(task.status, "running");
+
+  await endTurn(env, task, b2, "Done");
+  await endTurn(env, task, b3, "Done");
+  assert.equal(task.gate.kind, "pick");
+  assert.deepEqual(
+    task.candidates.filter(c => c.status === "active").map(c => c.id),
+    ["build-2", "build-3"]
+  );
+  assert.ok(env.store.log(task.id).some(e => e.event === "stop-instance" && e.actor === "you"));
+});
+
+test("Stop a queued builder: it leaves the queue and never starts", async () => {
+  const env = setup({
+    caps: { claude: { enabled: true, max: 1 }, codex: { enabled: true, max: 2 } },
+  });
+  const task = await toBuilders(env);
+  const queued = task.instances.find(i => i.candidate === "build-2");
+  assert.equal(queued.status, "queued");
+
+  assert.deepEqual(await env.engine.stopInstance(task.id, queued.id), { ok: true });
+  await env.engine.settled(task.id);
+  assert.equal(env.scheduler.usage().agents.claude.queued, 0);
+  const [b1, b3] = env.runner.by({ role: "builder" });
+  await endTurn(env, task, b1, "Done");
+  await endTurn(env, task, b3, "Done");
+  assert.equal(env.runner.by({ role: "builder" }).length, 2); // build-2 was never launched
+  assert.equal(task.gate.kind, "pick");
+});
+
+test("Stopping the last builder asks you; Retry starts it again in the same worktree", async () => {
+  const env = setup();
+  const task = await toBuilders(env, { ...BEST, agents: { claude: 1 } });
+  const [b1] = env.runner.by({ role: "builder" });
+  const inst = task.instances.find(i => i.role === "builder");
+
+  await env.engine.stopInstance(task.id, inst.id);
+  await env.engine.settled(task.id);
+  assert.equal(task.gate.kind, "stopped");
+  assert.deepEqual(task.gate.actions, ["retry", "abort"]);
+
+  assert.deepEqual(await decide(env, task, "retry"), { ok: true });
+  const again = env.runner.by({ role: "builder" });
+  assert.equal(again.length, 2);
+  assert.notEqual(again[1].name, b1.name); // its old session was stopped: a new one
+  assert.equal(again[1].cwd, "/w/shop-build-1");
+  assert.equal(task.candidates[0].status, "active");
+});
+
+test("Stop the stage: its agents stop and you choose — Continue goes on with the builder that finished", async () => {
+  const env = setup();
+  const task = await toBuilders(env);
+  const [b1, b2, b3] = env.runner.by({ role: "builder" });
+  await endTurn(env, task, b1, "Done");
+
+  assert.deepEqual(await env.engine.stopStage(task.id), { ok: true });
+  await env.engine.settled(task.id);
+  assert.ok(env.runner.stopped.includes(b2.name) && env.runner.stopped.includes(b3.name));
+  assert.equal(task.gate.kind, "stopped");
+  assert.deepEqual(task.gate.actions, ["retry", "continue", "abort"]);
+  assert.equal(task.stages[task.stage].status, "waiting"); // never goes on by itself
+
+  assert.deepEqual(await decide(env, task, "continue"), { ok: true });
+  assert.deepEqual(
+    task.candidates.filter(c => c.status === "active").map(c => c.id),
+    ["build-1"]
+  );
+  assert.equal(task.gate.kind, "pick");
+  assert.equal(env.workspace.merges.length, 0);
+});
+
+test("Stop the stage before anyone finished: only Retry or Abort", async () => {
+  const env = setup();
+  const task = await startBest(env);
+  assert.deepEqual(await env.engine.stopStage(task.id), { ok: true });
+  await env.engine.settled(task.id);
+  assert.deepEqual(task.gate.actions, ["retry", "abort"]);
+  assert.deepEqual(await decide(env, task, "retry"), { ok: true });
+  assert.equal(env.runner.by({ role: "planner" }).length, 2);
+});
+
+test("A stop that lands between the scheduler's launch and the session gives the slot back", async () => {
+  const env = setup();
+  const task = await startBest(env);
+  await endTurn(env, task, env.runner.sessions[0], "1. Edit cart.js");
+  // The builders are launched (slots taken) inside approve; Stop is queued right behind it
+  const approve = env.engine.decide(task.id, task.gate.id, "approve");
+  const stop = env.engine.stop(task.id);
+  await Promise.all([approve, stop]);
+  await env.engine.settled(task.id);
+  assert.equal(task.status, "stopped");
+  assert.equal(env.scheduler.usage().total.running, 0);
+});
+
+test("Stopping refuses what isn't running", async () => {
+  const env = setup();
+  const task = await startBest(env);
+  const planner = task.instances[0];
+  await endTurn(env, task, env.runner.sessions[0], "plan");
+  assert.equal((await env.engine.stopInstance(task.id, planner.id)).ok, false); // already done
+  assert.equal((await env.engine.stopStage(task.id)).ok, false); // waiting on you, nothing runs
+  assert.equal((await env.engine.stopInstance("nope", "x")).ok, false);
+});

@@ -61,6 +61,7 @@ const GATE_ACTIONS = {
   interrupted: ["retry", "abort"], // an agent's session ended before its turn did
   violation: ["continue", "abort"], // a read-only agent changed files
   failed: ["retry", "abort"], // a stage couldn't run (launch error, no candidates left)
+  stopped: ["retry", "continue", "abort"], // you stopped a stage (or its last agent): you say what's next
   runbook: ["abort"], // an operations plan: each step is run, skipped or edited through runbookAction(); abort stops the plan
 };
 
@@ -323,7 +324,8 @@ class TaskEngine extends EventEmitter {
       }
       note = String(note || "").trim();
       // Retrying what was interrupted or couldn't run needs no note; another attempt by the builders does
-      const plainRetry = gate.kind === "interrupted" || gate.kind === "failed";
+      const plainRetry =
+        gate.kind === "interrupted" || gate.kind === "failed" || gate.kind === "stopped";
       if ((action === "changes" || action === "retry") && !plainRetry && !note) {
         return { ok: false, error: "Write what should change" };
       }
@@ -363,8 +365,27 @@ class TaskEngine extends EventEmitter {
       task.status = "running";
       switch (action) {
         case "approve":
-        case "continue":
           await this.#advance(task);
+          break;
+        case "continue":
+          if (gate.kind === "stopped") {
+            // On with the answers that are in: the stage's own gate (review, no-findings, Arbiter) still applies
+            const st = this.#stage(task);
+            const state = task.stages[task.stage];
+            state.status = "running";
+            // The builders you stopped don't go on half-done
+            for (const c of task.candidates.filter(
+              x => gate.candidates?.includes(x.id) && x.status === "active"
+            )) {
+              Object.assign(c, { status: "out", out: "Stopped by you", stoppedByYou: true });
+            }
+            const done = task.instances.filter(
+              i => i.stage === st.id && i.round === state.round && i.status === "done"
+            );
+            await this.#applyGate(task, st, done);
+          } else {
+            await this.#advance(task);
+          }
           break;
         case "changes":
           await this.#runStage(task, { prompt: CHANGES_PROMPT, vars: { note }, reuse: true });
@@ -380,7 +401,13 @@ class TaskEngine extends EventEmitter {
           }
           break;
         case "retry":
-          if (gate.kind === "interrupted" || gate.kind === "failed") {
+          if (gate.kind === "interrupted" || gate.kind === "failed" || gate.kind === "stopped") {
+            // What you stopped runs again, in the same worktree (a builder's candidate comes back in)
+            for (const c of task.candidates.filter(x => gate.candidates?.includes(x.id))) {
+              if (c.stoppedByYou) {
+                Object.assign(c, { status: "active", out: null, stoppedByYou: false });
+              }
+            }
             await this.#runStage(task, {
               only: gate.candidates?.length ? gate.candidates : null,
               slots: gate.slots || null,
@@ -418,6 +445,92 @@ class TaskEngine extends EventEmitter {
       await this.#stop(task, "stopped by you");
       return { ok: true };
     });
+  }
+
+  /**
+   * Stops one agent of a running task — on purpose, so it never reads as a crash. A queued one leaves the
+   * queue; a starting or running one gives back its slot and its session ends. A Best-of-N builder's
+   * candidate drops out and the others go on; a split part, or the last builder, opens a 'stopped' gate.
+   * Worktrees and branches stay. → { ok, error? }
+   */
+  stopInstance(taskId, instanceId) {
+    const task = this.#tasks.get(taskId);
+    if (!task || !OPEN.has(task.status)) {
+      return Promise.resolve({ ok: false, error: "The task isn't running" });
+    }
+    return this.#serial(taskId, async () => {
+      const inst = task.instances.find(i => i.id === instanceId);
+      if (!inst || ENDED.has(inst.status)) {
+        return { ok: false, error: "That agent isn't running" };
+      }
+      this.#log(task, "you", "stop-instance", {
+        instance: inst.id,
+        candidate: inst.candidate || null,
+      });
+      await this.#endInstance(inst);
+      const st = task.template.stages.find(s => s.id === inst.stage);
+      const cand = inst.candidate && task.candidates.find(c => c.id === inst.candidate);
+      if (st?.role === "builder" && !st.split && cand?.status === "active") {
+        Object.assign(cand, { status: "out", out: "Stopped by you", stoppedByYou: true });
+      }
+      await this.#checkStage(task);
+      this.#save(task);
+      this.pump();
+      return { ok: true };
+    }).then(r => r || { ok: false, error: "Something went wrong — see the task log" });
+  }
+
+  /**
+   * Stops the current stage's agents (queued and running) and asks you what's next: run them again, go on
+   * with the answers that are in, or stop the task. Bayloob's own steps (tests, integrate, collect) can't
+   * be cut off. Worktrees and branches stay. → { ok, error? }
+   */
+  stopStage(taskId) {
+    const task = this.#tasks.get(taskId);
+    if (task?.status !== "running") {
+      return Promise.resolve({ ok: false, error: "No stage is running" });
+    }
+    return this.#serial(taskId, async () => {
+      const st = this.#stage(task);
+      const state = task.stages[task.stage];
+      if (!st || state.status !== "running") {
+        return { ok: false, error: "No stage is running" };
+      }
+      if (st.action || !st.agents?.length) {
+        return { ok: false, error: "This is Bayloob's own step — wait for it, or stop the task" };
+      }
+      const round = task.instances.filter(i => i.stage === st.id && i.round === state.round);
+      const live = round.filter(i => !ENDED.has(i.status));
+      this.#log(task, "you", "stop-stage", {
+        stage: st.id,
+        round: state.round,
+        stopped: live.map(i => i.id),
+      });
+      for (const inst of live) {
+        await this.#endInstance(inst);
+      }
+      const stopped = round.filter(i => i.status === "stopped");
+      const done = round.some(i => i.status === "done");
+      this.#openGate(task, "stopped", `You stopped ${st.title}`, {
+        candidates: [...new Set(stopped.map(i => i.candidate).filter(Boolean))],
+        slots: [...new Set(stopped.map(i => i.n))],
+        // Going on with part of a split build would lose a part; with nothing done there is nothing to go on with
+        actions:
+          done && !(st.role === "builder" && st.split) ? GATE_ACTIONS.stopped : ["retry", "abort"],
+      });
+      this.#save(task);
+      this.pump();
+      return { ok: true };
+    }).then(r => r || { ok: false, error: "Something went wrong — see the task log" });
+  }
+
+  /** The task and instance a tmux pane runs for (a task's agent stopped from elsewhere goes through the engine). */
+  instanceOf(paneId) {
+    const found = paneId ? this.#findByPane(paneId) : null;
+    if (!found || ENDED.has(found.inst.status)) {
+      return null;
+    }
+    return { taskId: found.task.id, instanceId: found.inst.id };
   }
 
   // ---------- scheduling ----------
@@ -608,7 +721,8 @@ class TaskEngine extends EventEmitter {
 
   async #launch(task, inst) {
     if (inst.status !== "starting") {
-      return; // stopped while it waited
+      this.scheduler.release(inst.schedId, "stopped"); // stopped while it waited: its slot is free again
+      return;
     }
     try {
       const cand = inst.candidate ? task.candidates.find(c => c.id === inst.candidate) : null;
@@ -803,6 +917,19 @@ class TaskEngine extends EventEmitter {
       });
       return;
     }
+    const stopped = round.filter(i => i.status === "stopped");
+    const stoppedGate = title =>
+      this.#openGate(task, "stopped", title, {
+        candidates: [...new Set(stopped.map(i => i.candidate).filter(Boolean))],
+        slots: [...new Set(stopped.map(i => i.n))],
+        actions: ["retry", "abort"],
+      });
+    if (st.role === "builder" && st.split && stopped.length) {
+      stoppedGate(
+        `You stopped ${stopped.length} part(s) of the split build — every part is needed`
+      );
+      return;
+    }
     if (st.role === "builder" && st.split && round.some(x => x.status === "failed")) {
       // Every part is needed: a part that couldn't run is retried (or the task stopped), never dropped
       const failed = round.filter(x => x.status === "failed");
@@ -820,12 +947,19 @@ class TaskEngine extends EventEmitter {
           c.out = i.error;
         }
       }
+      if (!this.#active(task).length && stopped.length) {
+        stoppedGate("You stopped the last builder");
+        return;
+      }
       if (!this.#active(task).length) {
         this.#openGate(task, "failed", "No builder could run", {
           detail: round.map(i => `${i.id}: ${i.error || i.status}`).join("\n"),
         });
         return;
       }
+    } else if (!round.some(i => i.status === "done") && stopped.length) {
+      stoppedGate(`You stopped ${st.title} before any agent finished`);
+      return;
     } else if (!round.some(i => i.status === "done")) {
       this.#openGate(task, "failed", `${st.title}: no agent finished`, {
         detail: round.map(i => `${i.id}: ${i.error || i.status}`).join("\n"),
@@ -1573,9 +1707,10 @@ class TaskEngine extends EventEmitter {
       this.#log(task, "you", "ops:stopped", { at: this.#currentStep(task)?.id || null });
     }
     for (const inst of task.instances) {
-      if (inst.status === "queued" || inst.status === "starting") {
+      if (inst.status === "queued") {
         inst.status = "stopped";
-      } else if (inst.status === "running") {
+      } else if (inst.status === "starting" || inst.status === "running") {
+        // A starting instance already holds its slot (the scheduler launched it): give it back too
         this.scheduler.release(inst.schedId, "stopped");
         Object.assign(inst, { status: "stopped", endedAt: this.now() });
       }
@@ -1585,6 +1720,21 @@ class TaskEngine extends EventEmitter {
       state.status = "stopped";
     }
     await this.#finish(task, "stopped", why);
+  }
+
+  // One instance ended on purpose: out of the queue, or its slot back and its session stopped. Marked
+  // stopped first, so the session's end that follows isn't taken for a crash ('interrupted').
+  async #endInstance(inst) {
+    const was = inst.status;
+    Object.assign(inst, { status: "stopped", endedAt: this.now(), waiting: null });
+    if (was === "queued") {
+      this.scheduler.cancel({ id: inst.schedId });
+      return;
+    }
+    this.scheduler.release(inst.schedId, "stopped");
+    if (was === "running" && inst.handle) {
+      await this.runner.stop(inst.handle).catch(() => {});
+    }
   }
 
   // The task's agent sessions end with it (their transcripts stay); worktrees and branches are kept
