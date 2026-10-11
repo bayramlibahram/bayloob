@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-10-11
+
+### Fixed
+- The New task flow now starts a single agent from Configure, keeps keyboard project/category selection
+  predictable, preserves the analysis question after preset changes, and validates log sources before launch.
+- Operations setup names the working runbook behavior, lets the owner choose its hosts, blocks bare Enter from
+  running a step, and uses runbook-specific stop wording.
+- Task details follow new gates and finished reports, show queue reasons on running cards, and refresh the
+  scheduler immediately when agent limits change.
+- The full Biome check ignores local agent worktrees and passes on the release tree.
 
 ### Added
 - **Operations** (orchestration 08b, as approved in `docs/orchestration/OPERATIONS.md`): an analysis with "Also
@@ -242,7 +251,7 @@
   (agent max, total, per project, free memory; sessions started by hand count too), high priority first then first
   come, releases on stop / crash, picks up after a restart (dead instances → interrupted), and backs an agent off
   after a rate-limit signal (1, 2, 4 … 30 min; never a retry loop). Codex rate limits are read from its rollout;
-  Claude Code's format hasn't been seen yet, so nothing is guessed. Not wired to tasks until the engine (04).
+  Claude Code's format hasn't been seen yet, so nothing is guessed. The scheduler feeds the workflow engine.
 - Usage dots in the panel header and the open pill: `Claude ●●●○ 3/4 +1`.
 - `Git.addTaskWorktree`: one worktree per writing instance on `bayloob/<task>/<step>-<n>`.
 - `scripts/scheduler-demo.js` with `scripts/stub-agent.js`: 9 instances from three tasks against the limits.
@@ -250,8 +259,8 @@
   branch, uncommitted changes, stack and test command) ② Category (Single agent · Agentic workflow · Analysis &
   operations, remembered per project) ③ Configure ④ Confirm. **Single agent** starts the session exactly as the
   old Ask Bayloob dialog did. Workflow and Analysis show the plan (sentence, stage diagram, gates, parallel load)
-  and are stored as drafts in `~/.config/Bayloob/tasks/<id>/config.json`; Start stays disabled until the engine
-  lands. Every change is kept as a draft, so closing the dialog loses nothing ("Start over" discards it).
+  and are stored as drafts in `~/.config/Bayloob/tasks/<id>/config.json`; Start runs them through the workflow
+  engine. Every change is kept as a draft, so closing the dialog loses nothing ("Start over" discards it).
 - Workspace panel navigation: **Inbox** (agents waiting on you — approvals, questions, terminal-only
   questions, file clashes, finished turns — with a red count), **Agents** grouped by project, **Tasks**
   (empty until workflows land), then the machine sections and Settings. Opens on the Inbox when it has

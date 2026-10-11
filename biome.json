@@ -7,7 +7,14 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!!**/design", "!!**/docs", "!!**/dist", "!!**/src/assets/packs/meta.js"]
+    "includes": [
+      "**",
+      "!!**/.claude",
+      "!!**/design",
+      "!!**/docs",
+      "!!**/dist",
+      "!!**/src/assets/packs/meta.js"
+    ]
   },
   "formatter": {
     "enabled": true,

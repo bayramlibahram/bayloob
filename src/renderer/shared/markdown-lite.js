@@ -141,12 +141,12 @@ function plainMarkdown(text) {
         return line;
       }
       const num = /^\s*(\d+[.)])/.exec(line);
-      return `\u0001${num ? `${num[1]} ` : ""}${line.slice(mark[0].length)}`;
+      return `\uE001${num ? `${num[1]} ` : ""}${line.slice(mark[0].length)}`;
     });
   return lines
     .join(" ")
-    .replace(/^\s*\u0001/, "")
-    .replace(/\s*\u0001/g, " · ")
+    .replace(/^\s*\uE001/, "")
+    .replace(/\s*\uE001/g, " · ")
     .replace(/!?\[([^\]\n]*)\]\([^)\s]*\)/g, "$1")
     .replace(/(\*\*|__|~~)(?=\S)(.+?)\1/g, "$2")
     .replace(/(^|[^\w*])\*(?=\S)([^*]+?)\*(?![\w*])/g, "$1$2")

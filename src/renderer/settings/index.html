@@ -394,8 +394,8 @@
       this.el.soundMore.hidden = true;
       this.el.agentGrid.hidden = false;
       this.el.agentsMore.hidden = true;
-      let tab = 'general';
-      try { tab = localStorage.getItem(TAB_KEY) || tab; } catch { /* storage unavailable */ }
+      let tab = state.tab || 'general';
+      if (!state.tab) { try { tab = localStorage.getItem(TAB_KEY) || tab; } catch { /* storage unavailable */ } }
       this.#tab(tab);
       if (tab === 'general') { this.el.shortcut.focus(); }
     }

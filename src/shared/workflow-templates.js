@@ -267,7 +267,7 @@
             : ANALYSIS_ARBITER_PROMPT,
           artifact: "report.md",
           gate: "always",
-          ...(a.opsPlan ? { runbook: true } : {}),
+          ...(a.opsPlan ? { runbook: true, hosts: Array.isArray(a.hosts) ? a.hosts : null } : {}),
         },
       ],
     };

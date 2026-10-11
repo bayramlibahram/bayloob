@@ -75,7 +75,7 @@ class FakeWorkspace {
   diffstat() {
     return Promise.resolve({ files: 2, added: 10, deleted: 1 });
   }
-  diff(root, sha, branch) {
+  diff(_root, _sha, branch) {
     return Promise.resolve(`diff --git a/cart.js b/cart.js\n+// ${branch}`);
   }
   testCommand() {

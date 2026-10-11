@@ -60,6 +60,7 @@ const { reportMarkdown } = require("../modules/tasks/arbiter");
 const { OpsRunner } = require("../modules/tasks/ops-runner");
 const { OpsMemory } = require("../modules/tasks/ops-memory");
 const { normalizeHost } = require("../modules/tasks/runbook");
+const { parseSource } = require("../modules/tasks/log-sources");
 const { sshAliases } = require("../infrastructure/system/ssh-config");
 const { TaskRunner } = require("../modules/tasks/task-runner");
 const { TaskWorkspace } = require("../modules/tasks/task-workspace");
@@ -452,6 +453,7 @@ class BayloobApp {
   // Apply saved settings right away, without a restart
   #applySettings(keys) {
     if (keys.includes("agents") || keys.includes("limits")) {
+      this.engine?.pump();
       this.#sendUsage();
     }
     if (keys.includes("mascot")) {
@@ -528,8 +530,9 @@ class BayloobApp {
     });
   }
 
-  async openSettings() {
+  async openSettings(tab = null) {
     this.settingsWindow.show({
+      tab,
       extension: await this.extension.status(),
       values: this.settings.all(),
       locked: this.settings.lockedByEnv(),
@@ -915,8 +918,8 @@ class BayloobApp {
     });
   }
 
-  // The New task dialog (Ask Bayloob): Single agent starts a session as before; Workflow / Analysis are
-  // stored as drafts until the engine exists. preset { agent, cwd, worktree } and prefill as for the launcher.
+  // The New task dialog (Ask Bayloob): Single agent starts a session; Workflow / Analysis run through the
+  // task engine. preset { agent, cwd, worktree } and prefill as for the launcher.
   async openLauncher(preset = null, prefill = "") {
     const usage = this.scheduler.usage().agents;
     const settings = this.settings.get("agents");
@@ -938,6 +941,7 @@ class BayloobApp {
       prefill,
       draft,
       home: os.homedir(),
+      hosts: this.settings.get("hosts"),
     });
   }
 
@@ -1488,6 +1492,27 @@ class BayloobApp {
 
     // New task dialog
     ipcMain.handle("newtask:project", (_e, cwd) => this.projects.read(expandHome(cwd)));
+    ipcMain.handle("newtask:validate-source", (_e, source, cwd) => {
+      const parsed = parseSource(source, expandHome(cwd));
+      if (parsed.error) {
+        return { ok: false, error: parsed.error };
+      }
+      if (parsed.kind === "file") {
+        try {
+          const stat = fs.statSync(parsed.path);
+          if (!stat.isFile()) {
+            return { ok: false, error: "That path is not a file" };
+          }
+          fs.accessSync(parsed.path, fs.constants.R_OK);
+        } catch (e) {
+          return {
+            ok: false,
+            error: e.code === "ENOENT" ? "No such file" : "That file cannot be read",
+          };
+        }
+      }
+      return { ok: true };
+    });
     ipcMain.handle("newtask:save-draft", (_e, config) => {
       try {
         const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
@@ -1668,6 +1693,13 @@ class BayloobApp {
     ipcMain.handle("newtask:pick-folder", (_e, current) =>
       this.newTask.pickFolder(current ? expandHome(current) : os.homedir())
     );
+    ipcMain.handle("newtask:pick-log-file", (_e, current) =>
+      this.newTask.pickLogFile(current ? expandHome(current) : os.homedir())
+    );
+    ipcMain.on("newtask:open-hosts", () => {
+      this.newTask.hide();
+      this.openSettings("hosts");
+    });
     ipcMain.on("newtask:close", () => this.newTask.hide());
     ipcMain.on("newtask:resize", (_e, height) => this.newTask.fitHeight(Number(height)));
 

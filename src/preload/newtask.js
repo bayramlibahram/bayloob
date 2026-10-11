@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld("newTaskAPI", {
   // Customize stages…: the workflow builder opens in the Tasks window on this draft's stages
   customize: (config, draftId) => ipcRenderer.invoke("newtask:customize", config, draftId),
   pickFolder: current => ipcRenderer.invoke("newtask:pick-folder", current),
+  pickLogFile: current => ipcRenderer.invoke("newtask:pick-log-file", current),
+  validateSource: (source, cwd) => ipcRenderer.invoke("newtask:validate-source", source, cwd),
+  openHosts: () => ipcRenderer.send("newtask:open-hosts"),
   clipboard: () => ipcRenderer.invoke("launcher:clipboard"),
   close: () => ipcRenderer.send("newtask:close"),
   resize: height => ipcRenderer.send("newtask:resize", height),

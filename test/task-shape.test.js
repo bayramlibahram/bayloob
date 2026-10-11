@@ -10,10 +10,14 @@ test("normalize keeps known values and falls back for the rest", () => {
   assert.equal(c.category, "single");
   assert.equal(c.single.agent, "claude");
   const a = T.normalize({
-    analysis: { logSources: [" journalctl -u x ", "", ...Array(20).fill("x")] },
+    analysis: {
+      logSources: [" journalctl -u x ", "", ...Array(20).fill("x")],
+      hosts: ["web-staging", "local", "bad host", "web-staging"],
+    },
   });
   assert.equal(a.analysis.logSources[0], "journalctl -u x");
   assert.equal(a.analysis.logSources.length, 10);
+  assert.deepEqual(a.analysis.hosts, ["web-staging"]);
 });
 
 test("Best-of-N: plan, parallel builders, tests, Arbiter, your merge", () => {
@@ -39,13 +43,21 @@ test("Review board writes nothing; analysis is read-only with an optional runboo
   assert.ok(T.stages(board).every(s => s.mode !== "writes"));
   const an = cfg({
     category: "analysis",
-    analysis: { preset: "incident", agents: { claude: 1 }, logSources: ["a"], opsPlan: true },
+    analysis: {
+      preset: "incident",
+      agents: { claude: 1 },
+      logSources: ["a"],
+      hosts: ["web-staging"],
+      opsPlan: true,
+    },
   });
   assert.deepEqual(
     T.stages(an).map(s => s.id),
     ["collect", "analyse", "report", "runbook"]
   );
   assert.ok(T.stages(an).every(s => s.mode !== "writes"));
+  const template = require("../src/shared/workflow-templates").analysisTemplate(an.analysis);
+  assert.deepEqual(template.stages.find(s => s.runbook).hosts, ["web-staging"]);
 });
 
 test("problems explain what is missing", () => {

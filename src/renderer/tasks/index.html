@@ -368,7 +368,8 @@
     stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
     stopStage: 'Stop stage', stopStageAsk: s => `Stop ${s}? Its agents stop and you decide what's next; worktrees stay.`, yesStopStage: 'Stop the stage',
     stopAgent: 'Stop', stopAgentTip: 'Stop this agent — its worktree stays', stopAgentAsk: 'Stop this agent? Its worktree stays.',
-    usageTip: (a, live, max, queued) => `${a}: ${live} of ${max} running for this task${queued ? `, ${queued} queued` : ''}`,
+    usageTip: (a, live, max, queued) => `${a}: ${live} of ${max} running for this task${queued ? `, ${queued} queued` : ''}${live > max ? ' · over the limit; no new agents start' : ''}`,
+    overLimit: 'over the limit · no new starts',
     stopped: 'Stopped. Worktrees and branches are kept until you delete them.',
     queuedN: n => `${n} queued`, runningN: n => `${n} running`, of: (a, b) => `${a} of ${b}`,
     the: { task: 'Task', project: 'Project', base: 'Started from', ro: 'Read-only worktree', tests: 'Test command', noTests: 'none found — tests are skipped' },
@@ -417,7 +418,7 @@
     ops: {
       next: 'Next', running: 'Running…', done: 'Done', failed: 'Failed', skipped: 'Skipped', pending: 'Not run', edited: 'edited by you',
       risk: { low: 'Low risk', medium: 'Medium risk', high: 'High risk' },
-      run: 'Run', dry: 'Dry run', skip: 'Skip', skipDanger: 'Skip — looks dangerous', edit: 'Edit', save: 'Save', cancel: 'Cancel', retry: 'Retry', rollback: 'Run rollback',
+      run: 'Run', dry: 'Dry run', skip: 'Skip', more: 'More', skipDanger: 'Skip — looks dangerous', edit: 'Edit', save: 'Save', cancel: 'Cancel', retry: 'Retry', rollback: 'Run rollback',
       confirmQ: (cmd, host) => `Run <code>${cmd}</code> on <b>${host}</b>?`, typeQ: host => `Type <b>${host}</b> to run this step`, refused: host => `${host} is prod — this command isn’t in its allowed patterns. Add one in Settings → Hosts first.`,
       exit: (c, ms) => `exit ${c ?? '—'} · ${ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`}`, rollbackOf: 'Rollback', dryDone: 'Dry run',
       offer: (p, h) => `“${p}” ran fine on ${h} three times — add it to its allowed commands?`, add: 'Add pattern', added: 'Added to the host’s allowed commands',
@@ -428,6 +429,7 @@
     col: { sev: 'Severity', where: 'Where', problem: 'Problem', rec: 'Recommendation', conf: 'Confidence', by: 'Found by' },
     notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
     send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
+    stopPlanAsk: 'Stop this plan? Steps not run stay as they are.', yesStopPlan: 'Stop plan',
     gateHint: { approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', runbook: 'Run, skip or edit each step in the Runbook tab — in order', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
     ago: at => timeAgo(at),
     log: {
@@ -556,6 +558,13 @@
       const before = this.tasks.get(task.id);
       this.tasks.set(task.id, task);
       this.#announceChanges(before, task);
+      if (this.open === task.id) {
+        if (before?.gate?.id !== task.gate?.id && task.gate) {
+          this.tab = this.#preferredTab(task);
+        } else if (!before?.report && task.report) {
+          this.tab = 'report';
+        }
+      }
       // Artifacts may have changed with it: read them again when shown
       if (before?.updatedAt !== task.updatedAt) {
         for (const k of [...this.#art.keys()]) { if (k.startsWith(`${task.id}:`)) { this.#art.delete(k); } }
@@ -664,7 +673,7 @@
         <div class="tt">${ICON.flow}<b>${esc(t.title)}</b></div>
         <div class="ln"><span class="chip out">${esc(t.project.name)}</span>${esc(PATTERN[t.template.id] || t.template.name)}</div>
         <div class="ln"><span class="chip c" style="--c:${color}"><span class="d${col === 'running' ? ' live' : ''}"></span>${esc(stageText)}</span></div>
-        ${why}${waiting && col === 'queued' ? `<div class="ln" style="color:var(--working)">${esc(waiting.waiting)}</div>` : ''}
+        ${why}${waiting ? `<div class="ln" style="color:var(--working)">${esc(this.#waitingText(waiting.waiting))}</div>` : ''}
         ${this.#cardUsage(t) || `<div class="agents">${builders.map(a => `<span>${novi(a.adapter)}×${a.count}</span>`).join('')}</div>`}
         <div class="ln">${ICON.clock}<span class="num">${elapsed(t)}</span>${best ? `<span class="diff"><span class="a">+${best.added}</span> <span class="r">−${best.deleted}</span></span>` : ''}</div>
       </button>`;
@@ -681,10 +690,11 @@
         }
       }
       const rows = Object.entries(by).map(([a, u]) => {
-        const max = Math.max(this.usage?.agents?.[a]?.max || 0, u.live);
+        const max = this.usage?.agents?.[a]?.max || 1;
+        const over = u.live > max;
         return `<span class="cu" title="${esc(T.usageTip(Agent.displayName(a), u.live, max, u.queued))}">${esc(Agent.displayName(a).split(' ')[0])}
           <span class="dots" style="--c:${Agent.color(a)}">${Array.from({ length: max }, (_, k) => `<i class="${k < u.live ? 'on' : ''}"></i>`).join('')}</span>
-          <b class="num">${u.live}/${max}</b>${u.queued ? `<em class="num">+${u.queued}</em>` : ''}</span>`;
+          <b class="num">${u.live}/${max}</b>${u.queued ? `<em class="num">+${u.queued}</em>` : ''}${over ? `<em>${T.overLimit}</em>` : ''}</span>`;
       });
       return rows.length ? `<div class="ln cuse">${rows.join('')}</div>` : '';
     }
@@ -758,7 +768,7 @@
       const rows = t.instances.map(i => `<tr>
           <td><span class="who">${novi(i.adapter)}<span>${esc(Agent.displayName(i.adapter))}<br><small class="mono" style="color:var(--muted)">${esc(i.id)}</small></span></span></td>
           <td>${esc(i.role)}</td><td><span class="badge ${i.mode === 'writes' ? 'writes' : i.mode === 'plan' ? 'plan' : 'ro'}">${T.mode[i.mode] || i.mode}</span></td>
-          <td>${T.istatus[i.status] || i.status}${i.waiting ? `<br><span class="wait">${esc(i.waiting)}</span>` : ''}${i.error ? `<br><span class="wait" style="color:var(--waiting)">${esc(i.error)}</span>` : ''}</td>
+          <td>${T.istatus[i.status] || i.status}${i.waiting ? `<br><span class="wait">${esc(this.#waitingText(i.waiting))}</span>` : ''}${i.error ? `<br><span class="wait" style="color:var(--waiting)">${esc(i.error)}</span>` : ''}</td>
           <td class="num">${i.startedAt ? clockTime(i.startedAt) : '—'}</td>
           <td><span class="rowacts">${this.composing?.action === 'stop-inst' && this.composing.inst === i.id
             ? `<span class="confirm">${T.stopAgentAsk}</span><button class="btn sm danger" type="button" data-act="stop-inst-yes">${T.yesStop}</button><button class="btn sm" type="button" data-act="cancel">${T.cancel}</button>`
@@ -909,7 +919,7 @@
               ${failed && x.rollback ? `<button class="btn" type="button" data-ops="rollback" data-step="${x.id}">${T.ops.rollback}</button>` : ''}
               <button class="btn" type="button" data-ops="edit" data-step="${x.id}">${T.ops.edit}</button>
               <button class="btn" type="button" data-ops="skip" data-step="${x.id}">${T.ops.skip}</button>
-              <button class="btn" type="button" data-ops="skip-danger" data-step="${x.id}">${T.ops.skipDanger}</button>
+              <details class="more"><summary>${T.ops.more}</summary><button class="btn sm" type="button" data-ops="skip-danger" data-step="${x.id}">${T.ops.skipDanger}</button></details>
               <span class="sp"></span>
               <button class="btn ${x.risk === 'high' || x.level === 'typed' ? 'danger' : 'primary'}" type="button" data-ops="run" data-step="${x.id}" data-primary>${failed ? T.ops.retry : T.ops.run} <kbd>Alt ↵</kbd></button></div>`;
           }
@@ -1019,9 +1029,9 @@
           <button class="btn primary" type="button" data-act="send-note">${T.send}</button></div>`;
       }
       if (c?.gate === g.id && c.action === 'abort') {
-        return `<div class="actions"><span class="msg confirm">${T.abortAsk}</span>
+        return `<div class="actions"><span class="msg confirm">${g.kind === 'runbook' ? T.stopPlanAsk : T.abortAsk}</span>
           <button class="btn" type="button" data-act="cancel">${T.cancel}</button>
-          <button class="btn danger" type="button" data-act="abort-yes">${T.yesAbort}</button></div>`;
+          <button class="btn danger" type="button" data-act="abort-yes">${g.kind === 'runbook' ? T.yesStopPlan : T.yesAbort}</button></div>`;
       }
       const picked = this.picked.get(t.id) || (g.kind === 'pick' && t.candidates.filter(x => x.status === 'active').length === 1 ? t.candidates.find(x => x.status === 'active').id : null);
       const primary = g.actions.find(a => ['accept', 'approve', 'merge'].includes(a)) || g.actions.find(a => a === 'pick') || g.actions.find(a => a === 'retry' && g.kind !== 'pick' && g.kind !== 'tests-failed') || null;
@@ -1076,8 +1086,29 @@
       return stateBlock({ kind: 'error', title: T.loadFailed(name), action: { label: T.retry, data: { retry: key } }, details: this.#artFailed.get(key) });
     }
 
+    #preferredTab(task) {
+      if (task?.gate?.kind === 'runbook') { return 'runbook'; }
+      if (task?.gate?.kind === 'decision' || (task?.gate?.kind === 'merge' && task.candidates.filter(x => x.status === 'active').length > 1)) { return 'decision'; }
+      if (task?.gate?.kind === 'pick') { return 'candidates'; }
+      if (task?.gate?.kind === 'approve') { return 'plan'; }
+      if (task?.report) { return 'report'; }
+      return 'overview';
+    }
+
+    #waitingText(text) {
+      const raw = String(text || '');
+      const agent = /^(\w+) (\d+)\/(\d+) running$/.exec(raw);
+      if (agent) { return `${Agent.displayName(agent[1])}: limit ${agent[3]} reached`; }
+      const throttle = /^throttled until (.+)$/.exec(raw);
+      if (throttle) {
+        const at = new Date(throttle[1]);
+        return Number.isNaN(at.getTime()) ? raw : `Rate limit until ${at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      return raw;
+    }
+
     #openTask(id) {
-      if (this.open !== id) { this.tab = this.tasks.get(id)?.gate?.kind === 'runbook' ? 'runbook' : this.tasks.get(id)?.gate?.kind === 'decision' ? 'decision' : this.tasks.get(id)?.gate?.kind === 'pick' ? 'candidates' : this.tasks.get(id)?.gate?.kind === 'approve' ? 'plan' : 'overview'; }
+      this.tab = this.#preferredTab(this.tasks.get(id));
       this.open = id;
       this.view = 'detail';
       this.composing = null;
@@ -1266,11 +1297,16 @@
       });
       // A decision is never taken by a bare Enter / Space on a focused button (Tab lands there easily):
       // only by a click or its Alt shortcut. The buttons that just open a note or a confirmation stay free.
-      const bareDecision = e => !e.altKey && (e.key === 'Enter' || e.key === ' ')
-        && !['changes', 'retry', 'abort'].includes(e.target.closest?.('[data-decide]')?.dataset.decide ?? 'changes');
-      document.addEventListener('keyup', e => { if (bareDecision(e)) { e.preventDefault(); } });
+      const bareAction = e => {
+        if (e.altKey || !['Enter', ' '].includes(e.key)) { return false; }
+        const decision = e.target.closest?.('[data-decide]')?.dataset.decide;
+        const ops = e.target.closest?.('[data-ops]')?.dataset.ops;
+        return (decision && !['changes', 'retry', 'abort'].includes(decision)) ||
+          ['run', 'dry', 'rollback', 'go'].includes(ops);
+      };
+      document.addEventListener('keyup', e => { if (bareAction(e)) { e.preventDefault(); } });
       document.addEventListener('keydown', async e => {
-        if (bareDecision(e)) {
+        if (bareAction(e)) {
           e.preventDefault();
           return this.toast(T.useAlt);
         }

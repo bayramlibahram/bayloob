@@ -21,6 +21,7 @@
   };
   const TEXT_MAX = 20_000;
   const SOURCES_MAX = 10;
+  const HOSTS_MAX = 20;
 
   const pick = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
   const counts = (raw, agents) =>
@@ -66,6 +67,15 @@
           .map(x => String(x).trim().slice(0, 300))
           .filter(Boolean)
           .slice(0, SOURCES_MAX),
+        hosts: Array.isArray(a.hosts)
+          ? [
+              ...new Set(
+                a.hosts
+                  .map(x => String(x).trim())
+                  .filter(x => /^[a-z0-9][a-z0-9-]{0,31}$/.test(x) && x !== "local")
+              ),
+            ].slice(0, HOSTS_MAX)
+          : null,
         opsPlan: !!a.opsPlan,
       },
     };

@@ -169,7 +169,7 @@ dialog whenever you like.
 |---|---|---|
 | **Single agent** | Claude Code, Codex or Gemini CLI gets your prompt. Optionally in a **new git worktree**, and in the terminal you pick. Files: 📎, drop or paste a screenshot | Normal permissions, from the pill |
 | **Agentic workflow** | **Pipeline** or **Best-of-N** (or your own template). Planner, builders, reviewer, how many of each | Builders write only in their own worktrees. You merge |
-| **Analysis & operations** | Code audit, security review, incident / log analysis, performance, dependencies *(engine: coming next)* | Read-only. Commands only run when you click |
+| **Analysis & operations** | Code audit, security review, incident / log analysis, performance, dependencies, with an optional runbook | Read-only. Commands only run when you click |
 
 The confirm step says it in plain words: *"3 agents will build in parallel (Claude Code ×2 and Codex ×1),
 each in its own worktree. You'll be asked after the plan and before merge."* It also shows the stages, the

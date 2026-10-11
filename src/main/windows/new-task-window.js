@@ -13,6 +13,20 @@ class NewTaskWindow extends PopupWindow {
       return r.canceled ? null : r.filePaths[0];
     });
   }
+
+  pickLogFile(defaultPath) {
+    return this.keepOpenDuring(async win => {
+      const r = await dialog.showOpenDialog(win, {
+        properties: ["openFile"],
+        defaultPath,
+        filters: [
+          { name: "Logs and text", extensions: ["log", "txt", "json", "jsonl"] },
+          { name: "All files", extensions: ["*"] },
+        ],
+      });
+      return r.canceled ? null : r.filePaths[0];
+    });
+  }
 }
 
 module.exports = { NewTaskWindow };

@@ -257,12 +257,14 @@
     customize: 'Customize stages…', customizeTipAnalysis: 'Opens the workflow builder on a copy: edit the analysts’ prompt, their agents and the Arbiter', customizeTip: 'Opens the workflow builder in the Tasks window on a copy of these stages',
     customizeLater: 'This pattern arrives with a later step', yourTemplates: 'Your templates', nStages: n => `${n} stages`,
     tplRuns: name => `Runs your template <b>${name}</b>:`, tplProblems: 'Your template has problems — fix them in Customize stages…',
-    sources: 'Log sources · collected read-only into the task', sourcePh: 'e.g. journalctl -u php8.3-fpm --since "-6h"', add: 'Add',
-    opsPlan: 'Also prepare an operations plan', opsSub: 'arrives with operations (a later step) — for now the run ends with the report',
+    sources: 'Log sources · collected read-only into the task', sourcePh: 'e.g. journalctl -u php8.3-fpm --since "-6h"', add: 'Add', chooseFile: 'Choose file…',
+    opsPlan: 'Also prepare an operations plan', opsSub: 'the Arbiter proposes commands; each runs only when you click',
+    opsHosts: 'Runbook hosts', localHost: 'This machine · dev', noHosts: 'No remote hosts yet. The runbook can use only this machine.', manageHosts: 'Add hosts in Settings',
     gatesCap: 'Gates — where you’ll be asked', load: 'Parallel load',
     rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rTerminal: 'Terminal', rPrompt: 'Prompt', rFiles: 'Files', edit: 'Edit',
     inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
     noPrompt: 'No prompt — the agent starts and waits for you', starting: 'Starting…', wrong: 'Something went wrong',
+    singleReady: (agent, project) => `${agent} starts in ${project}. Review the agent, prompt and folder above, then Start.`,
   };
   const ICON = {
     single: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01"/>',
@@ -282,7 +284,7 @@
   const CAT_COLOR = { single: 'var(--cat-single)', workflow: 'var(--cat-workflow)', analysis: 'var(--cat-analysis)' };
   const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
-  // Configurations the workflow engine can run so far (command 04): Pipeline and Best-of-N
+  // Workflow patterns the engine can run; analyses use their own preset-to-template path.
   const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board'];
   const runnable = c => c.category === 'analysis' || (c.category === 'workflow' && (!!c.workflow.template || RUNNABLE.includes(c.workflow.pattern)));
   // One of the owner's templates as the dialog's stage list (the shape TaskShape.stages gives)
@@ -297,8 +299,8 @@
 
   /**
    * The New task dialog. Single agent ends in the same launch as the old Ask Bayloob dialog; Agentic workflow
-   * and Analysis are saved as drafts (Start stays disabled until the engine exists). Every change is saved as a
-   * draft, so closing the dialog loses nothing.
+   * and Analysis become workflow-engine tasks. Every change is saved as a draft, so closing the dialog loses
+   * nothing.
    */
   class NewTaskView {
     state = null;
@@ -363,6 +365,8 @@
       const cwd = state.preset?.cwd || recent?.cwd || '';
       const other = a => inst.find(x => x !== a) || a;
       const first = inst[0] || 'claude';
+      const workflowAgents = { [first]: 2, ...(inst[1] ? { [inst[1]]: 1 } : {}) };
+      const arbiter = inst.find(x => !workflowAgents[x]) || other(first);
       const ids = (state.terminals || []).map(t => t.id);
       let saved = null;
       try { saved = localStorage.getItem(TERMINAL_KEY); } catch { /* storage unavailable */ }
@@ -375,8 +379,8 @@
         project: { cwd, name: cwd.split('/').pop() || '' },
         text: state.prefill || '',
         single: { agent, worktree: !!state.preset?.worktree, terminal: ids.includes(saved) ? saved : ids[0] || null },
-        workflow: { pattern: 'bestofn', planner: first, agents: { [first]: 2, ...(inst[1] ? { [inst[1]]: 1 } : {}) }, reviewer: other(first), arbiter: other(first) },
-        analysis: { preset: 'audit', agents: Object.fromEntries(inst.slice(0, 2).map(a => [a, 1])), arbiter: inst[2] || other(first), logSources: [], opsPlan: false },
+        workflow: { pattern: 'bestofn', planner: first, agents: workflowAgents, reviewer: other(first), arbiter },
+        analysis: { preset: 'audit', agents: Object.fromEntries(inst.slice(0, 2).map(a => [a, 1])), arbiter: inst[2] || other(first), logSources: [], hosts: (state.hosts || []).filter(h => h.env === 'staging').map(h => h.id), opsPlan: false },
       };
     }
 
@@ -436,6 +440,7 @@
       if (this.step === 4) { return this.cfg.category === 'single' ? this.#launch() : runnable(this.cfg) ? this.#startTask() : undefined; }
       const p = this.#problems();
       if (p.length) { return this.#message(p[0], true); }
+      if (this.step === 3 && this.cfg.category === 'single') { return this.#launch(); }
       this.#go(this.step + 1);
     }
 
@@ -444,8 +449,15 @@
       this.#go(this.step - 1);
     }
 
-    #changed({ render = true } = {}) {
+    #changed({ render = true, focus = null } = {}) {
       if (render) { this.#render(); }
+      if (focus) {
+        requestAnimationFrame(() => {
+          const el = document.getElementById(focus);
+          el?.focus();
+          if (el?.setSelectionRange) { el.setSelectionRange(el.value.length, el.value.length); }
+        });
+      }
       clearTimeout(this.#saveTimer);
       this.#saveTimer = setTimeout(() => this.#save(), 400);
     }
@@ -505,12 +517,13 @@
     #render() {
       if (!this.state) { return; }
       const c = this.cfg;
-      this.el.steps.innerHTML = T.steps.map((n, i) => `<li class="${i + 1 < this.step ? 'past' : ''}"${i + 1 === this.step ? ' aria-current="step"' : ''}><i>${i + 1 < this.step ? '✓' : i + 1}</i>${n}</li>`).join('');
+      const steps = c.category === 'single' ? T.steps.slice(0, 3) : T.steps;
+      this.el.steps.innerHTML = steps.map((n, i) => `<li class="${i + 1 < this.step ? 'past' : ''}"${i + 1 === this.step ? ' aria-current="step"' : ''}><i>${i + 1 < this.step ? '✓' : i + 1}</i>${n}</li>`).join('');
       this.el.subtitle.textContent = this.step === 1 || !c.project.cwd ? T.subProject : `${c.project.name} · ${T.cats[c.category].title}`;
       this.el.body.innerHTML = [null, () => this.#project(), () => this.#category(), () => this.#configure(), () => this.#confirm()][this.step]();
       if (this.step === 3 && c.category === 'single') { this.#mountComposer(); }
       this.el.back.textContent = this.step === 1 ? T.cancel : T.back;
-      const last = this.step === 4;
+      const last = this.step === 4 || (this.step === 3 && c.category === 'single');
       const later = last && c.category !== 'single' && !runnable(c);
       this.el.next.innerHTML = last ? `${I('play')}${T.start}` : `${T.next}${I('next')}`;
       this.el.next.disabled = later || this.busy;
@@ -583,7 +596,8 @@
             <button type="button" class="ghost" id="paste" title="${T.pasteTip}">${I('paste')}${T.paste}</button><span class="count" id="count"></span></div></div>
         <button type="button" class="toggle" role="switch" aria-checked="${!!s.worktree}" data-worktree ${this.hasGit ? '' : `disabled title="${T.needsGit}"`}>
           <span class="switch"></span><span class="txt">${T.worktree} <small>— ${this.hasGit ? T.worktreeSub : T.needsGit}</small></span></button>
-        ${terms.length > 1 ? `<div class="chips"><span class="label">${T.openIn}</span>${terms.map(t => `<button type="button" class="tchip" aria-pressed="${t.id === s.terminal}" data-term="${esc(t.id)}">${esc(t.name)}</button>`).join('')}</div>` : ''}`;
+        ${terms.length > 1 ? `<div class="chips"><span class="label">${T.openIn}</span>${terms.map(t => `<button type="button" class="tchip" aria-pressed="${t.id === s.terminal}" data-term="${esc(t.id)}">${esc(t.name)}</button>`).join('')}</div>` : ''}
+        <p class="hintline">${esc(T.singleReady(this.agents[s.agent]?.name || s.agent, this.cfg.project.name))}</p>`;
     }
 
     // Builder / reviewer / analyst rows: Novi, name, mode, free of max (or "will queue"), count stepper
@@ -687,6 +701,12 @@
 
     #configAnalysis() {
       const a = this.cfg.analysis;
+      const hosts = this.state.hosts || [];
+      const picked = new Set(Array.isArray(a.hosts) ? a.hosts : hosts.map(h => h.id));
+      const hostPicker = a.opsPlan ? `<div class="label">${T.opsHosts}</div>
+        <div class="chips"><button type="button" class="tchip" aria-pressed="true" disabled>${T.localHost}</button>
+          ${hosts.map(h => `<button type="button" class="tchip" aria-pressed="${picked.has(h.id)}" data-host="${esc(h.id)}">${esc(h.name)} · ${esc(h.env)}</button>`).join('')}</div>
+        ${hosts.length ? '' : `<div class="note" style="--c:var(--working)">${I('alert')}<span>${T.noHosts} <button type="button" class="btn ghost sm" data-settings>${T.manageHosts}</button></span></div>`}` : '';
       return `<div class="presets" role="group" aria-label="Preset">${Object.entries(TaskShape.PRESETS).map(([k, n]) => `<button type="button" class="preset" aria-pressed="${k === a.preset}" data-preset="${k}">${n}</button>`).join('')}</div>
         <div class="label">${T.analysts}</div>
         ${this.#agentRows(a.agents, 'read-only', T.word.analyst)}
@@ -695,8 +715,9 @@
         <div class="composer"><textarea id="text" data-focus rows="2" spellcheck="false" placeholder="${T.questionPh}" aria-label="${T.question}">${esc(this.cfg.text)}</textarea></div>
         ${a.preset === 'incident' ? `<div class="label">${T.sources}</div>
           <ul class="sources">${a.logSources.map((s, i) => `<li><span>${esc(s)}</span><button type="button" class="iconbtn" data-unsource="${i}" aria-label="Remove">${I('x')}</button></li>`).join('')}</ul>
-          <div class="field"><input id="source" placeholder="${esc(T.sourcePh)}" spellcheck="false" aria-label="Log source" class="mono"><button type="button" class="btn sm" data-addsource>${I('plus')}${T.add}</button></div>` : ''}
+          <div class="field"><input id="source" placeholder="${esc(T.sourcePh)}" spellcheck="false" aria-label="Log source" class="mono"><button type="button" class="btn sm" data-picksource>${I('folder')}${T.chooseFile}</button><button type="button" class="btn sm" data-addsource>${I('plus')}${T.add}</button></div>` : ''}
         <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}</small></span></button>
+        ${hostPicker}
         <span title="${T.customizeTipAnalysis}"><button type="button" class="expander" data-customize>${I('edit')}${T.customize}</button></span>`;
     }
 
@@ -748,7 +769,7 @@
       if (c.category === 'analysis') {
         const a = c.analysis;
         const n = TaskShape.total(a.agents);
-        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ' The operations plan comes with a later step; this run ends with the report.' : ''}`;
+        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ' The Arbiter also proposes a runbook for the hosts you selected; every command waits for your click.' : ''}`;
       }
       const tpl = this.#template(c);
       if (tpl) {
@@ -863,8 +884,15 @@
           if (r && !r.ok) { this.#message(r.error || T.wrong, true); }
           return;
         }
-        if (d.preset) { c.analysis.preset = d.preset; return this.#changed(); }
+        if (d.preset) { c.analysis.preset = d.preset; return this.#changed({ focus: 'text' }); }
         if (d.ops !== undefined) { c.analysis.opsPlan = !c.analysis.opsPlan; return this.#changed(); }
+        if (d.host) {
+          const hosts = new Set(Array.isArray(c.analysis.hosts) ? c.analysis.hosts : (this.state.hosts || []).map(h => h.id));
+          if (hosts.has(d.host)) { hosts.delete(d.host); } else { hosts.add(d.host); }
+          c.analysis.hosts = [...hosts];
+          return this.#changed();
+        }
+        if (d.settings !== undefined) { return this.api.openHosts?.(); }
         if (d.edit !== undefined) { return this.#go(3); }
         if (d.count) {
           const [a, delta] = d.count.split(':');
@@ -873,6 +901,12 @@
           return this.#changed();
         }
         if (d.addsource !== undefined) { return this.#addSource(); }
+        if (d.picksource !== undefined) {
+          const file = await this.api.pickLogFile?.(c.project.cwd);
+          const input = document.getElementById('source');
+          if (file && input) { input.value = file; return this.#addSource(); }
+          return;
+        }
         if (d.unattach) { return this.att.remove(Number(d.unattach)); }
         if (d.unsource) { c.analysis.logSources.splice(Number(d.unsource), 1); return this.#changed(); }
       });
@@ -889,6 +923,17 @@
         if (e.key === 'Escape') { e.preventDefault(); return this.busy ? undefined : this.api.close(); }
         if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); return this.#back(); }
         if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); return this.el.next.disabled ? undefined : this.#next(); }
+        if (this.step === 1 && e.target.id === 'q' && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+          const rows = [...this.el.body.querySelectorAll('.prow[data-cwd]')];
+          if (rows.length) { e.preventDefault(); return rows[e.key === 'ArrowDown' ? 0 : rows.length - 1].focus(); }
+        }
+        const project = e.target.closest?.('.prow[data-cwd]');
+        if (this.step === 1 && project && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+          const rows = [...this.el.body.querySelectorAll('.prow[data-cwd]')];
+          const i = rows.indexOf(project);
+          const next = rows[i + (e.key === 'ArrowDown' ? 1 : -1)];
+          if (next) { e.preventDefault(); return next.focus(); }
+        }
         // Radio groups (category, agent, base): arrows pick the next enabled choice, like native radios
         const radio = e.target.closest?.('[role="radio"]');
         if (radio && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && !e.altKey) {
@@ -908,18 +953,34 @@
         if (e.target.id === 'source' && e.key === 'Enter') { e.preventDefault(); return this.#addSource(); }
         // Enter (or Ctrl+Enter) goes on; Shift+Enter is a new line; a focused button handles its own Enter
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+          if (this.step === 2 && e.target.closest?.('[data-cat]')) {
+            e.preventDefault();
+            this.cfg.category = e.target.closest('[data-cat]').dataset.cat;
+            return this.#next();
+          }
           if (e.target.closest?.('button') && e.target !== this.el.next) { return; }
           e.preventDefault();
           if (this.step === 1 && /^[~/]/.test(this.query.trim())) { return this.#setProject(this.query); }
+          if (this.step === 1 && this.query.trim()) {
+            const first = this.el.body.querySelector('.prow[data-cwd]');
+            if (first) { return this.#setProject(first.dataset.cwd); }
+          }
           this.#next();
         }
       });
     }
 
-    #addSource() {
+    async #addSource() {
       const input = document.getElementById('source');
       const v = input?.value.trim();
       if (!v) { return; }
+      const checked = (await this.api.validateSource?.(v, this.cfg.project.cwd)) || { ok: true };
+      if (!checked.ok) {
+        input.setAttribute('aria-invalid', 'true');
+        input.closest('.field')?.style.setProperty('border-color', 'var(--waiting)');
+        this.#message(checked.error || T.wrong, true);
+        return;
+      }
       this.cfg.analysis.logSources.push(v);
       this.#changed();
       requestAnimationFrame(() => document.getElementById('source')?.focus());

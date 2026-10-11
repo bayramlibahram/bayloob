@@ -795,7 +795,7 @@ class TaskEngine extends EventEmitter {
       parts: st?.split && splitBuild ? splitBuild.agents.reduce((n, a) => n + a.count, 0) : "",
       diff: task.review ? `git diff ${task.review.from}..${task.review.to}` : "",
       rubric: st?.rubric || CODE_RUBRIC,
-      hosts: st?.runbook ? this.#hostsText() : "",
+      hosts: st?.runbook ? this.#hostsText(st.hosts) : "",
       ...inst.vars,
     };
     return renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
@@ -1160,13 +1160,15 @@ class TaskEngine extends EventEmitter {
       });
       return;
     }
+    const wasReasked = state.reasked;
     state.reasked = false;
     if (board) {
       // An operations plan comes with the report: checked against the hosts first (asked again once)
       let runbook = null;
       if (st.runbook && parsed.runbook?.length) {
-        const rb = parseRunbook(parsed.runbook, this.ops?.hosts() || []);
-        if (!rb.ok && !state.reasked) {
+        const hosts = this.#opsHosts(st.hosts);
+        const rb = parseRunbook(parsed.runbook, hosts);
+        if (!rb.ok && !wasReasked) {
           state.reasked = true;
           this.#log(task, "engine", "arbiter-invalid", { error: rb.error, reasked: false });
           await this.#runStage(task, {
@@ -1177,8 +1179,13 @@ class TaskEngine extends EventEmitter {
           return;
         }
         runbook = rb.ok
-          ? { steps: rb.steps.map(x => this.#warned(x)), status: "open", runs: [] }
-          : { steps: [], status: "unusable", error: rb.error };
+          ? {
+              steps: rb.steps.map(x => this.#warned(x)),
+              status: "open",
+              runs: [],
+              hosts: hosts.map(h => h.id),
+            }
+          : { steps: [], status: "unusable", error: rb.error, hosts: hosts.map(h => h.id) };
       }
       state.reasked = false;
       task.report = parsed.report;
@@ -1333,7 +1340,7 @@ class TaskEngine extends EventEmitter {
       if (rb.steps.some(x => x.status === "running")) {
         return { ok: false, error: "A step is still running" };
       }
-      const host = this.#host(step.host);
+      const host = this.#host(step.host, rb.hosts);
       if (!host) {
         return { ok: false, error: `The host "${step.host}" isn't in Settings → Hosts any more` };
       }
@@ -1508,8 +1515,13 @@ class TaskEngine extends EventEmitter {
     return task.runbook?.steps.find(x => x.status !== "done" && x.status !== "skipped") || null;
   }
 
-  #host(id) {
-    return id === LOCAL.id ? LOCAL : (this.ops?.hosts() || []).find(h => h.id === id) || null;
+  #opsHosts(ids = null) {
+    const all = this.ops?.hosts() || [];
+    return Array.isArray(ids) ? all.filter(h => ids.includes(h.id)) : all;
+  }
+
+  #host(id, allowed = null) {
+    return id === LOCAL.id ? LOCAL : this.#opsHosts(allowed).find(h => h.id === id) || null;
   }
 
   // Antibody: a step like one you skipped as dangerous gets a warning (never a block)
@@ -1530,8 +1542,8 @@ class TaskEngine extends EventEmitter {
     }
   }
 
-  #hostsText() {
-    return [LOCAL, ...(this.ops?.hosts() || [])]
+  #hostsText(ids = null) {
+    return [LOCAL, ...this.#opsHosts(ids)]
       .map(
         h =>
           `- ${h.id} (${h.env}${h.id === "local" ? ", this machine" : `, ssh ${h.alias}`})${h.allow?.length ? ` · allowed: ${h.allow.join("; ")}` : ""}`
