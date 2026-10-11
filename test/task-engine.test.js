@@ -7,7 +7,7 @@ const path = require("node:path");
 const { TaskEngine } = require("../src/main/modules/tasks/task-engine");
 const { TaskStore } = require("../src/main/modules/tasks/task-store");
 const { Scheduler } = require("../src/main/modules/tasks/scheduler");
-const { templateFor, builtin } = require("../src/main/modules/tasks/workflow-templates");
+const { templateFor, builtin } = require("../src/shared/workflow-templates");
 
 class FakeRunner {
   sessions = []; // { name, paneId, adapter, cwd, prompt, mode, role }

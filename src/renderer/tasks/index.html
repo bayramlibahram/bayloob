@@ -228,6 +228,68 @@
   .actions textarea { flex: 1 1 100%; min-height: 60px; resize: vertical; padding: 8px 10px; border-radius: 10px; background: var(--raised-2); border: 1px solid var(--line); line-height: 1.5; }
   .actions textarea:focus { border-color: var(--focus); }
   .actions .confirm { color: var(--waiting); font-weight: 600; }
+  /* header nav */
+  .wnav { display: flex; gap: 2px; -webkit-app-region: no-drag; }
+  .wnav button { height: 28px; padding: 0 10px; border-radius: 8px; color: var(--muted); font-weight: 600; }
+  .wnav button:hover { color: var(--text); background: var(--raised-2); }
+  .wnav button[aria-current="page"] { color: var(--text); background: var(--raised-2); }
+  /* templates */
+  .tpls { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; max-width: 1100px; }
+  .tpl { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); }
+  .tpl .tph { display: flex; align-items: center; gap: 8px; }
+  .tpl .tph b { flex: 1; font-size: 14px; }
+  .tpl p { color: var(--soft); font-size: 12.5px; }
+  .tpl .flow { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .tpl .arrow { color: var(--muted); font-size: 11px; }
+  .tpl .agents { display: flex; gap: 4px; }
+  .tpl .row, .scard .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .confirm { color: var(--waiting); font-weight: 600; font-size: 12.5px; }
+  /* builder */
+  .titlein { font-size: 18px; font-weight: 700; padding: 2px 6px; margin-left: -6px; border-radius: 8px; border: 1px solid transparent; min-width: 0; }
+  .titlein:hover, .descin:hover { border-color: var(--line); }
+  .titlein:focus, .descin:focus { border-color: var(--focus); background: var(--raised-2); }
+  .descin { flex: 1; min-width: 200px; padding: 2px 6px; border-radius: 7px; border: 1px solid transparent; color: var(--soft); }
+  .stages { display: flex; flex-direction: column; gap: 10px; max-width: 980px; }
+  .scard { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); }
+  .scard.bad { border-color: color-mix(in srgb, var(--waiting) 45%, transparent); }
+  .scard .sh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .scard .sh .sp { flex: 1; }
+  .scard .grip { color: var(--muted); display: grid; }
+  .scard .sn { font-weight: 700; color: var(--muted); }
+  .stitle { width: 140px; height: 30px; padding: 0 8px; border-radius: 8px; background: var(--raised-2); border: 1px solid var(--line); font-weight: 700; }
+  .stitle:focus, input.small:focus { border-color: var(--focus); }
+  .sbody { display: flex; flex-direction: column; gap: 8px; padding-left: 26px; }
+  .slot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .slot .cap { font-size: 11.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+  .slot .cap.q { color: var(--working); }
+  .slot .cap .i { width: 13px; height: 13px; }
+  .sel.small { height: 26px; font-size: 12px; padding-right: 24px; background-position: calc(100% - 12px) 11px, calc(100% - 8px) 11px; }
+  input.small { height: 26px; width: 120px; padding: 0 8px; border-radius: 7px; background: var(--raised-2); border: 1px solid var(--line); font-size: 12px; }
+  .stepper { display: inline-flex; align-items: center; border-radius: 9px; border: 1px solid var(--line); background: var(--raised-2); }
+  .stepper button { width: 28px; height: 28px; display: grid; place-items: center; color: var(--soft); }
+  .stepper button:hover:not(:disabled) { color: var(--text); background: var(--hover); }
+  .stepper button:disabled { opacity: .35; }
+  .stepper output { min-width: 22px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--soft); }
+  .check input[type=checkbox] { accent-color: var(--brand); width: 14px; height: 14px; }
+  .opts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--soft); }
+  .hint { color: var(--muted); font-size: 12.5px; }
+  .editor { position: relative; }
+  .editor textarea { width: 100%; min-height: 56px; resize: none; padding: 8px 10px; border-radius: 9px; background: var(--code-bg); border: 1px solid var(--line);
+    font: 12px/1.55 ui-monospace, "Ubuntu Mono", monospace; color: var(--soft); }
+  .editor textarea:focus { border-color: var(--focus); color: var(--text); }
+  .complete { position: absolute; left: 10px; top: calc(100% - 4px); z-index: 3; width: 320px; padding: 4px; border-radius: 10px; background: var(--surface);
+    border: 1px solid var(--line-strong); box-shadow: 0 10px 28px rgb(var(--shade) / calc(0.4 * var(--shade-k))); }
+  .complete div { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: 7px; font-size: 12px; cursor: pointer; }
+  .complete div.on, .complete div:hover { background: color-mix(in srgb, var(--brand) 16%, transparent); }
+  .complete code { color: var(--brand-soft); }
+  .complete small { color: var(--muted); text-align: right; }
+  .sissues { display: flex; flex-direction: column; gap: 2px; padding-left: 26px; color: var(--waiting); font-size: 12px; }
+  .sissues span { display: flex; align-items: center; gap: 5px; }
+  .sissues .i { width: 12px; height: 12px; }
+  .addstage { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 0 20px; }
+  .btn.ghost { background: none; border-color: transparent; color: var(--soft); }
+  .btn.ghost:hover { background: var(--raised-2); color: var(--text); }
   .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); padding: 8px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-strong);
     box-shadow: 0 10px 28px rgb(var(--shade) / calc(0.4 * var(--shade-k))); font-size: 12.5px; animation: slidein .15s ease-out; z-index: 5; }
   .toast.err { color: var(--waiting); }
@@ -236,9 +298,10 @@
 <body>
 <div class="app">
   <header class="whead">
-    <span class="logo" id="logo"></span><b>bayloob</b><span class="sep"></span><span class="sub">Tasks</span>
+    <span class="logo" id="logo"></span><b>bayloob</b><span class="sep"></span>
+    <nav class="wnav" id="wnav" aria-label="Views"><button type="button" data-view="board">Board</button><button type="button" data-view="templates">Templates</button></nav>
     <span class="sp"></span>
-    <div class="usage" id="usage" role="group" aria-label="Agents running"></div>
+    <div class="usage" id="usage" title="Agents running"></div>
     <button type="button" class="btn primary sm" id="newTask"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New task</button>
     <div class="wctl">
       <button type="button" class="iconbtn" data-win="minimize" title="Minimize" aria-label="Minimize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
@@ -252,6 +315,7 @@
 
 <script src="../shared/ui-common.js"></script>
 <script src="../shared/markdown-lite.js"></script>
+<script src="../../shared/workflow-templates.js"></script>
 <script>
   // Every string of the window
   const T = {
@@ -369,6 +433,8 @@
     composing = null; // { action } while a note / confirmation is being written
     #art = new Map(); // `${task}:${name}` → text | null (artifacts and logs, refreshed when the task changes)
     #toastTimer = null;
+    templates = [];
+    #builder = null;
 
     constructor(api) {
       this.api = api;
@@ -376,14 +442,19 @@
       document.getElementById('logo').innerHTML = Agent.thumb(MANAGER);
       try { this.density = localStorage.getItem(DENSITY_KEY) || 'comfortable'; } catch { /* storage unavailable */ }
       this.#bind();
-      setInterval(() => { if (!this.composing) { this.render(); } }, 30_000);
+      setInterval(() => { if (!this.composing && !this.editing) { this.render(); } }, 30_000);
     }
 
     show(state) {
       this.state = state;
       this.tasks = new Map((state.tasks || []).map(t => [t.id, t]));
       this.usage = state.usage || null;
-      if (state.focus && this.tasks.has(state.focus)) { this.#openTask(state.focus); } else { this.render(); }
+      this.templates = state.templates || [];
+      if (state.builder) {
+        this.builder.open(state.builder);
+        this.view = 'builder';
+        this.render();
+      } else if (state.focus && this.tasks.has(state.focus)) { this.#openTask(state.focus); } else { this.render(); }
       this.#renderUsage();
     }
 
@@ -395,10 +466,16 @@
         for (const k of [...this.#art.keys()]) { if (k.startsWith(`${task.id}:`)) { this.#art.delete(k); } }
       }
       if (this.composing && this.open === task.id && task.gate?.id !== this.composing.gate) { this.composing = null; }
-      if (!this.composing || this.open !== task.id) { this.render(); }
+      if (!this.editing && (!this.composing || this.open !== task.id)) { this.render(); }
     }
 
     setUsage(usage) { this.usage = usage; this.#renderUsage(); }
+
+    get builder() {
+      if (!this.#builder) { this.#builder = new window.WorkflowBuilder(this); }
+      return this.#builder;
+    }
+    get editing() { return this.view === 'builder' || this.view === 'templates'; }
 
     // ---------- header ----------
 
@@ -414,6 +491,19 @@
     // ---------- views ----------
 
     render() {
+      for (const b of document.querySelectorAll('#wnav [data-view]')) {
+        const on = b.dataset.view === 'templates' ? this.editing : !this.editing;
+        if (on) { b.setAttribute('aria-current', 'page'); } else { b.removeAttribute('aria-current'); }
+      }
+      if (this.view === 'builder' && this.builder.edit) {
+        this.el.main.innerHTML = this.builder.html();
+        return this.builder.afterRender(this.el.main);
+      }
+      if (this.editing) {
+        this.view = 'templates';
+        this.el.main.innerHTML = this.builder.listHtml(this.templates);
+        return;
+      }
       this.el.main.innerHTML = this.view === 'detail' && this.tasks.has(this.open) ? this.#detail(this.tasks.get(this.open)) : this.#board();
       const note = this.el.main.querySelector('[data-note]');
       if (note) { note.focus(); }
@@ -625,7 +715,7 @@
 
     async #decide(t, action, opts = {}) {
       const r = await this.api.decide(t.id, t.gate.id, action, opts);
-      if (!r?.ok) { this.#toast(r?.error || 'Something went wrong', true); return false; }
+      if (!r?.ok) { this.toast(r?.error || 'Something went wrong', true); return false; }
       this.composing = null;
       return true;
     }
@@ -653,7 +743,7 @@
       this.render();
     }
 
-    #toast(text, err = false) {
+    toast(text, err = false) {
       clearTimeout(this.#toastTimer);
       this.el.toast.textContent = text;
       this.el.toast.className = `toast${err ? ' err' : ''}`;
@@ -666,7 +756,18 @@
     #bind() {
       document.getElementById('newTask').addEventListener('click', () => this.api?.newTask());
       for (const b of document.querySelectorAll('[data-win]')) { b.addEventListener('click', () => this.api?.control(b.dataset.win)); }
+      for (const b of document.querySelectorAll('#wnav [data-view]')) {
+        b.addEventListener('click', () => {
+          if (this.view === 'builder' && this.builder.edit?.dirty) { this.builder.edit.confirmLeave = true; return this.render(); }
+          if (this.view === 'builder') { this.builder.edit = null; }
+          this.view = b.dataset.view;
+          this.open = null;
+          this.composing = null;
+          this.render();
+        });
+      }
       this.el.main.addEventListener('input', e => {
+        if (this.view === 'builder' && this.builder.onInput(e, this.el.main)) { return; }
         if (e.target.id === 'q') {
           this.query = e.target.value;
           const pos = e.target.selectionStart;
@@ -678,9 +779,16 @@
         if (e.target.matches('[data-note]') && this.composing) { this.composing.note = e.target.value; }
       });
       this.el.main.addEventListener('change', e => {
+        if (this.view === 'builder' && e.target.matches('select') && this.builder.onChange(e)) { return this.render(); }
         if (e.target.id === 'proj') { this.project = e.target.value; this.render(); }
       });
       this.el.main.addEventListener('click', async e => {
+        if (this.editing) {
+          const r = await this.builder.onClick(e);
+          if (r === 'builder' || r === 'templates') { this.view = r; }
+          if (r) { this.render(); }
+          return;
+        }
         const t = this.tasks.get(this.open);
         const open = e.target.closest('[data-open]');
         if (open) { return this.#openTask(open.dataset.open); }
@@ -695,7 +803,7 @@
         const term = e.target.closest('[data-term]');
         if (term && t) {
           const r = await this.api.terminal(t.id, term.dataset.term);
-          if (!r?.ok) { this.#toast(r?.error || 'Could not open a terminal', true); }
+          if (!r?.ok) { this.toast(r?.error || 'Could not open a terminal', true); }
           return;
         }
         const pick = e.target.closest('[data-pick]');
@@ -725,11 +833,19 @@
         if (act === 'stop-yes' && t) {
           const r = await this.api.stop(t.id);
           this.composing = null;
-          if (!r?.ok) { this.#toast(r?.error || 'Could not stop the task', true); }
+          if (!r?.ok) { this.toast(r?.error || 'Could not stop the task', true); }
           return this.render();
         }
       });
-      document.addEventListener('keydown', e => {
+      document.addEventListener('keydown', async e => {
+        if (this.view === 'builder') {
+          let r = this.builder.onKey(e, this.el.main);
+          if (r === 'save') { r = await this.builder.save(); if (r === 'templates') { this.view = 'templates'; } }
+          if (r === 'render' || r === 'templates') { this.render(); }
+          if (r) { return; }
+          if (e.key === 'Escape') { this.builder.edit.confirmLeave = !!this.builder.edit.dirty; if (!this.builder.edit.dirty) { this.builder.edit = null; this.view = 'templates'; } return this.render(); }
+          return;
+        }
         const t = this.tasks.get(this.open);
         if (e.key === 'Enter' && e.ctrlKey && e.target.matches?.('[data-note]')) {
           e.preventDefault();
@@ -765,5 +881,6 @@
     window.__demo = view; // opened in a plain browser: drive it from the console
   }
 </script>
+<script src="builder.js"></script>
 </body>
 </html>

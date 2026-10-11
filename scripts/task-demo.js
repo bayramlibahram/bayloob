@@ -13,7 +13,7 @@ const { TaskEngine } = require("../src/main/modules/tasks/task-engine");
 const { TaskStore } = require("../src/main/modules/tasks/task-store");
 const { Scheduler } = require("../src/main/modules/tasks/scheduler");
 const { TaskWorkspace } = require("../src/main/modules/tasks/task-workspace");
-const { templateFor } = require("../src/main/modules/tasks/workflow-templates");
+const { templateFor } = require("../src/shared/workflow-templates");
 
 const t0 = Date.now();
 const log = (...a) => console.log(`t+${((Date.now() - t0) / 1000).toFixed(1).padStart(4)}s`, ...a);

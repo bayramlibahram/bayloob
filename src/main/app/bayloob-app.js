@@ -42,12 +42,13 @@ const { MenuWatcher } = require("../modules/agents/terminal-menu");
 const { SpeechEngine } = require("../modules/voice/speech-engine");
 const { UploadStore } = require("../modules/uploads/upload-store");
 const { TaskStore } = require("../modules/tasks/task-store");
+const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
 const { Scheduler } = require("../modules/tasks/scheduler");
 const { TaskEngine } = require("../modules/tasks/task-engine");
 const { TaskRunner } = require("../modules/tasks/task-runner");
 const { TaskWorkspace } = require("../modules/tasks/task-workspace");
-const { templateFor } = require("../modules/tasks/workflow-templates");
+const { builtin, templateFor } = require("../../shared/workflow-templates");
 const shellIntegration = require("../modules/agents/shell-integration");
 const { capturePane } = require("../modules/sessions/session-output");
 const { TerminalLauncher } = require("../infrastructure/system/terminal-launcher");
@@ -225,6 +226,7 @@ class BayloobApp {
     this.recent = new RecentProjects(path.join(data, "recent-projects.json"));
     this.uploads.prune();
     this.tasks = new TaskStore(path.join(data, "tasks"));
+    this.templates = new TemplateStore(path.join(data, "workflows"));
     this.tasksWindow = new TasksWindow({ file: path.join(data, "tasks-window.json") });
     this.projects = new ProjectInfo({ git: this.git });
     // Which task instances may start: Settings → Agents limits, sessions already running, free memory
@@ -747,14 +749,48 @@ class BayloobApp {
       }));
   }
 
-  /** The Tasks window: the board, or one task's detail when `focus` is its id. */
-  async openTasks(focus = null) {
+  /**
+   * The Tasks window: the board, one task's detail when `focus` is its id, or the workflow builder on
+   * `builder: { template, draftId }` (from the New task dialog's Customize).
+   */
+  async openTasks(focus = null, builder = null) {
     await this.tasksWindow.show({
       tasks: this.engine.list(),
       usage: this.scheduler.usage(),
       agents: await this.#agentChoices(),
+      templates: this.templates.list({ capacity: this.#capacityMax() }),
       focus,
+      builder,
       home: os.homedir(),
+    });
+  }
+
+  // Agents that can run here → their max parallel instances (what templates are checked against)
+  #capacityMax() {
+    return Object.fromEntries(
+      Object.entries(this.#capacity())
+        .filter(([, c]) => c.enabled)
+        .map(([a, c]) => [a, c.max])
+    );
+  }
+
+  // Customize stages…: the builder opens on the draft's workflow; a built-in becomes the owner's copy first
+  async #customize(config, draftId) {
+    const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
+    const base = templateFor(saved, id => this.templates.get(id));
+    const template = builtin(base.id)
+      ? {
+          ...base,
+          builtin: false,
+          id: this.templates.idFor(`${base.name} copy`),
+          name: `${base.name} (copy)`,
+        }
+      : base;
+    this.newTask.hide();
+    await this.openTasks(null, {
+      template,
+      draftId: saved.id || draftId || null,
+      copyOf: builtin(base.id) ? base.id : null,
     });
   }
 
@@ -775,6 +811,7 @@ class BayloobApp {
       disabled,
       running,
       recent: recent.map(r => ({ ...r, category: this.tasks.lastCategory(r.cwd) })),
+      templates: this.templates.list({ capacity: this.#capacityMax() }).filter(t => !t.builtin),
       terminals: this.launcher.terminal.list(),
       preset,
       prefill,
@@ -1313,7 +1350,10 @@ class BayloobApp {
         if (saved.category !== "workflow") {
           throw new Error("Only workflows can start as tasks so far");
         }
-        const task = await this.engine.start(saved, templateFor(saved));
+        const task = await this.engine.start(
+          saved,
+          templateFor(saved, id => this.templates.get(id))
+        );
         this.newTask.hide();
         this.openTasks(task.id);
         return { ok: true, taskId: task.id };
@@ -1349,6 +1389,29 @@ class BayloobApp {
       return { ok: true };
     });
     ipcMain.on("open-tasks", (_e, id) => this.openTasks(id ? String(id) : null));
+
+    // Workflow templates (the builder): the owner's own; built-ins are read-only
+    ipcMain.handle("templates:list", () => this.templates.list({ capacity: this.#capacityMax() }));
+    ipcMain.handle("templates:id-for", (_e, name) => this.templates.idFor(String(name || "")));
+    ipcMain.handle("templates:remove", (_e, id) => this.templates.remove(String(id)));
+    // Saved from Customize: the draft uses it and the New task dialog comes back on ④ Confirm
+    ipcMain.handle("templates:save", async (_e, template, opts) => {
+      const r = this.templates.save(template, { capacity: this.#capacityMax() });
+      if (r.ok && opts?.draftId) {
+        const draft = this.tasks.get(String(opts.draftId));
+        if (draft?.status === "draft") {
+          this.tasks.saveDraft(
+            { ...draft, workflow: { ...draft.workflow, template: r.template.id } },
+            Object.keys(AGENTS)
+          );
+          this.openLauncher();
+        }
+      }
+      return r;
+    });
+    ipcMain.handle("newtask:customize", (_e, config, draftId) =>
+      result(() => this.#customize(config, draftId ? String(draftId) : null))
+    );
     ipcMain.on("tasks:window", (_e, action) => this.tasksWindow.control(String(action)));
     ipcMain.handle("newtask:launch", async (_e, opts, draftId) => {
       const cwd = expandHome(String(opts?.cwd || "").trim());

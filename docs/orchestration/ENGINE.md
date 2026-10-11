@@ -1,12 +1,12 @@
 # Workflow engine (command 04a)
 
 One engine for the Workspace and Orchestration specs. It runs in the main process. Its UI is the Tasks
-window (04b); the workflow builder comes with 04c.
+window (04b) with the workflow builder (04c).
 
 ## Parts
 | File | Role |
 |---|---|
-| `src/main/modules/tasks/workflow-templates.js` | Stage schema, validation (plain-language errors), built-ins Pipeline and Best-of-N, prompt variables |
+| `src/shared/workflow-templates.js` | Stage schema, validation (plain-language errors), built-ins Pipeline and Best-of-N, prompt variables |
 | `src/main/modules/tasks/task-engine.js` | State machine: stages, instances, candidates, gates, loops, restart recovery |
 | `src/main/modules/tasks/task-store.js` | `tasks/<id>/config.json`, `state.json` (atomic), `log.jsonl`, `artifacts/` |
 | `src/main/modules/tasks/task-workspace.js` | git side: read-only worktree, candidate worktrees, snapshots, diffstat, tests, merge |
@@ -44,9 +44,12 @@ Every transition goes to `log.jsonl` with actor `you`, `engine` or `agent`.
 - Claude asks "trust this folder?" for every new folder, including a fresh worktree. Codex's trust applies to
   the repository root, so a trusted project's worktrees are trusted.
 
-## UI (04b)
+## UI (04b, 04c)
 The Tasks window (`src/renderer/tasks/`, screenshots in `tasks/`), gate cards in the pill and the Inbox, and
-Start in the New task dialog for Pipeline and Best-of-N. The workflow builder comes with 04c.
+Start in the New task dialog for Pipeline, Best-of-N and the owner's templates. The workflow builder
+(`src/renderer/tasks/builder.js`, screenshots in `builder/`) edits templates; `TemplateStore`
+(`src/main/modules/tasks/template-store.js`) keeps them in `<config>/Bayloob/workflows/`, and the same
+validation (`templateIssues`, per stage) runs in the builder, on save and when a task starts.
 
 ## Not yet / limitations
 - Codex `-s read-only` does not hold with this machine's config (#34). The post-turn `git status` check catches

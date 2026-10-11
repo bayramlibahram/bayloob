@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Added
+- **Workflow builder** (command 04c), in the Tasks window → Templates: built-in Pipeline and Best-of-N
+  (read-only, Duplicate) and your own templates (Edit, Duplicate, Delete — asks first), saved to
+  `<config>/Bayloob/workflows/<id>.json`. Each stage: title, role, parallel / sequential, gate, move up/down
+  (`Alt+↑/↓`), delete; agent slots with agent, count stepper (`n free of max`, "will queue" when over),
+  mode; reviewer once per candidate; the answer's artifact name; prompt editor with `{{` completion (task,
+  base, branch, candidate, note, earlier stages' artifacts); on fail → go to an earlier stage, max loops.
+  Problems show under their stage as you type; `Ctrl+S` saves only a template without problems.
+- New task → Agentic workflow: **Customize stages…** opens the builder on a copy of the chosen pattern with
+  the dialog's agents; "Save and use in my task" brings the dialog back with it. Your templates appear as
+  choices next to the patterns; the confirm step's sentence, diagram, gates and load follow the template.
 - **Tasks window** (command 04b): its own resizable window (1280×800, min 960×600, remembers size and
   position) with the task board — Queued · Running · Needs you · Review · Done · Failed/stopped, filter,
   project, density — and each task's detail: stage stepper, Overview (task, base, worktrees, every agent with

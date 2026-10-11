@@ -19,7 +19,7 @@
 // Nothing destructive or outward-facing happens without decide() from the human: merging is a gate action,
 // worktrees and branches are never deleted here.
 const { EventEmitter } = require("node:events");
-const { renderPrompt, validateTemplate } = require("./workflow-templates");
+const { renderPrompt, validateTemplate } = require("../../../shared/workflow-templates");
 const { parseFindings } = require("../agents/challenge-report");
 
 const ARTIFACT_IN_PROMPT = 12_000; // an artifact pasted into a prompt keeps its tail beyond this

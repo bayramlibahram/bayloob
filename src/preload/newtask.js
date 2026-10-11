@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("newTaskAPI", {
   launch: (opts, draftId) => ipcRenderer.invoke("newtask:launch", opts, draftId),
   // Workflow: the draft becomes a task the engine runs (the Tasks window opens on it)
   start: config => ipcRenderer.invoke("newtask:start", config),
+  // Customize stages…: the workflow builder opens in the Tasks window on this draft's stages
+  customize: (config, draftId) => ipcRenderer.invoke("newtask:customize", config, draftId),
   pickFolder: current => ipcRenderer.invoke("newtask:pick-folder", current),
   clipboard: () => ipcRenderer.invoke("launcher:clipboard"),
   close: () => ipcRenderer.send("newtask:close"),

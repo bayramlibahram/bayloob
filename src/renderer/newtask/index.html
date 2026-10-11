@@ -270,7 +270,9 @@
     question: 'Question', questionPh: 'What should the analysts find out?',
     free: (f, m) => `${f} free of ${m}`, queue: n => `${n} will queue`, word: { builder: 'builder', reviewer: 'reviewer', analyst: 'analyst' },
     arbiterOk: 'A different agent — less likely to prefer its own work', arbiterSame: 'Same agent as one doing the work — it may prefer its own',
-    customize: 'Customize stages…', customizeTip: 'Available after step 04 (workflow builder)',
+    customize: 'Customize stages…', customizeTip: 'Opens the workflow builder in the Tasks window on a copy of these stages',
+    customizeLater: 'This pattern arrives with a later step', yourTemplates: 'Your templates', nStages: n => `${n} stages`,
+    tplRuns: name => `Runs your template <b>${name}</b>:`, tplProblems: 'Your template has problems — fix them in Customize stages…',
     sources: 'Log sources · collected read-only into the task', sourcePh: 'e.g. journalctl -u php8.3-fpm --since "-6h"', add: 'Add',
     opsPlan: 'Also prepare an operations plan', opsSub: 'commands are only proposed; each runs when you click',
     gatesCap: 'Gates — where you’ll be asked', load: 'Parallel load',
@@ -297,7 +299,14 @@
   const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   // Configurations the workflow engine can run so far (command 04): Pipeline and Best-of-N
-  const runnable = c => c.category === 'workflow' && ['pipeline', 'bestofn'].includes(c.workflow.pattern);
+  const runnable = c => c.category === 'workflow' && (!!c.workflow.template || ['pipeline', 'bestofn'].includes(c.workflow.pattern));
+  // One of the owner's templates as the dialog's stage list (the shape TaskShape.stages gives)
+  const templateStages = t => t.stages.map(s => ({
+    id: s.id, title: s.title, role: s.role === 'tester' ? 'action' : s.role,
+    mode: s.role === 'you' || s.role === 'arbiter' ? 'you' : s.action ? 'action' : s.role === 'builder' ? 'writes' : s.mode || 'read-only',
+    agents: (s.agents || []).map(a => [a.adapter, Number(a.count) || 1]), parallel: !!s.parallel,
+    gate: s.gate === 'human' || s.gate === 'arbiter' ? 'human' : null,
+  }));
   const list = a => a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
   const badge = mode => mode === 'writes' ? '<span class="badge writes">writes</span>' : mode === 'plan' ? '<span class="badge plan">plan</span>' : mode === 'read-only' ? '<span class="badge ro">read-only</span>' : '';
 
@@ -426,6 +435,11 @@
       }
       if (this.step < 3) { return []; }
       if (c.category === 'single' && this.att.busy) { return [T.attaching]; }
+      const tpl = this.#template(c);
+      if (tpl) {
+        return [!c.text.trim() ? 'Describe the task' : null, tpl.issues?.length ? T.tplProblems : null].filter(Boolean);
+      }
+      if (c.category === 'workflow' && c.workflow.template) { return ['That template doesn’t exist any more — pick a pattern']; }
       return TaskShape.problems(c, this.installed);
     }
 
@@ -606,19 +620,54 @@
         ${key.endsWith('arbiter') && avoid.length ? `<span class="hintline grow${same ? ' warn' : ''}">${same ? T.arbiterSame : T.arbiterOk}</span>` : ''}</div>`;
     }
 
+    // The owner's template the workflow uses, or null (a pattern's preset)
+    #template(c = this.cfg) {
+      return c.category === 'workflow' && c.workflow.template ? (this.state.templates || []).find(t => t.id === c.workflow.template) || null : null;
+    }
+
+    #stages(c) {
+      const t = this.#template(c);
+      return t ? templateStages(t) : TaskShape.stages(c);
+    }
+
+    #gates(c) {
+      const t = this.#template(c);
+      if (!t) { return TaskShape.gates(c); }
+      return t.stages.filter(s => s.gate === 'human' || s.gate === 'arbiter')
+        .map(s => s.role === 'you' ? 'Before merge — you merge or keep the branch' : s.gate === 'arbiter' ? `${s.title} — you pick the candidate` : `After ${s.title} — approve or ask for changes`);
+    }
+
+    #peak(c) {
+      const out = {};
+      for (const s of this.#stages(c)) { for (const [a, n] of s.agents) { out[a] = Math.max(out[a] || 0, n); } }
+      return out;
+    }
+
     #configWorkflow() {
       const w = this.cfg.workflow;
       const board = w.pattern === 'board';
       const builders = Object.keys(w.agents).filter(a => w.agents[a]);
-      return `<div class="presets" role="group" aria-label="Pattern">${Object.entries(TaskShape.PATTERNS).map(([k, p]) => `<button type="button" class="preset" aria-pressed="${k === w.pattern}" data-pattern="${k}">${p.name}<small>${p.hint}</small></button>`).join('')}</div>
+      const own = this.state.templates || [];
+      const tpl = this.#template();
+      const presets = `<div class="presets" role="group" aria-label="Pattern">${Object.entries(TaskShape.PATTERNS).map(([k, p]) => `<button type="button" class="preset" aria-pressed="${!tpl && k === w.pattern}" data-pattern="${k}">${p.name}<small>${p.hint}</small></button>`).join('')}</div>
+        ${own.length ? `<div class="label">${T.yourTemplates}</div><div class="presets" role="group" aria-label="${T.yourTemplates}">${own.map(t => `<button type="button" class="preset" aria-pressed="${tpl?.id === t.id}" data-template="${esc(t.id)}">${esc(t.name)}<small>${T.nStages(t.stages.length)}</small></button>`).join('')}</div>` : ''}`;
+      const canCustomize = !!tpl || ['pipeline', 'bestofn'].includes(w.pattern);
+      const customize = `<span title="${canCustomize ? T.customizeTip : T.customizeLater}"><button type="button" class="expander" data-customize ${canCustomize ? '' : 'disabled'}>${I('edit')}${T.customize}</button></span>`;
+      const text = `<div class="label">${T.task}</div>
+        <div class="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.taskPh}" aria-label="${T.task}">${esc(this.cfg.text)}</textarea></div>`;
+      if (tpl) {
+        return `${presets}
+          <p class="sentence" style="font-size:13px">${T.tplRuns(esc(tpl.name))} ${tpl.stages.map(s => `${esc(s.title)}${(s.agents || []).length ? ` ×${s.agents.reduce((a, x) => a + Number(x.count || 0), 0)}` : ''}`).join(' → ')}</p>
+          ${tpl.issues?.length ? `<p class="hintline warn">${T.tplProblems}</p>` : ''}
+          ${text}${customize}`;
+      }
+      return `${presets}
         ${board ? '' : this.#select('workflow.planner', w.planner, T.planner)}
         <div class="label">${board ? T.reviewers : T.builders}</div>
         ${this.#agentRows(w.agents, board ? 'read-only' : 'writes', board ? T.word.reviewer : T.word.builder)}
         ${['pipeline', 'split'].includes(w.pattern) ? this.#select('workflow.reviewer', w.reviewer, T.reviewer) : ''}
         ${this.#select('workflow.arbiter', w.arbiter, T.arbiter, board ? [] : builders)}
-        <div class="label">${T.task}</div>
-        <div class="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.taskPh}" aria-label="${T.task}">${esc(this.cfg.text)}</textarea></div>
-        <span title="${T.customizeTip}"><button type="button" class="expander" disabled>${I('edit')}${T.customize}</button></span>`;
+        ${text}${customize}`;
     }
 
     #configAnalysis() {
@@ -649,7 +698,7 @@
           <div class="review">${rows.map(([k, v]) => `<div class="rr"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}
             <div class="prompt"><span class="label">${T.rPrompt}</span> <button type="button" class="btn ghost sm" data-edit>${T.edit}</button><pre class="${prompt ? '' : 'empty'}">${esc(prompt || T.noPrompt)}</pre></div></div>`;
       }
-      const stages = TaskShape.stages(c);
+      const stages = this.#stages(c);
       const node = s => {
         const icon = s.mode === 'you' ? I(s.id === 'runbook' ? 'term' : s.id === 'read' ? 'file' : 'merge', 'big') : s.id === 'collect' ? I('file', 'big') : s.role === 'action' ? I('test', 'big') : '';
         const minis = s.agents.flatMap(([a, n]) => Array(Math.min(n, 4)).fill(a)).map(a => `<span class="m">${Agent.thumb(a)}</span>`).join('');
@@ -657,7 +706,7 @@
         return `<div class="node"><div class="box${s.mode === 'you' ? ' you' : ''}">${icon || `<span class="stack">${minis}</span>`}<b>${esc(s.title)}</b>${badge(s.mode)}</div><small>${sub}</small></div>`;
       };
       const diagram = stages.map((s, i) => `${i ? `${stages[i - 1].gate === 'human' ? '<span class="gate" title="You are asked here"></span>' : ''}<span class="link"></span>` : ''}${node(s)}`).join('');
-      const peak = TaskShape.peak(c);
+      const peak = this.#peak(c);
       const loads = Object.keys(peak).map(a => {
         const max = this.state.capacity[a] || 1;
         const busy = Math.min(max, this.state.running[a] || 0);
@@ -670,7 +719,7 @@
       }).join('');
       return `<p class="sentence">${this.#sentence(c)}</p>
         <div class="diagram" role="img" aria-label="Stages: ${esc(stages.map(s => s.title).join(', '))}">${diagram}</div>
-        <div class="label">${T.gatesCap}</div><ul class="glist">${TaskShape.gates(c).map(g => `<li><span class="gate"></span>${esc(g)}</li>`).join('')}</ul>
+        <div class="label">${T.gatesCap}</div><ul class="glist">${this.#gates(c).map(g => `<li><span class="gate"></span>${esc(g)}</li>`).join('')}</ul>
         <div class="label">${T.load}</div>${loads}`;
     }
 
@@ -681,6 +730,12 @@
         const a = c.analysis;
         const n = TaskShape.total(a.agents);
         return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read <b>${esc(c.project.name)}</b>${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report.${a.opsPlan ? ' Then it proposes an <b>operations plan</b> — each command runs only when you click.' : ''}`;
+      }
+      const tpl = this.#template(c);
+      if (tpl) {
+        const writers = tpl.stages.filter(s => s.role === 'builder').flatMap(s => s.agents || []);
+        const n = writers.reduce((a, x) => a + Number(x.count || 0), 0);
+        return `Runs your template <b>${esc(tpl.name)}</b> on <b>${esc(c.project.name)}</b>: ${tpl.stages.map(s => esc(s.title)).join(' → ')}.${n ? ` <b>${n} builder${n > 1 ? 's' : ''}</b>, each in its own worktree.` : ''} Nothing is merged until you click.`;
       }
       const w = c.workflow;
       const n = TaskShape.total(w.agents);
@@ -775,7 +830,14 @@
         if (d.agent) { c.single.agent = d.agent; return this.#changed(); }
         if (d.worktree !== undefined) { c.single.worktree = !c.single.worktree; return this.#changed(); }
         if (d.term) { c.single.terminal = d.term; return this.#changed(); }
-        if (d.pattern) { c.workflow.pattern = d.pattern; return this.#changed(); }
+        if (d.pattern) { c.workflow.pattern = d.pattern; c.workflow.template = null; return this.#changed(); }
+        if (d.template) { c.workflow.template = d.template; return this.#changed(); }
+        if (d.customize !== undefined) {
+          clearTimeout(this.#saveTimer);
+          const r = await this.api.customize?.({ ...c, id: this.draftId || undefined }, this.draftId);
+          if (r && !r.ok) { this.#message(r.error || T.wrong, true); }
+          return;
+        }
         if (d.preset) { c.analysis.preset = d.preset; return this.#changed(); }
         if (d.ops !== undefined) { c.analysis.opsPlan = !c.analysis.opsPlan; return this.#changed(); }
         if (d.edit !== undefined) { return this.#go(3); }

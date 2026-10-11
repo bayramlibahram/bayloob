@@ -15,5 +15,12 @@ contextBridge.exposeInMainWorld("tasksAPI", {
   // Opens a terminal attached to one instance's tmux session
   terminal: (id, instanceId) => ipcRenderer.invoke("tasks:terminal", id, instanceId),
   newTask: () => ipcRenderer.send("open-launcher"),
+  // Workflow templates: built-ins are read-only; save → { ok, template } | { ok: false, issues }
+  templates: {
+    list: () => ipcRenderer.invoke("templates:list"),
+    idFor: name => ipcRenderer.invoke("templates:id-for", name),
+    save: (template, opts) => ipcRenderer.invoke("templates:save", template, opts),
+    remove: id => ipcRenderer.invoke("templates:remove", id),
+  },
   control: action => ipcRenderer.send("tasks:window", action),
 });
