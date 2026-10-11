@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Read-only Codex can't write any more.** It now runs with `--sandbox read-only --ask-for-approval never`.
+  With the default on-request policy, a config with `approvals_reviewer = "auto_review"` approved the
+  sandbox escalation and the file was written (#34). The post-turn `git status` check stays as the backstop.
+- `scripts/task-demo.js` runs again since the Arbiter joined the workflows. It now covers every preset
+  (Pipeline, Best-of-N, Split work, Review board) and an incident analysis, and exits 1 when a scenario
+  doesn't end as expected.
+
+### Docs
+- README: Run modes, Split work and Review board, the Arbiter, Analysis and operations, Operations safety,
+  Stop per agent or stage, Settings → Hosts. "Next up" lists only what isn't built yet.
+
 ## 0.7.0 — 2026-10-11
 
 ### Fixed
