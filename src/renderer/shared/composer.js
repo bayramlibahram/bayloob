@@ -8,6 +8,9 @@ const PASTE_MIN_CHARS = 1200;
 const PASTE_MIN_LINES = 20;
 const PASTE_PREVIEW_LINES = 30;
 
+// Pasted text kept across a reload, per draft (localStorage holds a few MB for all of them)
+const STORED_PASTE_MAX = 200_000;
+
 const lineCount = text => (text ? String(text).split("\n").length : 0);
 
 /** "245 chars", "3 lines · 1.2k chars" — '' for no text. */
@@ -173,7 +176,12 @@ class Drafts {
     }
     const s = this.#stored[key];
     return s && Date.now() - s.at < this.maxAgeMs
-      ? { text: s.text || "", format: s.format || "", files: s.files || [] }
+      ? {
+          text: s.text || "",
+          format: s.format || "",
+          files: s.files || [],
+          pastes: (s.pastes || []).map(text => ({ text, open: false })),
+        }
       : null;
   }
 
@@ -191,10 +199,20 @@ class Drafts {
       size,
       secretsOk: !!secretsOk,
     }));
+    // pasted text too, up to STORED_PASTE_MAX characters in all (a larger paste stays in memory only)
+    let room = STORED_PASTE_MAX;
+    const pastes = [];
+    for (const p of draft.pastes || []) {
+      room -= p.text.length;
+      if (room >= 0) {
+        pastes.push(p.text);
+      }
+    }
     this.#stored[key] = {
       text: draft.text || "",
       format: draft.format || "",
       files,
+      pastes,
       at: Date.now(),
     };
     this.#save();

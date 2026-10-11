@@ -50,6 +50,18 @@ test("drafts: text, format and attached files survive a reload (paths and the se
   const got = again.get("say:s1");
   assert.equal(got.text, "Fix it");
   assert.deepEqual(got.files, [{ path: "/u/1/.env", name: ".env", size: 20, secretsOk: true }]);
+  // pasted text too (closed chips), up to a limit
+  assert.deepEqual(JSON.parse(JSON.stringify(got.pastes)), [
+    { text: "x".repeat(2000), open: false },
+  ]);
+  d.set("say:s2", {
+    text: "big",
+    pastes: [{ text: "y".repeat(150_000) }, { text: "z".repeat(100_000) }],
+  });
+  assert.deepEqual(
+    new Drafts("k").get("say:s2").pastes.map(p => p.text.length),
+    [150_000]
+  );
   // in memory: the whole draft, the checked files included
   assert.equal(d.get("say:s1").files[0].secrets.length, 1);
   // empty → forgotten
