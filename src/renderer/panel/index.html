@@ -1059,7 +1059,7 @@
       const old = this.el.detail.querySelector('[data-console]');
       const atBottom = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 8;
       const top = old?.scrollTop || 0;
-      this.el.detail.innerHTML = head + body;
+      swapHtml(this.el.detail, head + body);
       const con = this.el.detail.querySelector('[data-console]');
       this.el.detail.classList.toggle('has-console', !!con);
       if (con) { con.scrollTop = atBottom ? con.scrollHeight : top; }
@@ -1255,7 +1255,7 @@
       const logs = lg && cs.some(c => c.id === lg.id)
         ? `<h3>${T.logsOf(esc(lg.name))} <button class="link" data-logs-close>${T.close}</button></h3>
            ${lg.error ? stateBlock({ kind: 'error', title: T.logsFailed, action: { label: T.retry, data: { logs: lg.id } }, details: lg.error })
-             : lg.text == null ? stateBlock({ kind: 'loading', line: T.loadingLogs }) : `<pre class="logs">${esc(lg.text) || T.noLogs}</pre>`}`
+             : lg.text == null ? stateBlock({ kind: 'loading', line: T.loadingLogs }) : `<pre class="logs" data-k="logs:${esc(lg.id)}">${esc(lg.text) || T.noLogs}</pre>`}`
         : '';
       return `
         <div class="tiles">
