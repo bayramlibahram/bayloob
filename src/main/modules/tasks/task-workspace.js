@@ -8,6 +8,8 @@ const { Git, parseShortstat } = require("../../infrastructure/system/git");
 const { detectTests } = require("./project-info");
 
 const TEST_TIMEOUT_MS = 10 * 60_000;
+const ENV_FILE = /^\.env(\..+)?$/;
+const ENV_EXAMPLE = /\.(example|sample|template|dist)$/;
 const TEST_LINES = 300; // the tail of the test output that's kept (and pasted into a fix prompt)
 // Committing a snapshot on Bayloob's own task branch; the owner's identity when git has one
 const FALLBACK_IDENTITY = ["-c", "user.name=Bayloob", "-c", "user.email=bayloob@localhost"];
@@ -266,27 +268,47 @@ class TaskWorkspace {
     return r.code === 0 ? { ok: true } : { ok: false, error: r.err.trim() || "git apply failed" };
   }
 
-  // A fresh worktree has no installed dependencies: share the project's node_modules through a symlink
-  // (kept out of git through the repo's local exclude file, never .gitignore), so tests can run there.
+  // A fresh worktree has none of what git doesn't carry: installed dependencies and the project's env files
+  // (.env, .env.local… — `DATABASE_URL is required` failed every candidate's tests in the first real run).
+  // They're shared through symlinks, kept out of git through the repo's local exclude file (never .gitignore).
+  // Examples (.env.example, .sample, .template, .dist) are tracked files anyway.
   async #shareDeps(root, dir) {
-    const deps = path.join(root, "node_modules");
-    const link = path.join(dir, "node_modules");
-    if (!fs.existsSync(deps) || fs.existsSync(link)) {
-      return;
+    const shared = ["node_modules"];
+    try {
+      for (const name of fs.readdirSync(root)) {
+        if (
+          ENV_FILE.test(name) &&
+          !ENV_EXAMPLE.test(name) &&
+          fs.statSync(path.join(root, name)).isFile()
+        ) {
+          shared.push(name);
+        }
+      }
+    } catch {
+      /* an unreadable project shares nothing */
     }
-    fs.symlinkSync(deps, link, "dir");
-    const ignored = await run(dir, ["check-ignore", "-q", "node_modules"]).then(
-      () => true,
-      () => false
-    );
-    if (!ignored) {
-      const common = (await run(dir, ["rev-parse", "--git-common-dir"])).trim();
-      const exclude = path.resolve(dir, common, "info", "exclude");
-      fs.mkdirSync(path.dirname(exclude), { recursive: true });
-      fs.appendFileSync(
-        exclude,
-        "\n# Bayloob: node_modules shared into task worktrees\n/node_modules\n"
+    for (const name of shared) {
+      const target = path.join(root, name);
+      const link = path.join(dir, name);
+      // A file git carries (tracked, or in the snapshot) is already there and stays as it is
+      if (
+        !fs.existsSync(target) ||
+        fs.existsSync(link) ||
+        fs.lstatSync(link, { throwIfNoEntry: false })
+      ) {
+        continue;
+      }
+      fs.symlinkSync(target, link, name === "node_modules" ? "dir" : "file");
+      const ignored = await run(dir, ["check-ignore", "-q", name]).then(
+        () => true,
+        () => false
       );
+      if (!ignored) {
+        const common = (await run(dir, ["rev-parse", "--git-common-dir"])).trim();
+        const exclude = path.resolve(dir, common, "info", "exclude");
+        fs.mkdirSync(path.dirname(exclude), { recursive: true });
+        fs.appendFileSync(exclude, `\n# Bayloob: shared into task worktrees\n/${name}\n`);
+      }
     }
   }
 }

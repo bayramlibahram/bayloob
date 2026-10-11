@@ -186,3 +186,21 @@ test("a repository without commits can start from its files", async () => {
   assert.deepEqual([r.head, r.branch], [null, "main"]);
   assert.equal(fs.readFileSync(path.join(r.roDir, "index.js"), "utf8"), "x\n");
 });
+
+test("the project's env files reach every worktree (symlinked, out of git); examples stay as tracked", async () => {
+  const { root, ws } = repo();
+  fs.writeFileSync(path.join(root, ".gitignore"), "node_modules/\n.env\n");
+  fs.writeFileSync(path.join(root, ".env.example"), "DATABASE_URL=\n");
+  g(root, "add", ".");
+  g(root, "commit", "-qm", "env example");
+  fs.writeFileSync(path.join(root, ".env"), "DATABASE_URL=postgres://demo\n"); // ignored
+  fs.writeFileSync(path.join(root, ".env.local"), "DEBUG=1\n"); // not ignored, not tracked
+  const { roDir, sha } = await ws.prepare({ cwd: root, taskId: ID });
+  const c = await ws.addCandidate({ root, taskId: ID, candidate: "build-1", sha });
+  for (const dir of [roDir, c.dir]) {
+    assert.equal(fs.readlinkSync(path.join(dir, ".env")), path.join(root, ".env"));
+    assert.equal(fs.readlinkSync(path.join(dir, ".env.local")), path.join(root, ".env.local"));
+    assert.equal(fs.lstatSync(path.join(dir, ".env.example")).isSymbolicLink(), false);
+    assert.equal(await ws.dirty(dir), false);
+  }
+});

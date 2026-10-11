@@ -13,6 +13,9 @@
   still shows the red sound icon on the bar.
 
 ### Fixed
+- A task's worktrees now get the project's env files too (`.env`, `.env.local`…, symlinked like `node_modules`
+  and kept out of git; `.env.example` and the like stay as tracked). In the first real Best-of-N run every
+  candidate's tests failed with `DATABASE_URL is required` only because `.env` is git-ignored.
 - Workflow tasks noticed a Codex builder finish only through Codex's `notify`, which interactive Codex 0.162
   no longer calls (`codex exec` still does) — found in the first real Best-of-N run, where two finished Codex
   builders kept the task waiting. The end of a Codex turn now also comes from its rollout's `task_complete`
