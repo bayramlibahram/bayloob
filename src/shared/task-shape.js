@@ -25,6 +25,7 @@
   const SOURCES_MAX = 10;
   const HOSTS_MAX = 20;
   const ATTACH_MAX = 50;
+  const PASTES_MAX = 10;
 
   const pick = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
   const counts = (raw, agents) =>
@@ -46,6 +47,11 @@
       category: pick(raw.category, CATEGORIES, "single"),
       project: { cwd: String(raw.project?.cwd || ""), name: String(raw.project?.name || "") },
       text: String(raw.text || "").slice(0, TEXT_MAX),
+      // Large pastes kept as chips in New task; they go after the text when it starts (see composeText)
+      pastes: (Array.isArray(raw.pastes) ? raw.pastes : [])
+        .map(x => String(x || "").slice(0, TEXT_MAX))
+        .filter(x => x.trim())
+        .slice(0, PASTES_MAX),
       // Files for a workflow or analysis (Bayloob's uploads; the engine copies them into the task when it starts).
       // secretsOk: the owner saw the secret warning and sends it anyway
       attachments: (Array.isArray(raw.attachments) ? raw.attachments : [])
@@ -302,7 +308,7 @@
     if (used(bag).some(([a]) => notInstalled(a))) {
       out.push("An agent you picked isn't installed");
     }
-    if (!c.text.trim()) {
+    if (!c.text.trim() && !c.pastes?.length) {
       out.push(c.category === "analysis" ? "Write the question" : "Describe the task");
     }
     if (c.category === "analysis" && c.analysis.preset === "files" && !c.attachments?.length) {

@@ -35,7 +35,7 @@ class Pastes {
     this.list = list;
     this.onChange = onChange;
     this.insert = insert;
-    this.list?.addEventListener("click", e => this.#click(e));
+    this.list?.addEventListener("click", e => this.click(e));
   }
 
   static isLarge(text) {
@@ -119,10 +119,11 @@ class Pastes {
         ${p.open ? `<pre tabindex="0" aria-label="Pasted text">${esc(preview)}${more > 0 ? `\n… ${more} more line${more === 1 ? "" : "s"}` : ""}</pre>` : ""}</li>`;
   }
 
-  #click(e) {
+  /** The chips' own buttons (a page whose list is rebuilt passes its clicks here). true when it was one. */
+  click(e) {
     const b = e.target.closest("[data-paste-open], [data-paste-insert], [data-paste-rm]");
     if (!b) {
-      return;
+      return false;
     }
     if (b.dataset.pasteOpen !== undefined) {
       const p = this.items[Number(b.dataset.pasteOpen)];
@@ -141,12 +142,14 @@ class Pastes {
     } else {
       this.remove(Number(b.dataset.pasteRm));
     }
+    return true;
   }
 }
 
 /**
- * Unsent drafts by key (a session id): the whole draft in memory, its text (and format) also in
- * localStorage, so a reload or a restart brings it back. Old ones are dropped.
+ * Unsent drafts by key (a session id): the whole draft in memory; its text, format and attached files (their
+ * paths in Bayloob's uploads — the page checks them again when it restores them) also in localStorage, so a
+ * reload or a restart brings it back. Old ones are dropped.
  */
 class Drafts {
   #mem = new Map();
@@ -170,7 +173,7 @@ class Drafts {
     }
     const s = this.#stored[key];
     return s && Date.now() - s.at < this.maxAgeMs
-      ? { text: s.text || "", format: s.format || "" }
+      ? { text: s.text || "", format: s.format || "", files: s.files || [] }
       : null;
   }
 
@@ -181,7 +184,19 @@ class Drafts {
       return this.delete(key);
     }
     this.#mem.set(key, draft);
-    this.#stored[key] = { text: draft.text || "", format: draft.format || "", at: Date.now() };
+    // files: where they are and what the owner said about a secret warning, not their content
+    const files = (draft.files || []).map(({ path, name, size, secretsOk }) => ({
+      path,
+      name,
+      size,
+      secretsOk: !!secretsOk,
+    }));
+    this.#stored[key] = {
+      text: draft.text || "",
+      format: draft.format || "",
+      files,
+      at: Date.now(),
+    };
     this.#save();
   }
 

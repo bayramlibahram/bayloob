@@ -227,3 +227,88 @@
   margin: 10px 16px 0;
   color: var(--muted, #8b8b96);
 }
+
+/* A large paste (composer.js): one chip, opened to read, put back in the box, or removed — every prompt box */
+.pastes {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pastes[hidden] {
+  display: none;
+}
+.paste {
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.05);
+  border: 1px solid rgb(var(--ink) / 0.09);
+  font-size: 12px;
+  min-width: 0;
+}
+.paste .ph {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 9px;
+}
+.paste .pn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  color: var(--soft);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.paste .pn:hover {
+  color: var(--text);
+}
+.paste .pi {
+  color: var(--brand-soft);
+  font-size: 11px;
+}
+.paste small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.paste .pa {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgb(var(--ink) / 0.08);
+}
+.paste .pa:hover {
+  background: rgb(var(--ink) / 0.14);
+}
+.paste .rm {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.paste .rm:hover {
+  background: color-mix(in srgb, var(--waiting) 15%, transparent);
+  color: var(--waiting);
+}
+.paste pre {
+  margin: 0 6px 6px;
+  padding: 6px 8px;
+  max-height: min(160px, 25vh);
+  overflow: auto;
+  border-radius: 7px;
+  background: var(--code-bg);
+  font:
+    11.5px / 1.45 ui-monospace,
+    monospace;
+  color: var(--softer);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

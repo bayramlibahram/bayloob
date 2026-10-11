@@ -214,6 +214,7 @@
 
 <script src="../shared/ui-common.js"></script>
 <script src="../shared/attachments.js"></script>
+<script src="../shared/composer.js"></script>
 <script src="../../shared/task-shape.js"></script>
 <script>
   const T = {
@@ -334,6 +335,13 @@
           this.#fit();
           this.#changed({ render: files });
         } });
+      // A large paste becomes a chip (kept with the draft as cfg.pastes); it goes after the text on start
+      this.pastes = new Pastes({ list: null, insert: text => this.#insertText(text), onChange: () => {
+        this.cfg.pastes = this.pastes.items.map(i => i.text);
+        this.#count();
+        this.#fit();
+        this.#changed({ render: false });
+      } });
       Attachments.guardWindow();
       this.#bind();
     }
@@ -357,6 +365,7 @@
       this.infoFailed = new Map();
       this.att.clear();
       this.taskAtt.items = [];
+      this.pastes.restore((state.draft?.pastes || []).map(text => ({ text, open: false })));
       const d = state.draft;
       if (d) {
         this.cfg = d;
@@ -500,7 +509,7 @@
       this.el.next.disabled = this.el.back.disabled = true;
       this.#message(T.starting);
       clearTimeout(this.#saveTimer);
-      const res = await this.api.start?.({ ...this.cfg, id: this.draftId || undefined, workflow: { ...this.cfg.workflow, base: this.#base() } });
+      const res = await this.api.start?.({ ...this.cfg, text: this.pastes.compose(this.cfg.text), pastes: [], id: this.draftId || undefined, workflow: { ...this.cfg.workflow, base: this.#base() } });
       this.busy = false;
       this.el.next.disabled = this.el.back.disabled = false;
       if (res?.ok) {
@@ -517,7 +526,7 @@
       this.el.next.disabled = this.el.back.disabled = true;
       this.#message(T.starting);
       // Same options as the old Ask Bayloob dialog sent to launcher:launch
-      const res = await this.api.launch({ agent: s.agent, cwd: this.cfg.project.cwd, prompt: this.att.compose(this.cfg.text.trim()), worktree: !!s.worktree, terminal: s.terminal }, this.draftId);
+      const res = await this.api.launch({ agent: s.agent, cwd: this.cfg.project.cwd, prompt: this.att.compose(this.pastes.compose(this.cfg.text.trim())), worktree: !!s.worktree, terminal: s.terminal }, this.draftId);
       this.busy = false;
       this.el.next.disabled = this.el.back.disabled = false;
       if (res?.ok) {
@@ -609,7 +618,7 @@
             <span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${this.usable(k) ? T.free(this.free(k), this.state.capacity[k]) : this.whyNot(k)}</small></span><span class="tick">${k === s.agent ? I('check') : ''}</span></button>`).join('')}</div>
         <div class="label">${T.prompt}</div>
         <div class="composer" id="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.promptPh}" aria-label="${T.prompt}"></textarea>
-          <ul class="atts" id="atts" hidden></ul>
+          <ul class="atts" id="atts" hidden></ul><ul class="pastes" id="pastes" hidden></ul>
           <div class="tools"><button type="button" class="ghost" id="attach" title="${T.attachTip}" hidden>${I('clip')}${T.attach}</button>
             <button type="button" class="ghost" id="paste" title="${T.pasteTip}">${I('paste')}${T.paste}</button><span class="count" id="count"></span></div></div>
         <button type="button" class="toggle" role="switch" aria-checked="${!!s.worktree}" data-worktree ${this.hasGit ? '' : `disabled title="${T.needsGit}"`}>
@@ -743,8 +752,29 @@
 
     // A workflow's or analysis's files: chips and Attach under the text box
     #fileTools() {
-      return `<ul class="atts" id="atts" hidden></ul>
+      return `<ul class="atts" id="atts" hidden></ul><ul class="pastes" id="pastes" hidden></ul>
         <div class="tools"><button type="button" class="ghost" id="attach" title="${T.attachTaskTip}">${I('clip')}${T.attach}</button><span class="count">${T.filesStay}</span></div>`;
+    }
+
+    // The pasted-text chips under the text box (rebuilt on every render, like the box)
+    #mountPastes(ta) {
+      const list = document.getElementById('pastes');
+      this.pastes.list = list;
+      this.pastes.render();
+      list.addEventListener('click', e => this.pastes.click(e));
+      this.pastes.bindPaste(ta); // after the files: a pasted file is theirs, a large text a chip
+    }
+
+    // A chip's text put back at the caret
+    #insertText(text) {
+      const ta = document.getElementById('text');
+      if (!ta) { return; }
+      const at = ta.selectionStart ?? ta.value.length;
+      ta.value = ta.value.slice(0, at) + text + ta.value.slice(ta.selectionEnd ?? at);
+      this.cfg.text = ta.value;
+      ta.focus();
+      this.#count();
+      this.#grow(ta);
     }
 
     #mountTaskFiles() {
@@ -759,6 +789,7 @@
       attach.addEventListener('click', () => this.taskAtt.pick());
       this.taskAtt.bindDrop(document.getElementById('composer'));
       this.taskAtt.bindPaste(ta);
+      this.#mountPastes(ta);
     }
 
     #confirm() {
@@ -770,7 +801,7 @@
         const rows = [[T.rAgent, `<span class="m s">${Agent.thumb(s.agent)}</span><b>${name(s.agent)}</b>`], [T.rFolder, `<code>${esc(tilde(c.project.cwd, this.state.home))}</code>`],
           [T.rWhere, s.worktree ? `${T.inWorktree} <small>${T.worktreeNote}</small>` : T.inFolder], ...(term ? [[T.rTerminal, esc(term.name)]] : []),
           ...(this.att.count ? [[T.rFiles, this.att.items.map(f => `<code title="${esc(f.path)}">${esc(f.name)}</code>`).join(' ')]] : [])];
-        const prompt = this.att.compose(c.text.trim());
+        const prompt = this.att.compose(this.pastes.compose(c.text.trim()));
         return `<p class="sentence"><b>${name(s.agent)}</b> starts in <b>${esc(c.project.name)}</b>${prompt ? ' and gets your prompt' : ''}. Permissions come to the pill.</p>
           <div class="review">${rows.map(([k, v]) => `<div class="rr"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}
             <div class="prompt"><span class="label">${T.rPrompt}</span> <button type="button" class="btn ghost sm" data-edit>${T.edit}</button><pre class="${prompt ? '' : 'empty'}">${esc(prompt || T.noPrompt)}</pre></div></div>`;
@@ -849,6 +880,7 @@
       document.getElementById('paste').addEventListener('click', () => this.#pasteClipboard());
       this.att.bindDrop(document.getElementById('composer'));
       this.att.bindPaste(ta);
+      this.#mountPastes(ta);
       this.#count();
       this.#grow(ta);
     }
@@ -867,9 +899,8 @@
     }
 
     #count() {
-      const n = this.cfg.text.length;
       const el = document.getElementById('count');
-      if (el) { el.textContent = n ? T.chars(n) : ''; }
+      if (el) { el.textContent = lengthLabel([this.cfg.text.trim(), this.pastes.text].filter(Boolean).join('\n\n')); }
     }
 
     #grow(ta) {

@@ -161,6 +161,7 @@
         <div class="composer">
           <textarea id="prompt" rows="3" aria-label="Prompt" placeholder="What should be done?" spellcheck="false"></textarea>
           <ul class="atts" id="atts" hidden></ul>
+          <ul class="pastes" id="pastes" hidden></ul>
           <div class="tools">
             <button type="button" class="ghost attach-btn" id="attach" title="Attach files — or drop them here, or paste a screenshot (Ctrl+V)" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.5-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-7.9"/></svg>Attach</button>
@@ -207,6 +208,7 @@
 
 <script src="../shared/ui-common.js"></script>
 <script src="../shared/attachments.js"></script>
+<script src="../shared/composer.js"></script>
 <script>
   const T = {
     ask: 'Ask Bayloob', askSub: 'Start a new agent session',
@@ -251,7 +253,11 @@
         paste: $('paste'), queued: $('queued'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
         attach: $('attach'), atts: $('atts'),
         quote: $('quote'), agents: $('agents'), worktree: $('worktree'), terms: $('terms'), review: $('review'), msg: $('msg'), back: $('back'), submit: $('submit') };
-      this.att = new Attachments({ api: api.uploads, list: this.el.atts, onChange: () => this.#fit(), onError: t => this.#message(t, true) });
+      this.att = new Attachments({ api: api.uploads, list: this.el.atts, onChange: () => { this.#saveDraft(); this.#fit(); }, onError: t => this.#message(t, true) });
+      // A large paste becomes a chip; what you were writing is kept per session (and for a new one) until it's sent
+      this.pastes = new Pastes({ list: $('pastes'), onChange: () => { this.#updateCount(); this.#saveDraft(); this.#fit(); },
+        insert: text => this.#insert(text) });
+      this.drafts = new Drafts('bayloob.launcher.drafts');
       this.el.attach.hidden = !this.att.available;
       this.#bind();
     }
@@ -260,7 +266,14 @@
     get installed() { return Object.keys(this.state.agents).filter(k => this.state.agents[k].installed); }
     get flow() { return this.isNew ? ['prompt', 'agent', 'confirm'] : ['prompt', 'confirm']; }
     get text() { return this.el.prompt.value.trim(); }
-    get prompt() { return this.att.compose(this.text); } // what the agent gets: the text and the attached files
+    // what the agent gets: the text, the pasted blocks, and the attached files
+    get prompt() { return this.att.compose(this.pastes.compose(this.text)); }
+    get #draftKey() { return this.isNew ? 'new' : `session:${this.state?.session?.id}`; }
+
+    #saveDraft() {
+      if (!this.state || this.busy) { return; }
+      this.drafts.set(this.#draftKey, { text: this.el.prompt.value, files: [...this.att.items], pastes: this.pastes.snapshot() });
+    }
 
     show(state) {
       this.state = state;
@@ -271,6 +284,14 @@
       this.el.subtitle.textContent = this.isNew ? T.askSub : s.project;
       this.el.prompt.value = state.prefill || '';
       this.att.clear();
+      this.pastes.clear();
+      // No prompt handed in: what you were writing here last time comes back (files checked again)
+      const draft = state.prefill ? null : this.drafts.get(this.#draftKey);
+      if (draft) {
+        this.el.prompt.value = draft.text || '';
+        if (draft.files?.length) { this.att.restore(draft.files); }
+        this.pastes.restore(draft.pastes);
+      }
       this.el.prompt.classList.toggle('code', !!state.prefill && !state.draft);
       this.el.prompt.placeholder = this.isNew ? T.promptPlaceholder : T.followUp;
       this.el.projectBox.hidden = !this.isNew;
@@ -427,8 +448,18 @@
     }
 
     #updateCount() {
-      const n = this.el.prompt.value.length;
-      this.el.count.textContent = n > 0 ? T.chars(n) : '';
+      this.el.count.textContent = lengthLabel([this.el.prompt.value.trim(), this.pastes?.text].filter(Boolean).join('\n\n'));
+    }
+
+    // A pasted chip's text put back at the caret
+    #insert(text) {
+      const el = this.el.prompt;
+      const at = el.selectionStart ?? el.value.length;
+      el.value = el.value.slice(0, at) + text + el.value.slice(el.selectionEnd ?? at);
+      el.focus();
+      this.#updateCount();
+      this.#grow();
+      this.#saveDraft();
     }
 
     // The prompt box grows with its text, up to a limit (then it scrolls)
@@ -488,8 +519,10 @@
     #done(res) {
       this.busy = false;
       this.el.submit.disabled = this.el.back.disabled = false;
-      if (res?.ok) { this.api.close(); }
-      else { this.#message(res?.error || T.wrong, true); }
+      if (res?.ok) {
+        this.drafts.delete(this.#draftKey);
+        this.api.close();
+      } else { this.#message(res?.error || T.wrong, true); }
     }
 
     // ---------- events ----------
@@ -502,8 +535,9 @@
       this.el.attach.addEventListener('click', () => this.att.pick());
       this.att.bindDrop(this.el.prompt.closest('.composer'));
       this.att.bindPaste(this.el.prompt);
+      this.pastes.bindPaste(this.el.prompt); // after the files: a pasted file is theirs, a large text a chip
       Attachments.guardWindow();
-      this.el.prompt.addEventListener('input', () => { this.#updateCount(); this.#grow(); });
+      this.el.prompt.addEventListener('input', () => { this.#updateCount(); this.#grow(); this.#saveDraft(); });
       this.el.queued.addEventListener('click', async e => {
         const b = e.target.closest('[data-unqueue]');
         if (!b) { return; }

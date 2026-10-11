@@ -128,3 +128,15 @@ test("Design debate: the agents picked discuss (roles in turn), the Arbiter deci
     /The design the discussion settled on[\s\S]*\{\{artifact:design\.md\}\}/
   );
 });
+
+test("pastes: a draft keeps large pastes (chips) apart from its text; a task with only a paste is described", () => {
+  const c = cfg({
+    category: "workflow",
+    text: "",
+    pastes: ["Stack trace…", "", 42],
+    workflow: { pattern: "bestofn", agents: { claude: 1 } },
+  });
+  assert.deepEqual(c.pastes, ["Stack trace…", "42"]);
+  assert.equal(T.problems(c).includes("Describe the task"), false);
+  assert.equal(T.problems({ ...c, pastes: [] }).includes("Describe the task"), true);
+});
