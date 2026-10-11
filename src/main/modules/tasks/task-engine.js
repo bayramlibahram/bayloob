@@ -23,6 +23,7 @@
 // Nothing destructive or outward-facing happens without decide() from the human: merging is a gate action,
 // worktrees and branches are never deleted here.
 const { EventEmitter } = require("node:events");
+const path = require("node:path");
 const {
   renderPrompt,
   validateTemplate,
@@ -99,6 +100,10 @@ class TaskEngine extends EventEmitter {
     now = Date.now,
     arbiterThreshold = () => 0.6,
     ops = null, // { hosts() → [host], runner: OpsRunner, memory: OpsMemory } — operations (08b)
+    // Attachments (11): taskId → its AttachmentStore; files are only taken from `stagingDir` (where the pages'
+    // uploads land), never from any path a page names
+    attachments = null,
+    stagingDir = null,
   }) {
     super();
     Object.assign(this, {
@@ -110,6 +115,8 @@ class TaskEngine extends EventEmitter {
       now,
       arbiterThreshold,
       ops,
+      attachments,
+      stagingDir,
     });
     scheduler.on("released", () => this.pump());
   }
@@ -154,6 +161,62 @@ class TaskEngine extends EventEmitter {
   // ---------- start ----------
 
   /**
+   * The draft's attached files into the task's own folder (copied, hashed, scanned, converted). Nothing starts
+   * while one is refused or still has a secret warning the owner hasn't confirmed.
+   */
+  async #importAttachments(config) {
+    const items = config.attachments || [];
+    if (!items.length) {
+      return [];
+    }
+    if (!this.attachments) {
+      throw new Error("Files can't be attached to a task here");
+    }
+    const store = this.attachments(config.id);
+    const errors = [];
+    for (const item of items) {
+      const inside =
+        this.stagingDir &&
+        path.resolve(item.path).startsWith(path.resolve(this.stagingDir) + path.sep);
+      if (!inside) {
+        errors.push(
+          `${item.name || path.basename(item.path)}: attach it again (it isn't one of Bayloob's uploads)`
+        );
+        continue;
+      }
+      const r = await store.add(item.path, { name: item.name || path.basename(item.path) });
+      if (!r.ok) {
+        errors.push(r.error);
+      } else if (item.secretsOk && r.attachment.secrets.length) {
+        store.confirmSecrets(r.attachment.id);
+      }
+    }
+    const waiting = store.unconfirmed();
+    if (waiting.length) {
+      errors.push(
+        ...waiting.map(
+          a =>
+            `${a.name} looks like it holds a secret (${[...new Set(a.secrets.map(x => x.label))].join(", ")}) — remove it or confirm sending it`
+        )
+      );
+    }
+    if (errors.length) {
+      throw new Error(errors.join("\n"));
+    }
+    return store.list().map(({ id, name, file, size, kind, sha256, derived, note, secrets }) => ({
+      id,
+      name,
+      file,
+      size,
+      kind,
+      sha256,
+      derived,
+      note,
+      secrets: secrets.length,
+    }));
+  }
+
+  /**
    * Starts a task from a saved draft: `config` is the New task configuration (with its id), `template` the
    * workflow it runs. Returns the task's state.
    */
@@ -165,6 +228,7 @@ class TaskEngine extends EventEmitter {
     if (!config?.id || this.#tasks.has(config.id) || this.store.state(config.id)) {
       throw new Error("That task has already started");
     }
+    const attached = await this.#importAttachments(config);
     // From the last commit, or from the project's files as they are (uncommitted ones included)
     const from = config.workflow?.base === "worktree" ? "worktree" : "head";
     const ws = await this.workspace.prepare({ cwd: config.project.cwd, taskId: config.id, from });
@@ -189,6 +253,8 @@ class TaskEngine extends EventEmitter {
         : ((await this.workspace.reviewRange?.({ root: ws.root, ...ws }).catch(() => null)) ??
           null),
       subtasks: null, // Split work: { list, overlaps, error } from the planner's answer
+      // What the agents get as files (paths in their prompt): [{ id, name, file, size, kind, derived, note }]
+      attachments: attached,
       testCommand: await this.workspace.testCommand(ws.root),
       status: "running",
       stage: 0,
@@ -204,6 +270,16 @@ class TaskEngine extends EventEmitter {
     };
     this.#tasks.set(task.id, task);
     this.store.markStarted(task.id);
+    if (attached.length) {
+      this.#log(task, "engine", "attachments", {
+        files: attached.map(a => ({
+          name: a.name,
+          size: a.size,
+          sha256: a.sha256,
+          secrets: a.secrets,
+        })),
+      });
+    }
     this.#log(task, "engine", "started", {
       template: template.id,
       base: ws.sha,
@@ -759,6 +835,9 @@ class TaskEngine extends EventEmitter {
         }
         cwd = cand.dir;
       }
+      if (task.attachments?.length) {
+        await this.workspace.mirrorAttachments({ from: this.attachments(task.id).dir, dir: cwd });
+      }
       const prompt = this.#prompt(task, inst, cand);
       const reuse = inst.reuse && (await this.runner.alive(inst.reuse).catch(() => false));
       let handle;
@@ -813,7 +892,10 @@ class TaskEngine extends EventEmitter {
       hosts: st?.runbook ? this.#hostsText(st.hosts) : "",
       ...inst.vars,
     };
-    return renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
+    const text = renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
+    // Attached files: their paths in the agent's folder, never their content
+    const files = task.attachments?.length ? this.attachments(task.id).manifest() : "";
+    return files ? `${text}\n\n${files}` : text;
   }
 
   // An artifact by the name a template uses: the candidate's own copy first (test-output.build-2.txt)

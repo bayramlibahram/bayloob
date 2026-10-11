@@ -130,6 +130,14 @@ test("Workspace: Ctrl+Shift+B to the pill and back, the close button hides it th
   assert.equal(s.get("onClose"), "pill");
 });
 
+test("attachment limits: 50 MB a file, 200 MB a task by default; clamped", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
+  const s = new Settings(path.join(dir, "settings.json"));
+  assert.deepEqual(s.get("attachLimits"), { fileMB: 50, taskMB: 200 });
+  s.save({ attachLimits: { fileMB: 0, taskMB: 99999 } });
+  assert.deepEqual(s.get("attachLimits"), { fileMB: 1, taskMB: 2000 });
+});
+
 test("UI scale: 0.9 … 1.5 on a 0.05 grid (100 % when it isn't a number)", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
   const s = new Settings(path.join(dir, "settings.json"));

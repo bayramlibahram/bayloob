@@ -51,6 +51,8 @@ const { AgentConsole } = require("../modules/console/agent-console");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
 const { SpeechEngine } = require("../modules/voice/speech-engine");
 const { UploadStore } = require("../modules/uploads/upload-store");
+const { AttachmentStore } = require("../modules/attachments/attachment-store");
+const { Converters } = require("../modules/attachments/converters");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
@@ -137,6 +139,7 @@ class BayloobApp {
   newTask = new NewTaskWindow();
   panel = new PanelWindow();
   uploads = new UploadStore();
+  converters = new Converters(); // pdftotext / LibreOffice for attachments, when installed
   settingsWindow = new SettingsWindow();
   server = new EventServer();
   // The pill shows its own card (and sound) for done / waiting: no second, desktop copy over it
@@ -301,6 +304,9 @@ class BayloobApp {
       scheduler: this.scheduler,
       capacity: () => this.#capacity(),
       arbiterThreshold: () => this.settings.get("arbiterConfidence"),
+      // Files attached in New task: taken only from Bayloob's uploads, copied into <task>/attachments
+      attachments: id => this.#attachmentsOf(id),
+      stagingDir: this.uploads.dir,
       // Operations: hosts from Settings, steps run only from the owner's clicks (runbookAction)
       ops: {
         hosts: () => this.settings.get("hosts"),
@@ -450,6 +456,16 @@ class BayloobApp {
     }).create();
     this.tray.update(this.recent.list());
     this.#registerShortcut();
+  }
+
+  /** A task's attachments, with the limits from Settings. */
+  #attachmentsOf(taskId) {
+    const l = this.settings.get("attachLimits");
+    return new AttachmentStore({
+      dir: path.join(this.tasks.dirOf(taskId), "attachments"),
+      limits: { fileMB: l.fileMB, taskMB: l.taskMB },
+      converters: this.converters,
+    });
   }
 
   // ---------- settings ----------

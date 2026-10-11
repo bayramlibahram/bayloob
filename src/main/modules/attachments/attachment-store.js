@@ -226,7 +226,11 @@ class AttachmentStore {
       );
       a.extracted = { dir: dirName, files: r.files, bytes: r.bytes };
       a.note = `extracted: ${r.files} file${r.files === 1 ? "" : "s"} in ${dirName}/`;
-      for (const f of walk(r.dir).slice(0, 500)) {
+      const inside = walk(r.dir);
+      for (const f of inside) {
+        fs.chmodSync(f, 0o444); // like the archive itself: agents read, nobody edits
+      }
+      for (const f of inside.slice(0, 500)) {
         const type = classify(f);
         const rel = path.relative(this.dir, f);
         for (const s of scanFile(f, { text: type.kind === "text" || type.kind === "code" })) {

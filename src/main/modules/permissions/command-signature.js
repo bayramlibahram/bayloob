@@ -305,7 +305,16 @@ function similarity(a, b) {
   return Math.min(10, tenths) / 10;
 }
 
+// Paths into a task's attachments mirror (<dir>/.bayloob/attachments), anywhere in a tool's input
+const ATTACHMENTS = /(?:^|[\s"'=/])\.bayloob(?:[\\/]|["'\s]|$)/m;
+
+/** Whether a request would change a task's attached files: it names .bayloob and isn't read-only. */
+function changesAttachments(tool, input = {}, cwd = "") {
+  return ATTACHMENTS.test(JSON.stringify(input)) && !readOnly(tool, input, cwd);
+}
+
 module.exports = {
+  changesAttachments,
   signature,
   ruleable,
   similarity,

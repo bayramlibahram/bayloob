@@ -171,6 +171,47 @@ class TaskWorkspace {
     };
   }
 
+  /**
+   * A task's attachments where its agent works: `<dir>/.bayloob/attachments/`, hard-linked from the task's own
+   * folder (copied when that's on another disk), read-only, and kept out of git through the repo's local exclude
+   * file — so they're never committed, merged or seen as a read-only agent's change. Files already there stay.
+   */
+  async mirrorAttachments({ from, dir }) {
+    const dest = path.join(dir, ".bayloob", "attachments");
+    const copy = (src, to) => {
+      fs.mkdirSync(to, { recursive: true });
+      for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+        const a = path.join(src, e.name);
+        const b = path.join(to, e.name);
+        if (e.name === "attachments.json" && src === from) {
+          continue;
+        }
+        if (e.isDirectory()) {
+          copy(a, b);
+        } else if (e.isFile() && !fs.existsSync(b)) {
+          try {
+            fs.linkSync(a, b);
+          } catch {
+            fs.copyFileSync(a, b);
+            fs.chmodSync(b, 0o444);
+          }
+        }
+      }
+    };
+    copy(from, dest);
+    const ignored = await run(dir, ["check-ignore", "-q", ".bayloob/attachments"]).then(
+      () => true,
+      () => false
+    );
+    if (!ignored) {
+      const common = (await run(dir, ["rev-parse", "--git-common-dir"])).trim();
+      const exclude = path.resolve(dir, common, "info", "exclude");
+      fs.mkdirSync(path.dirname(exclude), { recursive: true });
+      fs.appendFileSync(exclude, "\n# Bayloob: files attached to tasks\n/.bayloob/\n");
+    }
+    return dest;
+  }
+
   /** The candidate's whole change against the base (for the Arbiter's input). */
   diff(root, sha, branch) {
     return run(root, ["diff", "--no-color", `${sha}...${branch}`], 60_000);

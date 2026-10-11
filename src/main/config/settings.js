@@ -31,6 +31,7 @@ const DEFAULTS = {
   soundVolume: 0.8, // 0..1
   soundToggles: {}, // sound name -> on/off, overriding the pack's default_enabled
   watchClipboard: false, // opt-in: offer "Fix this error?" when a stack trace is copied
+  attachLimits: { fileMB: 50, taskMB: 200 }, // files attached to a task: per file, and all of a task's together
   hosts: [], // operations: { id, name, alias (~/.ssh/config), env dev|staging|prod, allow: [patterns], notes }
   agents: AGENT_DEFAULTS, // per agent: { enabled, max (parallel instances), notes }
   limits: LIMIT_DEFAULTS, // { total, perProject, minFreeGB } for task instances (see tasks/scheduler.js)
@@ -56,6 +57,7 @@ const ENV = {
   agents: () => undefined,
   limits: () => undefined,
   hosts: () => undefined,
+  attachLimits: () => undefined,
 };
 
 const VALIDATE = {
@@ -107,6 +109,10 @@ const VALIDATE = {
         ];
       })
     ),
+  attachLimits: v => {
+    const l = v && typeof v === "object" ? v : {};
+    return { fileMB: clampInt(l.fileMB, 1, 500, 50), taskMB: clampInt(l.taskMB, 1, 2000, 200) };
+  },
   limits: v => {
     const l = v && typeof v === "object" ? v : {};
     return {

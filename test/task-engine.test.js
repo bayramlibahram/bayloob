@@ -8,6 +8,7 @@ const { TaskEngine } = require("../src/main/modules/tasks/task-engine");
 const { TaskStore } = require("../src/main/modules/tasks/task-store");
 const { Scheduler } = require("../src/main/modules/tasks/scheduler");
 const { templateFor, builtin } = require("../src/shared/workflow-templates");
+const { AttachmentStore } = require("../src/main/modules/attachments/attachment-store");
 
 class FakeRunner {
   sessions = []; // { name, paneId, adapter, cwd, prompt, mode, role }
@@ -41,6 +42,11 @@ class FakeRunner {
 }
 
 class FakeWorkspace {
+  mirrors = [];
+  mirrorAttachments(opts) {
+    this.mirrors.push(opts);
+    return Promise.resolve(path.join(opts.dir, ".bayloob/attachments"));
+  }
   tests = new Map(); // dir → [results in order]; default ok
   dirtyDirs = new Set();
   merges = [];
@@ -1312,4 +1318,76 @@ test("A session that crashes right after starting: the gate shows its last lines
   await env.engine.settled(task.id);
   assert.match(task.gate.title, /\(2 times\)/);
   assert.equal(env.runner.by({ role: "builder" }).length, 2);
+});
+
+// ---------- Attachments ----------
+
+test("Attachments: copied into the task when it starts, mirrored where each agent works, named in its prompt", async () => {
+  const env = setup();
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), "staging-"));
+  env.engine.stagingDir = staging;
+  env.engine.attachments = id =>
+    new AttachmentStore({ dir: path.join(env.store.dirOf(id), "attachments") });
+  const put = (name, text) => {
+    const d = fs.mkdtempSync(path.join(staging, "u-"));
+    fs.writeFileSync(path.join(d, name), text);
+    return { path: path.join(d, name), name, size: text.length };
+  };
+  const log = put("app.log", "12:03 ERROR pool exhausted\n");
+  const env1 = put(".env", "STRIPE_KEY=sk_live_abcdefghijklmnopqrstuvwx\n");
+  const analysis = (attachments, id) =>
+    env.store.saveDraft({
+      ...(id ? { id } : {}),
+      category: "analysis",
+      project: { cwd: "/w/shop", name: "shop" },
+      text: "What failed at noon?",
+      analysis: { preset: "audit", agents: { claude: 1 }, arbiter: "codex" },
+      attachments,
+    });
+
+  // a path a page made up (not one of Bayloob's uploads) is never read
+  const outside = analysis([{ path: "/etc/hostname", name: "hostname.txt" }]);
+  await assert.rejects(
+    env.engine.start(outside, templateFor(outside)),
+    /hostname\.txt: attach it again/
+  );
+  // a secret nobody confirmed stops the start, with what was found
+  const secret = analysis([log, env1]);
+  await assert.rejects(
+    env.engine.start(secret, templateFor(secret)),
+    /\.env looks like it holds a secret \(\.env file, Stripe secret key\)/
+  );
+  assert.equal(env.engine.get(secret.id), null);
+
+  const ok = analysis([log, { ...env1, secretsOk: true }], secret.id);
+  await env.engine.start(ok, templateFor(ok));
+  await env.engine.settled(ok.id);
+  const task = env.engine.get(ok.id);
+  assert.deepEqual(
+    task.attachments.map(a => [a.name, a.file, a.secrets]),
+    [
+      ["app.log", "app.log", 0],
+      [".env", "env", 2],
+    ]
+  );
+  assert.equal(fs.existsSync(log.path), true); // copied, not moved
+  const [analyst] = env.runner.by({ role: "analyst" });
+  assert.deepEqual(
+    env.workspace.mirrors.map(m => m.dir),
+    ["/w/shop-ro"]
+  );
+  assert.equal(env.workspace.mirrors[0].from, path.join(env.store.dirOf(ok.id), "attachments"));
+  assert.match(
+    analyst.prompt,
+    /\n\nAttached files \(read-only[^\n]*\n- \.bayloob\/attachments\/app\.log \(27 B\)\n- \.bayloob\/attachments\/env \(\d+ B\)$/
+  );
+  assert.doesNotMatch(analyst.prompt, /pool exhausted|sk_live/); // paths, never content
+  const logged = env.store.log(ok.id).find(e => e.event === "attachments");
+  assert.deepEqual(
+    logged.files.map(f => [f.name, f.secrets]),
+    [
+      ["app.log", 0],
+      [".env", 2],
+    ]
+  );
 });

@@ -3,7 +3,10 @@
 //   node src/main/modules/sessions/event-server.js
 const http = require("node:http");
 const { loadOrCreateToken, tokenMatches } = require("./api-token");
-const { readOnly } = require("../permissions/command-signature");
+const { readOnly, changesAttachments } = require("../permissions/command-signature");
+
+const ATTACHMENTS_DENIED =
+  "Files in .bayloob/attachments are the owner's attachments: read them, but don't change, move or delete them";
 const { parseFindings } = require("../agents/challenge-report");
 const { SessionStore } = require("./session-store");
 const { suggestionsFrom } = require("../../../shared/suggestions");
@@ -316,6 +319,11 @@ class EventServer {
     const role = this.store.roleOf(id, query.get("tmux"));
     if (READ_ONLY_ROLES.has(role) && !QUESTION_TOOLS.has(tool) && !readOnly(tool, input, cwd)) {
       return res.end(decisionBody("deny", null, event, deniedFor(role)));
+    }
+    // A task's attached files (.bayloob/attachments) are the owner's: any agent may read them, none changes them
+    // (they're read-only on disk too, but an agent could chmod or delete them)
+    if (!QUESTION_TOOLS.has(tool) && changesAttachments(tool, input, cwd)) {
+      return res.end(decisionBody("deny", null, event, ATTACHMENTS_DENIED));
     }
     const known =
       QUESTION_TOOLS.has(tool) || !this.immune ? null : this.immune.assess(tool, input, cwd);

@@ -96,6 +96,34 @@ test("node_modules is shared into worktrees and stays out of git", async () => {
   }
 });
 
+test("attachments: mirrored read-only into each worktree, out of git, and left alone by snapshots", async () => {
+  const { root, ws } = repo();
+  const { roDir, sha } = await ws.prepare({ cwd: root, taskId: ID });
+  const c = await ws.addCandidate({ root, taskId: ID, candidate: "build-1", sha });
+  const from = fs.mkdtempSync(path.join(os.tmpdir(), "att-"));
+  fs.writeFileSync(path.join(from, "attachments.json"), "[]");
+  fs.writeFileSync(path.join(from, "app.log"), "ERROR\n", { mode: 0o444 });
+  fs.mkdirSync(path.join(from, "dump"));
+  fs.writeFileSync(path.join(from, "dump", "a.csv"), "x\n", { mode: 0o444 });
+  for (const dir of [roDir, c.dir]) {
+    const dest = await ws.mirrorAttachments({ from, dir });
+    assert.equal(dest, path.join(dir, ".bayloob/attachments"));
+    assert.equal(fs.readFileSync(path.join(dest, "app.log"), "utf8"), "ERROR\n");
+    assert.equal(fs.readFileSync(path.join(dest, "dump/a.csv"), "utf8"), "x\n");
+    assert.equal(fs.existsSync(path.join(dest, "attachments.json")), false);
+    assert.equal(fs.statSync(path.join(dest, "app.log")).mode & 0o222, 0);
+    assert.equal(await ws.dirty(dir), false); // a read-only agent's check doesn't see them as a change
+  }
+  // a second launch in the same folder keeps what's there and doesn't repeat the exclude line
+  await ws.mirrorAttachments({ from, dir: roDir });
+  const exclude = fs.readFileSync(path.join(root, ".git/info/exclude"), "utf8");
+  assert.equal(exclude.match(/\/\.bayloob\//g).length, 1);
+  // the builder's work is committed without them
+  fs.writeFileSync(path.join(c.dir, "cart.js"), "module.exports = 2;\n");
+  await ws.snapshot(c.dir, "build");
+  assert.equal(g(c.dir, "show", "--name-only", "--format=", "HEAD"), "cart.js");
+});
+
 test("merge: only on the base branch with a clean tree; conflicts are undone and listed", async () => {
   const { root, ws } = repo();
   const { sha } = await ws.prepare({ cwd: root, taskId: ID });

@@ -135,3 +135,35 @@ test("similar-request table: aliases match, the safe version of a command doesn'
     assert.ok(similarity(bash(a), bash(b)) < 0.9, `${a} !~ ${b}`);
   }
 });
+
+test("attachments: agents read .bayloob/attachments but never change, move or delete what's there", () => {
+  const { changesAttachments } = require("../src/main/modules/permissions/command-signature");
+  const cwd = "/w/shop-build-1";
+  const f = "/w/shop-build-1/.bayloob/attachments/report.pdf";
+  assert.equal(changesAttachments("Read", { file_path: f }, cwd), false);
+  assert.equal(
+    changesAttachments("Grep", { pattern: "ERROR", path: ".bayloob/attachments" }, cwd),
+    false
+  );
+  assert.equal(
+    changesAttachments("Bash", { command: "cat .bayloob/attachments/app.log" }, cwd),
+    false
+  );
+  assert.equal(
+    changesAttachments("Edit", { file_path: f, old_string: "a", new_string: "b" }, cwd),
+    true
+  );
+  assert.equal(changesAttachments("Write", { file_path: f, content: "x" }, cwd), true);
+  assert.equal(changesAttachments("Bash", { command: "rm -rf .bayloob" }, cwd), true);
+  assert.equal(
+    changesAttachments("Bash", { command: "chmod u+w .bayloob/attachments/app.log" }, cwd),
+    true
+  );
+  assert.equal(
+    changesAttachments("Bash", { command: "mv ./.bayloob/attachments/a.csv /tmp/" }, cwd),
+    true
+  );
+  // other paths, and names that only look alike, are none of its business
+  assert.equal(changesAttachments("Edit", { file_path: "/w/shop-build-1/cart.js" }, cwd), false);
+  assert.equal(changesAttachments("Write", { file_path: "/w/shop/src/my.bayloob.js" }, cwd), false);
+});

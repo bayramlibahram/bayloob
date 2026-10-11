@@ -22,6 +22,7 @@
   const TEXT_MAX = 20_000;
   const SOURCES_MAX = 10;
   const HOSTS_MAX = 20;
+  const ATTACH_MAX = 50;
 
   const pick = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
   const counts = (raw, agents) =>
@@ -43,6 +44,17 @@
       category: pick(raw.category, CATEGORIES, "single"),
       project: { cwd: String(raw.project?.cwd || ""), name: String(raw.project?.name || "") },
       text: String(raw.text || "").slice(0, TEXT_MAX),
+      // Files for a workflow or analysis (Bayloob's uploads; the engine copies them into the task when it starts).
+      // secretsOk: the owner saw the secret warning and sends it anyway
+      attachments: (Array.isArray(raw.attachments) ? raw.attachments : [])
+        .map(x => ({
+          path: String(x?.path || ""),
+          name: String(x?.name || "").slice(0, 200),
+          size: Math.max(0, Math.trunc(Number(x?.size) || 0)),
+          secretsOk: x?.secretsOk === true,
+        }))
+        .filter(x => x.path.startsWith("/"))
+        .slice(0, ATTACH_MAX),
       single: {
         agent: agentOr(s.agent),
         worktree: !!s.worktree,
