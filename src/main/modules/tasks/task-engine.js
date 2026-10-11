@@ -1719,14 +1719,22 @@ class TaskEngine extends EventEmitter {
           text: this.#readArtifact(task, i.artifact) || "",
         }));
       const analysis = task.template.stages.some(s => s.role === "analyst");
+      // An incident war-room: the discussion is the analysis (its thread goes in with the logs)
+      const talk =
+        task.category === "analysis" && task.template.stages.some(s => s.role === "discussion");
       input = arbiterInput({
         goal: task.text,
         reviews,
         range: task.review,
-        label: analysis ? "Analyst" : "Reviewer",
-        extra: analysis
-          ? [this.#readArtifact(task, "logs.md"), this.#readArtifact(task, "audit.md")]
-          : [],
+        label: analysis || talk ? "Analyst" : "Reviewer",
+        extra:
+          analysis || talk
+            ? [
+                talk ? this.#readArtifact(task, "thread.md") : null,
+                this.#readArtifact(task, "logs.md"),
+                this.#readArtifact(task, "audit.md"),
+              ]
+            : [],
       });
     } else {
       const candidates = [];

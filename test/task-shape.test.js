@@ -140,3 +140,36 @@ test("pastes: a draft keeps large pastes (chips) apart from its text; a task wit
   assert.equal(T.problems(c).includes("Describe the task"), false);
   assert.equal(T.problems({ ...c, pastes: [] }).includes("Describe the task"), true);
 });
+
+test("Incident war-room: logs collected, the analysts discuss in turn (roles), the Arbiter reports from the thread", () => {
+  const { templateFor, validateTemplate } = require("../src/shared/workflow-templates");
+  const c = cfg({
+    category: "analysis",
+    text: "Why did checkout fail at noon?",
+    analysis: {
+      preset: "warroom",
+      agents: { claude: 1, codex: 2 },
+      arbiter: "codex",
+      logSources: ["logs/app.log"],
+    },
+  });
+  assert.deepEqual(
+    T.stages(c).map(s => s.id),
+    ["collect", "talk", "report"]
+  );
+  assert.match(T.gates(c)[0], /After the war-room/);
+  const t = templateFor(c);
+  assert.deepEqual(validateTemplate(t), []);
+  const talk = t.stages.find(s => s.id === "talk");
+  assert.equal(talk.format, "war-room");
+  assert.deepEqual(
+    talk.participants.map(p => [p.adapter, p.role]),
+    [
+      ["claude", "On-call"],
+      ["codex", "Database"],
+      ["codex", "Application"],
+    ]
+  );
+  assert.match(talk.topic, /\{\{task\}\}[\s\S]*\{\{artifact:logs\.md\}\}/);
+  assert.match(t.stages.find(s => s.id === "report").prompt, /Arbiter of an incident war-room/);
+});

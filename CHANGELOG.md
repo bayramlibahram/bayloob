@@ -38,6 +38,13 @@
   the thread by round (or Columns, Stance timeline, Raw), search and filter, the agreement matrix, proposals, open
   points and the decision, and a composer to write to everyone or ask one participant, pin, pause or end it. The
   stage shows `Round 2/3 · 2 of 3 agree`. The prototype it follows is in `docs/orchestration/prototype/`.
+- **The discussion in its own window**: "Open in a window" in the Discussion tab (1440 × 900, remembered); minimize
+  sends it to the pill, whose task row reads "Discussing · Round 2/3 · 1 of 2 agree" and brings it back.
+- **Incident war-room**, a new analysis preset: the logs are collected, the analysts talk the incident through in
+  turn (On-call, Database, Application…) until they agree, and the Arbiter writes the report from the discussion
+  and the logs (with a runbook if you ask).
+- **Workflow builder: a Discussion stage** — participants (agent, role, count), format, rounds, who decides, the
+  topic, and where the decision goes. "Add an agent" works again (it couldn't find its stage).
 - **Design debate**, a new workflow pattern in New task: the agents you pick discuss the design in turn until they
   agree, the Arbiter writes the decision, then one agent plans and builds it, with tests, review and your merge.
 - **Response formats** (Settings → General → Prompts): templates your prompts go into, your text where `{{prompt}}`

@@ -504,6 +504,26 @@ const reported = task =>
         (/Decision/.test(store.readArtifact(task.id, "design.md") || "") ? null : "no design.md"),
     }
   );
+  await run(
+    "Incident war-room (logs/app.log collected; Claude + Codex discuss; you adopt; Codex reports)",
+    {
+      category: "analysis",
+      text: "Why did checkout fail at noon?",
+      analysis: {
+        preset: "warroom",
+        agents: { claude: 1, codex: 1 },
+        arbiter: "codex",
+        logSources: ["logs/app.log"],
+      },
+    },
+    {
+      expect: (task, _root, store) =>
+        reported(task) ||
+        (/db pool/.test(store.readArtifact(task.id, "arbiter-input.md") || "")
+          ? null
+          : "the Arbiter didn't get the thread and logs"),
+    }
+  );
   // Discussions: every format; the stub's participants come round to the opener's proposal in round 2
   const spoke = () => runners.at(-1).spoke;
   for (const [format, opts, want, note] of [
@@ -549,7 +569,7 @@ const reported = task =>
   console.log(
     failures.length
       ? `\n✗ ${failures.length} failed:\n  ${failures.join("\n  ")}`
-      : "\n✓ all 12 ran as expected"
+      : "\n✓ all 13 ran as expected"
   );
   process.exitCode = failures.length ? 1 : 0;
 })();

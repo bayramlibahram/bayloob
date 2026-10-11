@@ -59,6 +59,7 @@
       tester: "Built-in: run tests",
       reviewer: "Reviewer",
       analyst: "Analyst",
+      discussion: "Discussion",
       arbiter: "Arbiter",
       integrate: "Built-in: integrate parts",
       collect: "Built-in: collect logs / audit",
@@ -72,6 +73,25 @@
       "no-findings": "No review findings",
     },
     modes: { plan: "plan", "read-only": "read-only", writes: "writes" },
+    // A discussion stage: who takes part (and as what), the format, how many rounds, who decides
+    talk: {
+      who: "Participants · read-only, they speak in turn",
+      role: "As (role)",
+      add: "Add participant",
+      format: "Format",
+      formats: {
+        "round-robin": "Round-robin",
+        consensus: "Consensus",
+        debate: "Debate (for / against)",
+        critique: "Critique → revise",
+        "war-room": "War-room",
+      },
+      rounds: "rounds at most",
+      decider: "Decides",
+      you: "You",
+      topic: "Topic — what they discuss ({{task}} is the task)",
+      note: "Its decision is saved as the file below — later stages read it with {{artifact:…}}.",
+    },
     testerNote: "Runs the project’s own test command in every candidate’s worktree.",
     collectNote:
       "Reads the log sources listed in New task (and, for a security review, the project’s dependency audit) before the analysts start. Nothing is changed.",
@@ -91,6 +111,7 @@
       review: "Review",
       integrate: "Integrate",
       analyse: "Analysts",
+      talk: "Discussion",
       decide: "Decide",
       merge: "Merge",
     },
@@ -165,6 +186,22 @@
       ...WorkflowTemplates.builtin("bestofn").stages.find(s => s.role === "arbiter"),
     }),
     merge: () => ({ id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" }),
+    // Agents talk it through in rounds (14); its decision feeds the stages after it
+    talk: () => ({
+      id: "talk",
+      title: "Discuss",
+      role: "discussion",
+      mode: "read-only",
+      format: "consensus",
+      rounds: 3,
+      topic: "{{task}}",
+      participants: [
+        { adapter: "claude", count: 1, role: "Architect" },
+        { adapter: "codex", count: 1, role: "Skeptic" },
+      ],
+      artifact: "decision.md",
+      gate: "human",
+    }),
   };
   const AGENT_ROLES = new Set(["planner", "builder", "reviewer", "analyst"]);
   const I = d => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
@@ -324,6 +361,8 @@
           ${B.split[s.role] ? `<label class="check" title="${B.splitTip[s.role]}"><input type="checkbox" data-c="split" data-i="${i}"${s.split ? " checked" : ""}> ${B.split[s.role]}</label>` : ""}
           ${s.role !== "builder" ? `<label class="check">${B.saveAs} <input class="small mono" data-f="artifact" data-i="${i}" value="${esc(s.artifact || "")}" placeholder="answer.md" spellcheck="false"></label>` : ""}</div>`;
         body += this.#promptHtml(s.prompt, `prompt`, i, B.prompt);
+      } else if (s.role === "discussion") {
+        body += this.#talkHtml(s, i);
       } else if (s.role === "tester") {
         body += `<p class="hint">${B.testerNote}</p>`;
       } else if (s.role === "arbiter") {
@@ -349,6 +388,39 @@
       }
       return `<article class="scard${issues.length ? " bad" : ""}" data-stage="${i}">${head}<div class="sbody">${body}</div>
         <div class="sissues" data-issues="${i}"${issues.length ? "" : " hidden"}>${issues.map(x => `<span>${ICO.x} ${esc(x.text.replace(/^Stage \d+( "[^"]*")?: /, ""))}</span>`).join("")}</div></article>`;
+    }
+
+    // A discussion stage: participants (agent, role, count), format, rounds, who decides, where the decision goes
+    #talkHtml(s, i) {
+      const T = B.talk;
+      const agents = this.view.state?.agents || {};
+      const agentOpts = v =>
+        Object.entries(agents)
+          .map(([id, g]) =>
+            opt(id, `${g.name}${g.installed ? "" : ` (${B.notInstalled})`}`, v === id)
+          )
+          .join("");
+      const ps = s.participants || [];
+      return `<p class="label">${T.who}</p>
+        ${ps
+          .map(
+            (p, k) => `<div class="slot"><span class="novi">${Agent.thumb(p.adapter)}</span>
+          <select class="sel" data-s="padapter" data-i="${i}" data-k="${k}" aria-label="Agent">${agentOpts(p.adapter)}</select>
+          <input class="small" data-f="prole" data-i="${i}" data-k="${k}" value="${esc(p.role || "")}" placeholder="${T.role}" aria-label="${T.role}" spellcheck="false">
+          ${this.#stepper(Number(p.count) || 1, `pcount:${i}:${k}`, 1, 4)}
+          ${ps.length > 1 ? `<button class="iconbtn" type="button" data-delpart="${i}:${k}" title="${B.remove}">${ICO.x}</button>` : ""}</div>`
+          )
+          .join("")}
+        <div class="row"><button class="btn sm ghost" type="button" data-addpart="${i}">${ICO.plus} ${T.add}</button>
+          <label class="check">${T.format} <select class="sel" data-s="format" data-i="${i}">${Object.entries(
+            T.formats
+          )
+            .map(([k, n]) => opt(k, n, s.format === k))
+            .join("")}</select></label>
+          <label class="check">${this.#stepper(Number(s.rounds) || 3, `rounds:${i}`, 1, 10)} ${T.rounds}</label>
+          <label class="check">${T.decider} <select class="sel" data-s="decider" data-i="${i}">${opt("", T.you, !s.decider?.adapter)}${agentOpts(s.decider?.adapter)}</select></label>
+          <label class="check" title="${T.note}">${B.saveAs} <input class="small mono" data-f="artifact" data-i="${i}" value="${esc(s.artifact || "")}" placeholder="decision.md" spellcheck="false"></label></div>
+        ${this.#promptHtml(s.topic, "topic", i, T.topic)}`;
     }
 
     #slotHtml(s, i, a, k) {
@@ -432,6 +504,7 @@
         arbiter: "decide",
         integrate: "integrate",
         analyst: "analyse",
+        discussion: "talk",
         collect: "collect",
         you: "merge",
       }[role];
@@ -474,6 +547,10 @@
         s.artifact = el.value.trim() || undefined;
       } else if (f === "prompt") {
         s.prompt = el.value;
+      } else if (f === "topic") {
+        s.topic = el.value;
+      } else if (f === "prole") {
+        s.participants[Number(el.dataset.k)].role = el.value;
       } else if (f === "failprompt") {
         s.onFail.prompt = el.value;
       }
@@ -531,7 +608,9 @@
         return false;
       }
       const t = this.edit.template;
-      const i = d.i !== undefined ? Number(d.i) : null;
+      // the stage: data-i, or the stage index a button carries itself (add an agent / a participant)
+      const own = [d.i, d.addagent, d.addpart].find(v => v !== undefined);
+      const i = own !== undefined ? Number(own) : null;
       if (d.b === "back") {
         if (this.edit.dirty) {
           this.edit.confirmLeave = true;
@@ -568,6 +647,14 @@
           title: old.title,
           gate: old.gate,
         };
+      } else if (d.addpart !== undefined) {
+        t.stages[i].participants = [
+          ...(t.stages[i].participants || []),
+          { adapter: "claude", count: 1, role: "" },
+        ];
+      } else if (d.delpart) {
+        const [si, k] = d.delpart.split(":").map(Number);
+        t.stages[si].participants.splice(k, 1);
       } else if (d.addagent !== undefined) {
         t.stages[i].agents = [...(t.stages[i].agents || []), { adapter: "claude", count: 1 }];
       } else if (d.delagent) {
@@ -580,6 +667,14 @@
         if (what === "count") {
           const slot = t.stages[Number(a)].agents[Number(b)];
           slot.count = Math.max(1, Number(slot.count) + Number(delta));
+        }
+        if (what === "pcount") {
+          const p = t.stages[Number(a)].participants[Number(b)];
+          p.count = Math.min(4, Math.max(1, Number(p.count) + Number(delta)));
+        }
+        if (what === "rounds") {
+          const st = t.stages[Number(a)];
+          st.rounds = Math.min(10, Math.max(1, (Number(st.rounds) || 3) + Number(b)));
         }
         if (what === "loops") {
           const f = t.stages[Number(a)].onFail;
@@ -634,6 +729,12 @@
         s.agents[Number(el.dataset.k)].adapter = el.value;
       } else if (what === "goto") {
         s.onFail.goto = el.value;
+      } else if (what === "padapter") {
+        s.participants[Number(el.dataset.k)].adapter = el.value;
+      } else if (what === "format") {
+        s.format = el.value;
+      } else if (what === "decider") {
+        s.decider = el.value ? { adapter: el.value } : undefined;
       }
       this.edit.dirty = true;
       this.#validate();

@@ -20,6 +20,7 @@
     perf: "Performance review",
     deps: "Dependency upgrade report",
     files: "Analyze files",
+    warroom: "Incident war-room",
   };
   const TEXT_MAX = 20_000;
   const SOURCES_MAX = 10;
@@ -117,7 +118,7 @@
     if (c.category === "analysis") {
       const a = c.analysis;
       return [
-        ...(a.preset === "incident" && a.logSources.length
+        ...(["incident", "warroom"].includes(a.preset) && a.logSources.length
           ? [
               {
                 id: "collect",
@@ -129,14 +130,24 @@
               },
             ]
           : []),
-        {
-          id: "analyse",
-          title: `Analysts ×${total(a.agents)}`,
-          role: "analyst",
-          mode: "read-only",
-          agents: used(a.agents),
-          parallel: true,
-        },
+        a.preset === "warroom"
+          ? {
+              id: "talk",
+              title: `War-room ×${total(a.agents)}`,
+              role: "discussion",
+              mode: "read-only",
+              agents: used(a.agents),
+              note: "in turn, until they agree",
+              gate: "human",
+            }
+          : {
+              id: "analyse",
+              title: `Analysts ×${total(a.agents)}`,
+              role: "analyst",
+              mode: "read-only",
+              agents: used(a.agents),
+              parallel: true,
+            },
         {
           id: "report",
           title: "Report",
@@ -246,6 +257,12 @@
   function gates(c) {
     if (c.category === "single") {
       return ["Permissions — in the pill, as today"];
+    }
+    if (c.category === "analysis" && c.analysis.preset === "warroom") {
+      return [
+        "After the war-room — adopt where they landed, or ask for another round",
+        ...(c.analysis.opsPlan ? ["Every runbook step — Run, Skip, Edit or Stop plan"] : []),
+      ];
     }
     if (c.category === "analysis") {
       return c.analysis.opsPlan

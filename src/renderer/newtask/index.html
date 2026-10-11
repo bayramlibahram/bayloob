@@ -742,7 +742,7 @@
         <div class="label">${T.question}</div>
         ${a.preset === 'files' && !this.taskAtt.items.length ? `<p class="hintline">${I('info')} ${T.filesFirst}</p>` : ''}
         <div class="composer" id="composer"><textarea id="text" data-focus rows="2" spellcheck="false" placeholder="${T.questionPh}" aria-label="${T.question}">${esc(this.cfg.text)}</textarea>${this.#fileTools()}</div>
-        ${a.preset === 'incident' ? `<div class="label">${T.sources}</div>
+        ${['incident', 'warroom'].includes(a.preset) ? `<div class="label">${T.sources}</div>
           <ul class="sources">${a.logSources.map((s, i) => `<li><span>${esc(s)}</span><button type="button" class="iconbtn" data-unsource="${i}" aria-label="Remove">${I('x')}</button></li>`).join('')}</ul>
           <div class="field"><input id="source" placeholder="${esc(T.sourcePh)}" spellcheck="false" aria-label="Log source" class="mono"><button type="button" class="btn sm" data-picksource>${I('folder')}${T.chooseFile}</button><button type="button" class="btn sm" data-addsource>${I('plus')}${T.add}</button></div>` : ''}
         <button type="button" class="toggle" role="switch" aria-checked="${!!a.opsPlan}" data-ops><span class="switch"></span><span class="txt">${T.opsPlan} <small>— ${T.opsSub}</small></span></button>
@@ -843,8 +843,11 @@
         const a = c.analysis;
         const n = TaskShape.total(a.agents);
         const files = c.attachments.length;
+        if (a.preset === 'warroom') {
+          return `<b>${n} agent${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) hold an <b>incident war-room</b> on <b>${esc(c.project.name)}</b>: they discuss in turn, read-only, until they agree on the root cause${a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''}` : ''}. You can write to them, pause or end it. Arbiter: <b>${name(a.arbiter)}</b> writes the report${a.opsPlan ? ', with a runbook — every command waits for your click' : ''}.`;
+        }
         const what = a.preset === 'files' ? `the <b>${files} attached file${files === 1 ? '' : 's'}</b> (with <b>${esc(c.project.name)}</b> for context)` : `<b>${esc(c.project.name)}</b>`;
-        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read ${what}${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${a.preset === 'incident' && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ` The Arbiter also proposes a runbook for this machine${a.hosts?.length ? ' and the remote hosts you selected' : ''}; every command waits for your click.` : ''}`;
+        return `<b>${n} analyst${n > 1 ? 's' : ''}</b> (${lst(a.agents)}) read ${what}${n > 1 ? ' in parallel' : ''}. <b>Nothing is written.</b> Arbiter: <b>${name(a.arbiter)}</b> merges the findings into one report${a.preset === 'security' ? ', with the project’s own dependency audit (npm / composer / pip-audit) as input' : ''}${['incident', 'warroom'].includes(a.preset) && a.logSources.length ? `, with the last lines of ${a.logSources.length} log source${a.logSources.length > 1 ? 's' : ''} (read only)` : ''}.${a.opsPlan ? ` The Arbiter also proposes a runbook for this machine${a.hosts?.length ? ' and the remote hosts you selected' : ''}; every command waits for your click.` : ''}`;
       }
       const tpl = this.#template(c);
       if (tpl) {

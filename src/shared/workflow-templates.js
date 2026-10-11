@@ -229,7 +229,15 @@
     perf: "Performance review",
     deps: "Dependency upgrade report",
     files: "Analyze files",
+    warroom: "Incident war-room",
   };
+
+  // Incident war-room: the analysts talk it through in turn (a discussion), then the Arbiter writes the report
+  const WARROOM_ROLES = ["On-call", "Database", "Application", "Infrastructure", "Security"];
+  const WARROOM_ARBITER_PROMPT = ANALYSIS_ARBITER_PROMPT.replace(
+    "You are the Arbiter of an analysis. Merge the analysts' findings below into one report",
+    "You are the Arbiter of an incident war-room. Turn the participants' discussion below (what they agreed on, and what is still open) into one report"
+  );
 
   /** An analysis configuration as a template: collect (when there is something to collect) → analysts → Arbiter. */
   function analysisTemplate(a) {
@@ -237,7 +245,9 @@
     const analysts = Object.entries(a.agents || {})
       .filter(([, n]) => n > 0)
       .map(([adapter, count]) => ({ adapter, count }));
-    const sources = preset === "incident" ? (a.logSources || []).slice(0, 10) : [];
+    const sources = ["incident", "warroom"].includes(preset)
+      ? (a.logSources || []).slice(0, 10)
+      : [];
     const collect = sources.length || preset === "security";
     return {
       id: `analysis-${preset}`,
@@ -258,17 +268,48 @@
               },
             ]
           : []),
-        {
-          id: "analyse",
-          title: "Analysts",
-          role: "analyst",
-          mode: "read-only",
-          agents: analysts.length ? analysts : [{ adapter: "claude", count: 1 }],
-          parallel: true,
-          prompt: analystPrompt(preset),
-          artifact: "analysis.md",
-          gate: "always",
-        },
+        preset === "warroom"
+          ? {
+              id: "talk",
+              title: "War-room",
+              role: "discussion",
+              mode: "read-only",
+              format: "war-room",
+              rounds: 3,
+              topic: lines(
+                "Incident war-room: find the root cause and the fix together. Share what you see in the logs and the code,",
+                "challenge each other, and converge on one explanation.",
+                "",
+                "{{task}}",
+                ...(sources.length
+                  ? ["", "The logs Bayloob collected:", "{{artifact:logs.md}}"]
+                  : [])
+              ),
+              participants: (analysts.length
+                ? analysts
+                : [{ adapter: "claude", count: 1 }]
+              ).flatMap((x, i, all) =>
+                Array.from({ length: x.count }, (_, k) => ({
+                  adapter: x.adapter,
+                  count: 1,
+                  role: WARROOM_ROLES[
+                    (all.slice(0, i).reduce((n, y) => n + y.count, 0) + k) % WARROOM_ROLES.length
+                  ],
+                }))
+              ),
+              gate: "human",
+            }
+          : {
+              id: "analyse",
+              title: "Analysts",
+              role: "analyst",
+              mode: "read-only",
+              agents: analysts.length ? analysts : [{ adapter: "claude", count: 1 }],
+              parallel: true,
+              prompt: analystPrompt(preset),
+              artifact: "analysis.md",
+              gate: "always",
+            },
         {
           id: "report",
           title: "Arbiter",
@@ -276,12 +317,13 @@
           mode: "read-only",
           agents: [{ adapter: a.arbiter || "codex", count: 1 }],
           // The runbook part goes before the (long) input, next to the JSON form it extends
-          prompt: a.opsPlan
-            ? ANALYSIS_ARBITER_PROMPT.replace(
-                "{{artifact:arbiter-input.md}}",
-                `${RUNBOOK_PART.trim()}\n\n{{artifact:arbiter-input.md}}`
-              )
-            : ANALYSIS_ARBITER_PROMPT,
+          prompt: (base =>
+            a.opsPlan
+              ? base.replace(
+                  "{{artifact:arbiter-input.md}}",
+                  `${RUNBOOK_PART.trim()}\n\n{{artifact:arbiter-input.md}}`
+                )
+              : base)(preset === "warroom" ? WARROOM_ARBITER_PROMPT : ANALYSIS_ARBITER_PROMPT),
           artifact: "report.md",
           gate: "always",
           ...(a.opsPlan ? { runbook: true, hosts: Array.isArray(a.hosts) ? a.hosts : null } : {}),
