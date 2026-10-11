@@ -33,7 +33,7 @@
 
   /* header */
   .head { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
-  .head .ic { width: 38px; height: 38px; }
+  .head .ic { width: 40px; height: 40px; }
   .head .brand { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
   .head .sep { width: 1px; height: 22px; background: var(--line); }
   .head .sub { color: var(--muted); }
@@ -390,10 +390,32 @@
   .window-mode .panel { margin: 0; border: 0; border-radius: 0; box-shadow: none; animation: none; height: 100vh; display: flex; flex-direction: column; background: var(--backdrop); }
   .window-mode .head { -webkit-app-region: drag; padding: 10px 10px 10px 16px; }
   .window-mode .head button, .window-mode .head .usage { -webkit-app-region: no-drag; }
-  .window-mode .main { flex: 1; min-height: 0; height: auto;
-    grid-template-columns: var(--side-w, 196px) 5px minmax(260px, 1fr) 5px var(--detail-w, 440px); }
+  .window-mode .main { flex: 1; min-height: 0; height: auto; grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: var(--side-w, 196px) 5px minmax(240px, 1fr) 5px minmax(300px, var(--detail-w, 440px)); }
   .window-mode .detailcol { border-left: 0; }
-  .window-mode .side { border-right: 0; }
+  /* a short window: the sidebar scrolls instead of running under the prompt box */
+  .window-mode .side { border-right: 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  /* the header stays one line: the status text gives way first, the window controls never */
+  .window-mode .head > * { flex: none; }
+  .window-mode .head .usage { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  .window-mode .head .status { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+  .window-mode .head .status .txt { overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 1040px) { .window-mode .head .sep, .window-mode .head .sub { display: none; } }
+  @media (max-width: 900px) { .window-mode .head .status .txt { display: none; } }
+  /* Expand: the detail (or an agent's console) takes the list's place too */
+  .window-mode .main.expanded { grid-template-columns: var(--side-w, 196px) 5px 0 0 minmax(0, 1fr); }
+  .window-mode .main.expanded .listcol, .window-mode .main.expanded .listcol + .split { visibility: hidden; overflow: hidden; padding: 0; }
+  .window-mode .dhead .expand svg { width: 16px; height: 16px; }
+  /* narrow columns (a large UI scale): the search box and the detail's header give way, nothing spills over */
+  .window-mode .listcol, .window-mode .detailcol { container-type: inline-size; }
+  .window-mode .search { min-width: 0; flex: 0 1 210px; }
+  .window-mode .search input { min-width: 0; }
+  @container (max-width: 330px) { .listhead h2 { flex: 0 1 auto; } .search { flex: 1 1 0; } }
+  @container (max-width: 400px) {
+    .dhead .ic { width: 40px; height: 40px; }
+    .dhead .state .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .dhead .who span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  }
   /* splitters between the columns: drag to resize, double-click for the default width */
   .split { cursor: col-resize; position: relative; background: transparent; }
   .split::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--line); }
@@ -581,8 +603,10 @@
       applications: 'Terminals, Files and other apps appear here', system: 'Docker shows up here when it is installed and running',
     },
     windows: 'Windows', projects: 'Projects', containers: 'Containers', recent: 'Recent activity', nothingYet: 'Nothing yet',
+    expandDetail: 'Expand: use the whole width (Ctrl+Shift+E)', collapseDetail: 'Back to the list (Ctrl+Shift+E)',
+    sideNarrow: 'The window is too narrow for the full sidebar',
     focus: 'Focus window', newTab: 'New tab', newWindow: 'New window', openTerminal: 'Open terminal', more: 'More actions', open: 'Open',
-    tabs: n => `${n} tab${n === 1 ? '' : 's'}`, wins: n => `${n} window${n === 1 ? '' : 's'}`, sessions: n => `${n} session${n === 1 ? '' : 's'}`,
+    tabs: n => `${n} tab${n === 1 ? '' : 's'}`, wins: n => `${n} window${n === 1 ? '' : 's'}`, winsUnknown: 'Windows: —', sessions: n => `${n} session${n === 1 ? '' : 's'}`,
     unhealthyN: n => `${n} unhealthy`, allHealthy: 'All healthy',
     needsExtension: 'Enable the Bayloob GNOME extension in Settings to see and focus this app’s windows.',
     start: 'Start', stop: 'Stop', restart: 'Restart', cancel: 'Cancel', close: 'Close',
@@ -703,8 +727,10 @@
 
   /** One row's data, whatever it is: an installed app, Docker, or an agent session. */
   function appItem(a) {
-    return { key: `app:${a.id}`, kind: a.id === 'docker' ? 'docker' : 'app', id: a.id, name: a.name, subtitle: a.subtitle,
-      status: a.status, category: a.category, data: a };
+    // "Running" under the name would only repeat the status next to it: the kind of app says more
+    const repeats = !a.subtitle || a.subtitle.toLowerCase() === String(T.status[a.status] || a.status).toLowerCase();
+    return { key: `app:${a.id}`, kind: a.id === 'docker' ? 'docker' : 'app', id: a.id, name: a.name,
+      subtitle: repeats ? T.kind[a.category] || a.subtitle : a.subtitle, status: a.status, category: a.category, data: a };
   }
   // A task worktree is <repo>-<task id>-<leaf>: build-2, ro…; a session found again after a restart may only have that
   const TASK_DIR = /^(.+)-(\d{8}-\d{4}-[0-9a-f]{4})-([a-z][a-z0-9-]*)$/;
@@ -980,7 +1006,7 @@
         : [T.noEvents, 'var(--working)', T.connectedTip(null)];
       this.el.status.style.setProperty('--c', color);
       this.el.status.title = tip;
-      this.el.status.innerHTML = `<span class="dot"></span>${label}`;
+      this.el.status.innerHTML = `<span class="dot"></span><span class="txt">${label}</span>`;
     }
 
     #renderSide() {
@@ -1087,7 +1113,7 @@
       const term = item.kind === 'agent' ? `<button type="button" class="square" data-act="terminal" title="${T.openTerminal}" aria-label="${T.openTerminal}">${ICON_TERM}</button>` : '';
       // An agent's header names its project (and its task, when it works for one), not just "AI agent"
       const sub = item.kind === 'agent' ? [item.data.label, projectPath(item.data)].filter(Boolean).join(' · ') : T.kind[item.category] || '';
-      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b title="${esc(item.name)}">${esc(item.name)}</b><span title="${esc(item.data.cwd || '')}">${esc(sub)}</span></div>${stateHtml(item.status)}${term}</div>`;
+      const head = `<div class="dhead">${iconHtml(item)}<div class="who"><b title="${esc(item.name)}">${esc(item.name)}</b><span title="${esc(item.data.cwd || '')}">${esc(sub)}</span></div>${stateHtml(item.status)}${term}${this.#expandButton()}</div>`;
       const body = item.kind === 'agent' ? this.#agentDetail(item.data) : item.kind === 'task' ? this.#taskDetail(item.data)
         : item.kind === 'docker' ? this.#dockerDetail(item.data) : this.#appDetail(item.data);
       // Keep the console's scroll: stuck to the newest step while at the bottom, left alone when scrolled up
@@ -1234,11 +1260,13 @@
 
     #appDetail(a) {
       const d = a.details || {};
+      // Without the GNOME extension Bayloob can't see windows: "0 windows" would be wrong, so it says it doesn't know
+      const wins = this.extension || a.windows.length ? T.wins(a.windows.length) : T.winsUnknown;
       const tiles = a.category === 'browser' && d.tabs !== undefined
         ? [[ICONS.tab, T.tabs(d.tabs)], [ICONS.win, T.wins(d.browserWindows.length)], [ICONS.cpu, formatBytes(a.memory)]]
         : a.category === 'terminal' && d.sessions
-          ? [[ICONS.tab, T.sessions(d.sessions)], [ICONS.win, T.wins(a.windows.length)], [ICONS.cpu, formatBytes(a.memory)]]
-          : [[ICONS.win, T.wins(a.windows.length)], [ICONS.mem, formatBytes(a.memory)], [ICONS.cpu, pct(a.cpu)]];
+          ? [[ICONS.tab, T.sessions(d.sessions)], [ICONS.win, wins], [ICONS.cpu, formatBytes(a.memory)]]
+          : [[ICONS.win, wins], [ICONS.mem, formatBytes(a.memory)], [ICONS.cpu, pct(a.cpu)]];
 
       // Browser windows come from its session (with tab counts); others from the GNOME extension
       let windows = '';
@@ -1805,6 +1833,11 @@
       }
       document.addEventListener('keydown', e => {
         if (e.ctrlKey && !e.shiftKey && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); this.#toggleSide(); }
+        if (e.ctrlKey && e.shiftKey && (e.key === 'e' || e.key === 'E') && this.current) { e.preventDefault(); this.#toggleExpand(); }
+      });
+      let wasNarrow = this.#narrow;
+      window.addEventListener('resize', () => {
+        if (this.#narrow !== wasNarrow) { wasNarrow = this.#narrow; this.#applyLayout(); }
       });
       this.#applyLayout();
     }
@@ -1833,20 +1866,44 @@
     }
 
     #toggleSide() {
+      if (this.#narrow) { return; }
       this.#layout.collapsed = !this.#layout.collapsed;
       this.#applyLayout(true);
     }
 
+    // Expand (Workspace window): the detail takes the list's column too; not kept across restarts
+    #expanded = false;
+    #expandButton() {
+      if (!WINDOW_MODE) { return ''; }
+      const label = this.#expanded ? T.collapseDetail : T.expandDetail;
+      const icon = this.#expanded
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+      return `<button type="button" class="square expand" data-expand title="${label}" aria-label="${label}" aria-pressed="${this.#expanded}">${icon}</button>`;
+    }
+
+    #toggleExpand() {
+      this.#expanded = !this.#expanded;
+      this.el.panel.querySelector('.main').classList.toggle('expanded', this.#expanded);
+      this.#renderDetail();
+      requestAnimationFrame(() => this.#syncEmbed());
+    }
+
+    // Too narrow for the full sidebar (a small window, or a large UI scale): icons only, whatever was chosen
+    get #narrow() { return WINDOW_MODE && innerWidth < 860; }
+
     #applyLayout(save = false) {
       const main = this.el.panel.querySelector('.main');
       const l = this.#layout;
-      main.classList.toggle('collapsed', !!l.collapsed);
-      main.style.setProperty('--side-w', `${l.collapsed ? 64 : l.side}px`);
+      const collapsed = !!l.collapsed || this.#narrow;
+      main.classList.toggle('collapsed', collapsed);
+      main.style.setProperty('--side-w', `${collapsed ? 64 : l.side}px`);
       main.style.setProperty('--detail-w', `${l.detail}px`);
       const b = document.getElementById('collapseSide');
-      const label = l.collapsed ? 'Expand the sidebar (Ctrl+B)' : 'Collapse the sidebar (Ctrl+B)';
+      const label = this.#narrow ? T.sideNarrow : collapsed ? 'Expand the sidebar (Ctrl+B)' : 'Collapse the sidebar (Ctrl+B)';
       b.title = label;
       b.setAttribute('aria-label', label);
+      b.disabled = this.#narrow;
       if (save) { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch { /* storage unavailable */ } }
       requestAnimationFrame(() => this.#syncEmbed());
     }
@@ -2010,6 +2067,7 @@
       this.el.detail.addEventListener('click', async e => {
         const item = this.current;
         if (!item) { return; }
+        if (e.target.closest('[data-expand]')) { return this.#toggleExpand(); }
         if (item.kind === 'agent' && await this.#inboxAct(item.data, e.target)) { return; }
         const toggle = e.target.closest('[data-toggle]');
         // Selecting text in a step or message isn't a click to fold it

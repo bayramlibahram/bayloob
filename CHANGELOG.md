@@ -11,6 +11,21 @@
 - Settings → General → **Workspace ✕ button**: hide to pill (default), close the window (as before), or quit
   Bayloob. Alt+F4 follows it too.
 - The pill's ⋯ menu: **Workspace window** and **Quit Bayloob**.
+- **Expand** in the Workspace window (the button in the detail's header, or Ctrl+Shift+E): the detail or an
+  agent's console takes the list's place too.
+
+### Fixed
+- The Workspace window at a large UI scale or its smallest size (orchestration 12):
+  - the sidebar scrolls instead of running under the prompt box (it did even at 960 × 600 and 100 %);
+  - the header stays on one line: "Workspace control", then the status text, give way; the window controls never
+    leave the window;
+  - the detail column narrows (440 → 300 px) before anything spills over, and a window too narrow for the full
+    sidebar shows it as icons;
+  - a narrow list or detail column shrinks its search box and its header instead of overlapping;
+  - the window's smallest size grows with the UI scale (never past 90 % of the screen), so 150 % doesn't squeeze
+    it to a 640 × 400 layout.
+- Running apps no longer say "Running" twice: the row's second line names the kind of app instead. Without the
+  GNOME extension an app's detail says "Windows: —" instead of a wrong "0 windows".
 
 ## 0.7.1 — 2026-10-11
 

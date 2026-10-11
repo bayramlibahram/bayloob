@@ -138,11 +138,26 @@ class AppWindow {
     });
   }
 
+  // The smallest the window may get: MIN in CSS pixels at the UI scale, so a large scale doesn't squeeze the
+  // layout below what it's made for — but never more than 90 % of the screen it's on
+  #minSize() {
+    const area = (
+      this.win ? screen.getDisplayMatching(this.win.getBounds()) : screen.getPrimaryDisplay()
+    ).workArea;
+    const z = Math.max(1, uiScale.factor);
+    return {
+      width: Math.min(Math.round(MIN.width * z), Math.round(area.width * 0.9)),
+      height: Math.min(Math.round(MIN.height * z), Math.round(area.height * 0.9)),
+    };
+  }
+
   /** Settings → UI scale changed: zoom the page and the pages embedded in it. */
   applyScale() {
     if (!this.win) {
       return;
     }
+    const min = this.#minSize();
+    this.win.setMinimumSize(min.width, min.height);
     this.win.webContents.setZoomFactor(uiScale.factor);
     for (const v of this.#views.values()) {
       if (!v.view.webContents.isDestroyed()) {
@@ -175,10 +190,13 @@ class AppWindow {
 
   #create() {
     const saved = this.#load();
+    const min = this.#minSize();
     this.win = new BrowserWindow({
       ...saved.bounds,
-      minWidth: MIN.width,
-      minHeight: MIN.height,
+      width: Math.max(saved.bounds.width, min.width),
+      height: Math.max(saved.bounds.height, min.height),
+      minWidth: min.width,
+      minHeight: min.height,
       frame: false,
       resizable: true,
       maximizable: true,
