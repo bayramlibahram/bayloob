@@ -749,7 +749,10 @@
    */
   // A text-only agent (a local model through Ollama) has no tools: only the Arbiter or a discussion's voice
   const TEXT_AGENTS = ["ollama"];
-  function templateIssues(t, { capacity = { claude: 4, codex: 2, gemini: 2, ollama: 1 } } = {}) {
+  function templateIssues(
+    t,
+    { capacity = { claude: 4, codex: 2, "codex-local": 1, gemini: 2, ollama: 1 } } = {}
+  ) {
     const issues = []; // { stage: index | null, text }
     if (!t || typeof t !== "object") {
       return [{ stage: null, text: "The template is empty" }];

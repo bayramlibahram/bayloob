@@ -15,7 +15,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { HOOKS_DIR, TOOLS_DIR, EXTENSION_DIR, ASSETS_DIR } = require("./paths");
 const { Settings } = require("../config/settings");
-const { AGENTS, agentCommand } = require("../modules/agents/agents");
+const { AGENTS, agentCommand, configure: configureAgents } = require("../modules/agents/agents");
 const { OllamaClient } = require("../modules/agents/ollama-client");
 const { AgentStats } = require("../modules/agents/agent-stats");
 const { errorPrompt, looksLikeError } = require("../modules/agents/error-prompt");
@@ -261,6 +261,11 @@ class BayloobApp {
   #onReady(open) {
     const data = app.getPath("userData");
     this.settings = new Settings(path.join(data, "settings.json"));
+    // Codex (local): its model, and its own CODEX_HOME with only Bayloob's hook in it
+    configureAgents({
+      codexLocalModel: () => this.settings.get("ollama").coder,
+      codexLocalHome: this.#codexLocalHome(data),
+    });
     this.settings.on("change", keys => this.#applySettings(keys));
     uiScale.set(this.settings.get("uiScale"));
     // Every window's CSS follows prefers-color-scheme, which follows this
@@ -880,13 +885,31 @@ class BayloobApp {
     );
   }
 
+  // Codex (local)'s CODEX_HOME: a config with Bayloob's notify hook only (written again when the hook moves)
+  #codexLocalHome(data) {
+    const home = path.join(data, "codex-local");
+    try {
+      fs.mkdirSync(home, { recursive: true });
+      const file = path.join(home, "config.toml");
+      const notify = `notify = ${JSON.stringify([this.hooks.hookScript, "codex"])}\n`;
+      if ((fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "") !== notify) {
+        fs.writeFileSync(file, notify);
+      }
+    } catch (e) {
+      console.error(`Bayloob: Codex (local) home: ${e.message}`);
+    }
+    return home;
+  }
+
   // Installed, and (a text agent) with a model picked in Settings → Agents
   #ready(k) {
     const def = AGENTS[k];
     if (!def || !this.#installedSet.has(def.bin)) {
       return false;
     }
-    return def.kind !== "text" || !!this.settings.get("ollama").model;
+    // a local model's agent needs its model picked
+    const ollama = this.settings.get("ollama");
+    return def.kind === "text" ? !!ollama.model : def.local ? !!ollama.coder : true;
   }
 
   async #agentSettingsInfo() {
@@ -911,7 +934,10 @@ class BayloobApp {
             : def
               ? {
                   name: def.name,
-                  installed: choices[k].installed,
+                  ...(def.local
+                    ? { local: true, ollama: { ...this.settings.get("ollama"), models } }
+                    : {}),
+                  installed: def.local ? this.#installedSet.has(def.bin) : choices[k].installed,
                   color: choices[k].color,
                   launch: cmd(agentCommand(k, "{prompt}")),
                   readOnly: def.readOnly.length
@@ -951,9 +977,14 @@ class BayloobApp {
           name:
             a.kind === "text"
               ? `${a.name} · ${this.settings.get("ollama").model || "no model"}`
-              : a.name,
+              : a.local
+                ? `${a.name} · ${this.settings.get("ollama").coder || "no model"}`
+                : a.name,
           installed:
-            installed.has(a.bin) && (a.kind !== "text" || !!this.settings.get("ollama").model),
+            installed.has(a.bin) &&
+            (a.kind === "text"
+              ? !!this.settings.get("ollama").model
+              : !a.local || !!this.settings.get("ollama").coder),
           // text: answers only (a local model) — it can be the Arbiter or take part in a discussion
           ...(a.kind === "text" ? { text: true } : {}),
           color: this.mascot === "svg" ? a.svgColor : a.color,

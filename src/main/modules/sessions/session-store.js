@@ -45,6 +45,13 @@ class SessionStore extends EventEmitter {
     this.emit("change", this.list());
   }
 
+  // A variant Bayloob launched (Codex (local) is the codex CLI on a local model): its hooks and process say
+  // "codex", the launch says which one it is
+  #shownAgent(agent, tmux, old) {
+    const variant = a => (a && a !== agent && a.startsWith(`${agent}-`) ? a : null);
+    return variant(tmux && this.#launched.get(tmux)?.agent) || variant(old?.agent) || agent;
+  }
+
   upsert(id, agent, ev, query, patch) {
     const old = this.#sessions.get(id);
     // The hook's own directory is only a fallback when the event has no cwd and the session is new
@@ -71,7 +78,7 @@ class SessionStore extends EventEmitter {
     }
     const session = {
       id,
-      agent,
+      agent: this.#shownAgent(agent, term.tmux, old),
       cwd,
       project: cwd ? path.basename(cwd) : agent,
       state: "idle",
@@ -182,7 +189,7 @@ class SessionStore extends EventEmitter {
       }
       this.#sessions.set(id, {
         id,
-        agent: a.agent,
+        agent: this.#shownAgent(a.agent, a.term?.tmux),
         cwd: a.cwd,
         project: a.cwd ? path.basename(a.cwd) : a.agent,
         state: a.state || "idle",

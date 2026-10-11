@@ -51,6 +51,15 @@ const AGENTS = {
     top: ["#a9cbff", "#6a9ef8", "#3f72e6"],
     bot: ["#5b8ff5", "#3461d6", "#1c3a9c"],
   },
+  // Codex on a local model: Codex's teal Novi
+  "codex-local": {
+    name: "Codex (local)",
+    pack: "teal",
+    color: "#2f9e8f",
+    light: "#0e7a6e",
+    top: ["#8ff5df", "#3fd3b6", "#16a48c"],
+    bot: ["#2fc7ae", "#139582", "#0b5e58"],
+  },
   // A local model through Ollama (answers only): the silver Novi, like other agents without a pack of their own
   ollama: {
     name: "Ollama",

@@ -370,6 +370,7 @@
     saved: 'Saved', hint: 'Ctrl+Enter to save',
     agentOff: 'off', notInstalled: 'Not installed — install the CLI, then restart Bayloob', running: (n, max) => `${n} of ${max} running`,
     enabledTip: name => `Use ${name} in tasks`, launch: 'Starts', readOnly: 'Read-only', noReadOnly: 'no read-only flag — Bayloob denies writes',
+    localCoder: 'Codex on a model pulled in Ollama, in its own settings (no plugins or MCP tools). It needs a model that calls tools with 16k+ context — gpt-oss:20b at 16k worked; Qwen3 8B only answered in text. Slow on a laptop: minutes per step',
     model: 'Model', url: 'URL', pickModel: 'Pick a model…', textOnly: 'Answers only — no tools, no files: it can be the Arbiter or take part in a discussion',
     noModels: url => `No models at ${url} — start Ollama (ollama serve) and pull one (ollama pull qwen3:8b)`,
     notesPh: 'Notes, e.g. subscription plan — rate limits apply', format: 'Response format',
@@ -413,7 +414,7 @@
       this.sounds = values.sounds;
       this.soundToggles = { ...(values.soundToggles || {}) };
       this.agents = JSON.parse(JSON.stringify(values.agents || {}));
-      this.ollama = { url: 'http://127.0.0.1:11434', model: '', ...(values.ollama || {}) };
+      this.ollama = { url: 'http://127.0.0.1:11434', model: '', coder: '', ...(values.ollama || {}) };
       this.hosts = JSON.parse(JSON.stringify(values.hosts || []));
       this.hostStatus = {};
       this.#renderHosts();
@@ -501,7 +502,8 @@
           <button type="button" class="switch" role="switch" aria-checked="${!!a.enabled && !!i.installed}" data-enable="${k}" ${i.installed ? '' : 'disabled'} title="${esc(T.enabledTip(name(k)))}" aria-label="${esc(T.enabledTip(name(k)))}"></button>
           ${stepper(`agent.${k}`, a.max, 1, 16, `${name(k)} max parallel`, !i.installed)}
           ${i.text && i.installed ? this.#textAgentHtml(i) : ''}
-          ${i.launch && !i.text ? `<span class="cmds"><span><b>${T.launch}</b>${esc(i.launch)}</span><span><b>${T.readOnly}</b>${esc(i.readOnly || T.noReadOnly)}</span></span>
+          ${i.local && i.installed ? this.#localAgentHtml(i) : ''}
+          ${i.launch && !i.text && !i.local ? `<span class="cmds"><span><b>${T.launch}</b>${esc(i.launch)}</span><span><b>${T.readOnly}</b>${esc(i.readOnly || T.noReadOnly)}</span></span>
           <input type="text" class="notes" data-notes="${k}" value="${esc(a.notes)}" placeholder="${esc(T.notesPh)}" aria-label="${esc(name(k))} notes">` : ''}
           ${i.installed && !i.text ? `<label class="fmt">${T.format}<select data-format="${k}" aria-label="${esc(name(k))} response format">${this.#formatOptions(this.promptFormat.agents[k] ?? '', true)}</select></label>` : ''}</div>`;
       }).join('');
@@ -516,12 +518,24 @@
     }
 
     // A local model through Ollama: which model, at which (local) URL; what it can do
+    #modelOptions(models, value) {
+      const has = models.some(m => m.name === value);
+      return [`<option value="">${T.pickModel}</option>`,
+        ...(value && !has ? [`<option value="${esc(value)}" selected>${esc(value)}</option>`] : []),
+        ...models.map(m => `<option value="${esc(m.name)}"${m.name === value ? ' selected' : ''}>${esc(m.name)}${m.params ? ` · ${esc(m.params)}` : ''}</option>`)].join('');
+    }
+
+    // Codex (local): the codex CLI on a model pulled in Ollama — which model, and the command it starts
+    #localAgentHtml(i) {
+      const models = i.ollama?.models || [];
+      return `<span class="cmds"><span><b>${T.model}</b><select data-ollama="coder" aria-label="Codex (local) model">${this.#modelOptions(models, this.ollama.coder)}</select></span>
+          <span><b>${T.launch}</b>${esc(i.launch)}</span><span><b>${T.readOnly}</b>${esc(i.readOnly || T.noReadOnly)}</span>
+          <span class="hint">${esc(models.length ? T.localCoder : T.noModels(this.ollama.url))}</span></span>`;
+    }
+
     #textAgentHtml(i) {
       const models = i.ollama?.models || [];
-      const has = models.some(m => m.name === this.ollama.model);
-      const options = [`<option value="">${T.pickModel}</option>`,
-        ...(this.ollama.model && !has ? [`<option value="${esc(this.ollama.model)}" selected>${esc(this.ollama.model)}</option>`] : []),
-        ...models.map(m => `<option value="${esc(m.name)}"${m.name === this.ollama.model ? ' selected' : ''}>${esc(m.name)}${m.params ? ` · ${esc(m.params)}` : ''}</option>`)].join('');
+      const options = this.#modelOptions(models, this.ollama.model);
       return `<span class="cmds"><span><b>${T.model}</b><select data-ollama="model" aria-label="Ollama model">${options}</select></span>
           <span><b>${T.url}</b><input type="text" data-ollama="url" value="${esc(this.ollama.url)}" spellcheck="false" aria-label="Ollama URL"></span>
           <span class="hint">${esc(models.length ? T.textOnly : T.noModels(this.ollama.url))}</span></span>`;

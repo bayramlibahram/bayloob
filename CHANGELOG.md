@@ -7,6 +7,11 @@
   pulled on this computer (the URL must be localhost). It answers only — no tools, no files, so it can't plan,
   build, review or analyse; Bayloob sends it everything in the message (the decider gets the whole thread).
   If Ollama isn't running or the model is missing, the stage says so, with how to fix it.
+- **Codex (local)**: the Codex CLI on a model pulled in Ollama (`codex --oss`), everywhere an agent is picked —
+  Single agent, builders, planner, reviewer, analysts, Arbiter. Settings → Agents → Codex (local): the model. It
+  runs in its own CODEX_HOME (Bayloob's hook only — your plugins and MCP tools filled a small model's context).
+  It needs a model that calls tools with 16k+ context: gpt-oss:20b at 16k edited a file in a real run; Qwen3 8B
+  only answered in text. Its sessions show as "Codex (local)" although its hooks say codex.
 - **Lead + team** (#28), a new workflow pattern in New task: the agent you pick as the **lead** plans and splits the
   work; the team builds one part each in its own worktree; the lead reviews every part (read-only) and changes go
   back to that part's builder; the parts are integrated — that branch is the lead's, so it fixes what fails the

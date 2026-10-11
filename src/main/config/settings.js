@@ -37,7 +37,8 @@ const DEFAULTS = {
   attachLimits: { fileMB: 50, taskMB: 200 }, // files attached to a task: per file, and all of a task's together
   hosts: [], // operations: { id, name, alias (~/.ssh/config), env dev|staging|prod, allow: [patterns], notes }
   agents: AGENT_DEFAULTS, // per agent: { enabled, max (parallel instances), notes }
-  ollama: { url: DEFAULT_URL, model: "" }, // the local model a text agent answers with (localhost only)
+  // Ollama (localhost only): model — the text agent's (Arbiter, discussion); coder — Codex (local)'s
+  ollama: { url: DEFAULT_URL, model: "", coder: "" },
   limits: LIMIT_DEFAULTS, // { total, perProject, minFreeGB } for task instances (see tasks/scheduler.js)
 };
 
@@ -119,6 +120,7 @@ const VALIDATE = {
   ollama: v => ({
     url: localUrl(v?.url) || DEFAULT_URL,
     model: /^[\w.:/-]{1,120}$/.test(String(v?.model || "")) ? String(v.model) : "",
+    coder: /^[\w.:/-]{1,120}$/.test(String(v?.coder || "")) ? String(v.coder) : "",
   }),
   attachLimits: v => {
     const l = v && typeof v === "object" ? v : {};

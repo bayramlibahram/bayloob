@@ -73,3 +73,20 @@ test("stale sessions are pruned, but not ones with a pending permission", () => 
     ["asking"]
   );
 });
+
+test("Codex (local) launched by Bayloob keeps its name although its hooks say codex", () => {
+  const store = new SessionStore();
+  store.trackLaunch({ name: "bl-shop-1", paneId: "%9", agent: "codex-local", cwd: "/w/shop" });
+  const s = store.upsert("codex:abc", "codex", { cwd: "/w/shop" }, q({ tmux: "%9" }), {});
+  assert.equal(s.agent, "codex-local");
+  assert.equal(s.managed, "bl-shop-1");
+  // a later event without the pane keeps it; a plain codex elsewhere stays codex
+  assert.equal(
+    store.upsert("codex:abc", "codex", { cwd: "/w/shop" }, q(), {}).agent,
+    "codex-local"
+  );
+  assert.equal(
+    store.upsert("codex:other", "codex", { cwd: "/w/x" }, q({ tmux: "%4" }), {}).agent,
+    "codex"
+  );
+});

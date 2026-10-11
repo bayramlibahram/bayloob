@@ -47,6 +47,19 @@ const AGENTS = {
     color: "#22b8cf",
     svgColor: "#3fd3b6",
   },
+  // The codex CLI on a model pulled in Ollama (`--oss`): a coding agent like Codex, on this computer only. Which
+  // model: Settings → Agents (local: () → the model; set by the app, see configure()). Codex needs a model that
+  // calls its tools: gpt-oss checked; Qwen3 8B only answered in text (2026-10-12).
+  "codex-local": {
+    name: "Codex (local)",
+    bin: "codex",
+    local: true,
+    withPrompt: p => [p],
+    readOnly: ["--sandbox", "read-only", "--ask-for-approval", "never"],
+    resume: id => ["resume", id],
+    color: "#2f9e8f",
+    svgColor: "#2f9e8f",
+  },
   // A local model through Ollama's API (kind "text"): no CLI, no tmux, no tools — Bayloob sends the prompt and
   // reads the answer (see tasks/task-runner.js). bin: only to tell whether Ollama is installed.
   ollama: {
@@ -70,6 +83,33 @@ const AGENTS = {
   },
 };
 
+// The model Codex (local) runs on (Settings → Agents), and its own CODEX_HOME — Bayloob's hook and nothing
+// else: the owner's plugins and MCP tools fill a small model's context and it calls tools that aren't there
+// (checked 2026-10-12: gpt-oss:20b edited the file only with a clean home and 16k context). The app sets both.
+let localModel = () => "";
+let localHome = null;
+function configure({ codexLocalModel, codexLocalHome } = {}) {
+  if (codexLocalModel) {
+    localModel = codexLocalModel;
+  }
+  if (codexLocalHome) {
+    localHome = codexLocalHome;
+  }
+}
+
+// How a local variant's CLI starts: in its own home (through env, so tmux's environment doesn't matter)
+const localBin = def =>
+  def.local && localHome ? ["env", `CODEX_HOME=${localHome}`, def.bin] : [def.bin];
+
+// What a local variant puts before everything else: the provider and its model
+function localFlags(def) {
+  if (!def.local) {
+    return [];
+  }
+  const model = localModel();
+  return ["--oss", "--local-provider", "ollama", ...(model ? ["-m", model] : [])];
+}
+
 // strict: a workflow's read-only run (taskReadOnly flags where the agent has them)
 function agentCommand(agent, prompt, { readOnly = false, strict = false, resume = null } = {}) {
   const def = AGENTS[agent];
@@ -83,13 +123,16 @@ function agentCommand(agent, prompt, { readOnly = false, strict = false, resume 
     if (!def.resume) {
       throw new Error(`${def.name} can't continue a conversation from Bayloob`);
     }
-    return [def.bin, ...def.resume(resume)];
+    return [...localBin(def), ...localFlags(def), ...def.resume(resume)];
   }
-  const flags = readOnly ? (strict && def.taskReadOnly) || def.readOnly : [];
+  const flags = [
+    ...localFlags(def),
+    ...(readOnly ? (strict && def.taskReadOnly) || def.readOnly : []),
+  ];
   if (!prompt) {
-    return [def.bin, ...flags.filter(f => f !== "--")];
+    return [...localBin(def), ...flags.filter(f => f !== "--")];
   }
-  return [def.bin, ...flags, ...def.withPrompt(prompt)];
+  return [...localBin(def), ...flags, ...def.withPrompt(prompt)];
 }
 
-module.exports = { AGENTS, agentCommand };
+module.exports = { AGENTS, agentCommand, configure };

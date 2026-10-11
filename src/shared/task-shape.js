@@ -4,7 +4,7 @@
 // Plain script: `require()` in main and tests, a <script> (global `TaskShape`) in the page.
 (root => {
   // Default parallel instances per agent until Settings → Agents exists (command 03)
-  const CAPACITY = { claude: 4, codex: 2, gemini: 2, grok: 1, ollama: 1 };
+  const CAPACITY = { claude: 4, codex: 2, "codex-local": 1, gemini: 2, grok: 1, ollama: 1 };
   // Agents that only answer text (a local model through Ollama's API): no tools, no files — they can be the
   // Arbiter or take part in a discussion, never plan, build, review or analyse
   const TEXT_AGENTS = ["ollama"];
