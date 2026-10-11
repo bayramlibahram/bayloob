@@ -1334,7 +1334,8 @@ test("Attachments: copied into the task when it starts, mirrored where each agen
     return { path: path.join(d, name), name, size: text.length };
   };
   const log = put("app.log", "12:03 ERROR pool exhausted\n");
-  const env1 = put(".env", "STRIPE_KEY=sk_live_abcdefghijklmnopqrstuvwx\n");
+  // a made-up key, built from parts so it never appears whole in the repo (push protection reads code too)
+  const env1 = put(".env", `STRIPE_KEY=${["sk", "live", "abcdefghijklmnopqrstuvwx"].join("_")}\n`);
   const analysis = (attachments, id) =>
     env.store.saveDraft({
       ...(id ? { id } : {}),

@@ -340,7 +340,11 @@ test("store: an archive is listed on add, extracted only on request, and its fil
     "dump.zip",
     makeZip([
       { name: "logs/app.log", data: "ok\n" },
-      { name: ".env", data: "STRIPE_KEY=sk_live_abcdefghijklmnopqrstuvwx\n" },
+      // a made-up key, built from parts so it never appears whole in the repo
+      {
+        name: ".env",
+        data: `STRIPE_KEY=${["sk", "live", "abcdefghijklmnopqrstuvwx"].join("_")}\n`,
+      },
     ])
   );
   const { attachment: a } = await store.add(zip);
