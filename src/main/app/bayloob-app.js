@@ -1026,6 +1026,12 @@ class BayloobApp {
   // The pill's line for a task's stage: a discussion says how far it is ("Discussing · Round 2/3 · 1 of 2 agree")
   #stageLine(t) {
     const st = t.template.stages[t.stage];
+    // the orchestrator: "Orchestrator · turn 3 · 2 running · 4 of 6 workers"
+    const o = t.orchestrator;
+    if (st?.role === "orchestrator" && o && !o.done) {
+      const running = o.workers.filter(w => w.status === "running" || w.status === "queued").length;
+      return `Orchestrator · turn ${o.turns + 1} · ${running} running · ${o.workers.length} of ${o.budget.workers} workers`;
+    }
     const d = t.discussion;
     if (st?.role !== "discussion" || d?.stage !== st.id) {
       return st?.title || "";

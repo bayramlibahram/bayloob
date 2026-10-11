@@ -339,6 +339,23 @@
   .toast.err { color: var(--waiting); }
 
   /* ---------- Discussion (14): participants · thread · summary, as in docs/orchestration/prototype/discussion.html ---------- */
+  /* Delegation (the orchestrator) and its first batch at the gate */
+  .deleg-sum { margin: 0 0 10px; color: var(--muted); }
+  .deleg-sum b { color: var(--fg); }
+  .dh { margin: 16px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .deleg { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .deleg .w { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+  .deleg .w > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .deleg .w small { color: var(--muted); }
+  .deleg .w.failed small, .deleg .w.interrupted small { color: var(--error); }
+  .deleg code, .batch code { font: 12px ui-monospace, "Ubuntu Mono", monospace; overflow-wrap: anywhere; }
+  .deleg-turns details { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin-bottom: 6px; }
+  .deleg-turns summary { cursor: pointer; font-weight: 600; }
+  .batch { display: block; margin-top: 8px; }
+  .batch .h { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .batch ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+  .batch li small { display: block; color: var(--muted); }
+  .batch li.refused { color: var(--error); }
   .disc { display: grid; grid-template-columns: 220px minmax(0, 1fr) 320px; gap: 16px; min-height: 100%; }
   .disc .people, .disc .side { display: flex; flex-direction: column; gap: 8px; }
   .disc .who { display: grid; grid-template-columns: 34px 1fr; gap: 2px 9px; align-items: center; padding: 8px; border-radius: 11px; text-align: left; border: 1px solid transparent; }
@@ -440,7 +457,7 @@
     noTasks: 'No tasks yet', noTasksHint: 'Start one with New task → Agentic workflow (Pipeline or Best-of-N).',
     category: { workflow: 'Agentic workflow', analysis: 'Analysis', single: 'Single agent' },
     status: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', stopped: 'Stopped', failed: 'Failed' },
-    tabs: { discussion: 'Discussion', runbook: 'Runbook', overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
+    tabs: { delegation: 'Delegation', discussion: 'Discussion', runbook: 'Runbook', overview: 'Overview', plan: 'Plan', candidates: 'Candidates', decision: 'Decision', tests: 'Tests', report: 'Report', reviews: 'Reviews', log: 'Log' },
     stop: 'Stop task', stopAsk: 'Stop this task? Its agents stop; worktrees and branches stay.', yesStop: 'Stop it', cancel: 'Cancel',
     stopStage: 'Stop stage', stopStageAsk: s => `Stop ${s}? Its agents stop and you decide what's next; worktrees stay.`, yesStopStage: 'Stop the stage',
     stopAgent: 'Stop', stopAgentTip: 'Stop this agent — its worktree stays', stopAgentAsk: 'Stop this agent? Its worktree stays.',
@@ -488,6 +505,17 @@
       stopped: { retry: 'Run them again', continue: 'Go on with what finished', abort: 'Stop the task' },
       discussion: { next: 'Next round', end: 'End & decide', abort: 'Abort' },
       'discussion-end': { adopt: 'Adopt decision', another: 'Another round', abort: 'Abort' },
+      delegation: { approve: 'Start them', changes: 'Say what to change', abort: 'Abort' },
+      budget: { more: 'Give it more', done: 'Finish with what’s done', abort: 'Abort' },
+      'orchestrator-stuck': { retry: 'Let it try again', abort: 'Abort' },
+      'orchestrator-lost': { retry: 'Run again', abort: 'Abort' },
+    },
+    deleg: {
+      turn: n => `Turn ${n}`, used: (n, max) => `${n} of ${max} workers`, turns: (n, max) => `${n} of ${max} turns`, minutes: (n, max) => `${n} of ${max} min`,
+      workers: 'Workers', none: 'No workers yet — the orchestrator asks for them at the end of its turn',
+      turnsTitle: 'The orchestrator’s turns', refused: 'Refused', files: 'files', readOnly: 'read-only', writes: 'writes',
+      batch: 'It asks to start', more: '+3 workers, +4 turns, +30 minutes',
+      status: { queued: 'waiting', running: 'working', done: 'done', failed: 'failed', interrupted: 'cut off', stopped: 'stopped' },
     },
     disc: {
       notYet: 'The discussion hasn’t started', notYetHint: 'It starts when the task reaches its discussion stage.',
@@ -529,7 +557,7 @@
     notePh: { changes: 'What should change? It goes to the same agent.', retry: 'What should the builders do differently?' },
     send: 'Send', abortAsk: 'Abort this task? Its agents stop; worktrees and branches stay.', yesAbort: 'Abort',
     stopPlanAsk: 'Stop this plan? Steps not run stay as they are.', yesStopPlan: 'Stop plan',
-    gateHint: { discussion: 'Paused between rounds — write to the participants, then go on or end it', 'discussion-end': 'Adopt writes decision.md for the next stages: your note, the decider’s answer, or the proposal most agree with', approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', runbook: 'Run, skip or edit each step in the Runbook tab — in order', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
+    gateHint: { delegation: 'Its first batch: check who it starts, with which files and prompt. After this it stays within its budget', budget: 'Give it more: +3 workers, +4 turns, +30 minutes. Finish: the writers’ parts are integrated and tested', 'orchestrator-stuck': 'Three of its turns in a row asked for nothing that could run — see why in Delegation', 'orchestrator-lost': 'Its session ended; Run again starts a new one with the protocol and the news', discussion: 'Paused between rounds — write to the participants, then go on or end it', 'discussion-end': 'Adopt writes decision.md for the next stages: your note, the decider’s answer, or the proposal most agree with', approve: 'Read the plan, then approve it or ask for changes', pick: 'You pick the candidate to keep', decision: 'Accept takes the Arbiter’s pick; or choose another one in Decision', runbook: 'Run, skip or edit each step in the Runbook tab — in order', merge: 'Nothing is merged until you click', apply: 'The change goes into your files, uncommitted — nothing is committed', 'tests-failed': 'Continue keeps the failing candidates', interrupted: 'The session ended before the agent finished', violation: 'A read-only agent changed files — see the Log', failed: '' },
     ago: at => timeAgo(at),
     log: {
       started: e => e.fromWorktree ? `Task started from your files as they were (on ${e.branch || '?'})` : `Task started from ${String(e.base || '').slice(0, 8)} on ${e.branch || '?'}`,
@@ -815,14 +843,16 @@
         const inner = cls === 'done' ? ICON.check : cls === 'wait' ? '!' : cls === 'fail' ? '×' : '';
         return `${i ? '<span class="sline"></span>' : ''}<div class="sstep ${cls}" data-k="step:${esc(t.id)}:${i}" data-v="${cls}"${i === t.stage && live ? ' aria-current="step"' : ''}><span class="si">${inner}</span><span>${esc(s.title)} <small>${esc(this.#stageNote(t, s, st))}</small></span></div>`;
       }).join('');
-      const board = !t.template.stages.some(s => s.role === 'builder');
+      const orch = t.template.stages.some(s => s.role === 'orchestrator');
+      const board = !orch && !t.template.stages.some(s => s.role === 'builder');
       const arb = t.template.stages.some(s => s.role === 'arbiter' && s.agents?.length);
       const tabs = board ? [['overview'], ...(arb ? [['report', t.report?.findings?.length || '']] : []), ...(t.runbook ? [['runbook', t.runbook.steps.length || '']] : []), ['reviews', t.instances.filter(i => (i.role === 'reviewer' || i.role === 'analyst') && i.status === 'done').length || ''], ['log']]
         : [['overview'], ['plan'], ['candidates', t.candidates.length || ''], ['decision'], ['tests'], ['log']];
       if (t.template.stages.some(s => s.role === 'discussion')) { tabs.splice(1, 0, ['discussion', t.discussion?.messages?.length || '']); }
+      if (orch) { tabs.splice(1, 1, ['delegation', t.orchestrator?.workers?.length || '']); } // no plan: its turns are in Delegation
       if (DISCUSSION_MODE) { this.tab = 'discussion'; }
       if (!tabs.some(([k]) => k === this.tab)) { this.tab = 'overview'; }
-      const pane = { discussion: () => this.#discussion(t), overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), runbook: () => this.#runbook(t), log: () => this.#log(t) }[this.tab]();
+      const pane = { delegation: () => this.#delegation(t), discussion: () => this.#discussion(t), overview: () => this.#overview(t), plan: () => this.#plan(t), candidates: () => this.#candidates(t), tests: () => this.#tests(t), reviews: () => this.#reviews(t), decision: () => this.#decision(t), report: () => this.#report(t), runbook: () => this.#runbook(t), log: () => this.#log(t) }[this.tab]();
       return `<div class="dhead"><div class="t">
           <button class="crumb" type="button" data-act="board">${ICON.back} ${T.back}</button>
           <h1 tabindex="-1">${esc(t.title)}</h1>
@@ -849,6 +879,12 @@
     }
 
     #stageNote(t, s, st) {
+      // The orchestrator: "turn 3 · 2 working · 4 of 6 workers"
+      if (s.role === 'orchestrator' && t.orchestrator) {
+        const o = t.orchestrator;
+        const busy = o.workers.filter(w => w.status === 'running' || w.status === 'queued').length;
+        return `turn ${o.turns}${busy ? ` · ${busy} working` : ''} · ${o.workers.length} of ${o.budget.workers} workers`;
+      }
       // A discussion: "Round 2/3 · 2 of 3 agree"
       if (s.role === 'discussion' && t.discussion?.stage === s.id) {
         const d = t.discussion;
@@ -901,6 +937,35 @@
     // ---------- Discussion (14): who's in it, the thread (or columns / stance timeline / raw), and the summary ----------
 
     disc = { view: 'thread', filter: null, q: '', to: '', text: '' };
+
+    // The orchestrator's first batch, at its gate: who it starts, how, with which files and prompt; what was refused
+    #batchHtml(g) {
+      const D = T.deleg;
+      const rows = g.batch.filter(a => a.do === 'start').map(a => `<li><b>${esc(a.id)}</b> · ${esc(AGENTS[a.agent]?.name || a.agent)} · ${a.mode === 'writes' ? `${D.writes} <code>${esc(a.files.join(', '))}</code>` : D.readOnly}<small>${esc(a.prompt.length > 240 ? `${a.prompt.slice(0, 240)}…` : a.prompt)}</small></li>`).join('');
+      const no = (g.refused || []).map(r => `<li class="refused">${esc(r.do)} <b>${esc(r.id)}</b> — ${esc(r.why)}</li>`).join('');
+      return `<span class="batch"><span class="h">${D.batch}</span><ul>${rows}${no ? `<li class="h">${D.refused}</li>${no}` : ''}</ul></span>`;
+    }
+
+    // Delegation: the orchestrator's budget, its workers (status, mode, files, changes), and its turns as it wrote them
+    #delegation(t) {
+      const D = T.deleg;
+      const o = t.orchestrator;
+      if (!o) { return stateBlock({ kind: 'loading', line: D.none }); }
+      const mins = Math.round((Math.min(Date.now(), t.endedAt || Date.now()) - o.startedAt) / 60000);
+      const head = `<p class="deleg-sum"><b>${D.turn(o.turns)}</b> · ${D.used(o.workers.length, o.budget.workers)} · ${D.turns(o.turns, o.budget.turns)} · ${D.minutes(Math.min(mins, o.budget.minutes), o.budget.minutes)}</p>`;
+      const cand = id => t.candidates.find(c => c.id === id);
+      const rows = o.workers.map(w => {
+        const c = w.candidate ? cand(w.candidate) : null;
+        const diff = c?.diff ? ` · ${c.diff.files} files +${c.diff.added} −${c.diff.deleted}` : '';
+        return `<li class="w ${esc(w.status)}">${novi(w.agent, 's')}<span><span><b>${esc(w.id)}</b> · ${esc(AGENTS[w.agent]?.name || w.agent)} · ${w.mode === 'writes' ? `${D.writes} <code>${esc((w.files || []).join(', '))}</code>` : D.readOnly}</span><small>${esc(D.status[w.status] || w.status)}${diff}</small></span></li>`;
+      }).join('');
+      const turns = Array.from({ length: o.turns }, (_, k) => o.turns - k).map(n => {
+        const text = this.#artifact(t.id, `orchestrator.${n}.md`);
+        return `<details${n === o.turns ? ' open' : ''}><summary>${D.turn(n)}</summary>${text === undefined ? this.#loadState(t.id, `orchestrator.${n}.md`) : `<pre class="output">${esc(text || '')}</pre>`}</details>`;
+      }).join('');
+      return `${head}<h3 class="dh">${D.workers}</h3>${rows ? `<ul class="deleg">${rows}</ul>` : `<p class="muted">${D.none}</p>`}
+        ${turns ? `<h3 class="dh">${D.turnsTitle}</h3><div class="deleg-turns">${turns}</div>` : ''}`;
+    }
 
     #discussion(t) {
       const d = t.discussion;
@@ -1283,7 +1348,8 @@
       return `<div class="actions"><span class="msg"><b>${esc(g.title)}</b><small>${esc((g.kind === 'merge' && t.base.fromWorktree ? T.gateHint.apply : T.gateHint[g.kind]) || '')}</small>
           ${g.detail ? `<small>${esc(g.detail)}</small>` : ''}${g.error ? `<small class="err">${esc(g.error)}</small>` : ''}
           ${g.hint ? `<small class="fix"><b>${T.fix}</b> ${esc(g.hint)}</small>` : ''}
-          ${g.screen ? `<details class="more"><summary>${T.lastScreen}</summary><pre class="output">${esc(g.screen)}</pre></details>` : ''}</span>
+          ${g.screen ? `<details class="more"><summary>${T.lastScreen}</summary><pre class="output">${esc(g.screen)}</pre></details>` : ''}
+          ${g.batch ? this.#batchHtml(g) : ''}</span>
         ${order.map(btn).join('')}</div>`;
     }
 
@@ -1325,6 +1391,7 @@
     #preferredTab(task) {
       if (DISCUSSION_MODE) { return 'discussion'; }
       if (task?.gate?.kind === 'runbook') { return 'runbook'; }
+      if (task?.template.stages[task.stage]?.role === 'orchestrator' || ['delegation', 'budget', 'orchestrator-stuck', 'orchestrator-lost'].includes(task?.gate?.kind)) { return 'delegation'; }
       if (['discussion', 'discussion-end'].includes(task?.gate?.kind) || task?.template.stages[task.stage]?.role === 'discussion') { return 'discussion'; }
       if (task?.gate?.kind === 'decision' || (task?.gate?.kind === 'merge' && task.candidates.filter(x => x.status === 'active').length > 1)) { return 'decision'; }
       if (task?.gate?.kind === 'pick') { return 'candidates'; }
