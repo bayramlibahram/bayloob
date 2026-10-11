@@ -167,3 +167,18 @@ test("Codex 0.162's new trust screen is answered too", async () => {
   assert.deepEqual(calls.keys, ["%7:Enter"]);
   assert.deepEqual(calls.trusted, ["t1:%7"]);
 });
+
+test("a session's last screen is kept after its pane is gone (a crash at start)", async () => {
+  const crash = "Starting Codex…\nError: account/read failed during TUI bootstrap";
+  const { runner } = make(["", crash, ""]); // "" once the pane is gone
+  const h = await runner.launch({
+    adapter: "codex",
+    cwd: "/w/b1",
+    prompt: "x",
+    mode: "writes",
+    role: "builder",
+    taskId: "t1",
+  });
+  await settle();
+  assert.equal(runner.lastScreen(h), crash);
+});

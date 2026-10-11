@@ -257,6 +257,9 @@
   .actions .msg b { font-weight: 650; }
   .actions .msg small { color: var(--muted); white-space: pre-wrap; }
   .actions .msg .err { color: var(--waiting); }
+  .actions .msg .fix { color: var(--softer); }
+  .actions .msg .fix b { color: var(--working); }
+  .actions .msg details pre { max-height: 180px; }
   .actions textarea { flex: 1 1 100%; min-height: 60px; resize: vertical; padding: 8px 10px; border-radius: 10px; background: var(--raised-2); border: 1px solid var(--line); line-height: 1.5; }
   .actions textarea:focus { border-color: var(--focus); }
   .actions .confirm { color: var(--waiting); font-weight: 600; }
@@ -392,6 +395,7 @@
       step: (n, what, status) => `Runbook step ${n} ${status}: ${what}`,
     },
     useAlt: 'Decisions take Alt+A (or Alt+P / Alt+R), or a click — not Enter',
+    fix: 'Fix:', lastScreen: 'What its screen said last',
     useAltRun: 'A step runs on Alt+Enter (focus on its card) or a click — not Enter',
     loading: 'Loading…', noLog: 'Nothing logged yet', noLogHint: 'Every stage, agent and decision is written here as it happens.',
     noSteps: 'The plan has no steps', noStepsHint: 'Nothing will run on the host. Stop the plan, or retry the task with a note.', retry: 'Retry', noInstances: 'No agent has started yet',
@@ -1038,7 +1042,9 @@
       // Primary last (bottom right), abort first
       const order = [...g.actions].sort((a, b) => (a === 'abort' ? -1 : b === 'abort' ? 1 : 0) || (a === primary ? 1 : b === primary ? -1 : 0));
       return `<div class="actions"><span class="msg"><b>${esc(g.title)}</b><small>${esc((g.kind === 'merge' && t.base.fromWorktree ? T.gateHint.apply : T.gateHint[g.kind]) || '')}</small>
-          ${g.detail ? `<small>${esc(g.detail)}</small>` : ''}${g.error ? `<small class="err">${esc(g.error)}</small>` : ''}</span>
+          ${g.detail ? `<small>${esc(g.detail)}</small>` : ''}${g.error ? `<small class="err">${esc(g.error)}</small>` : ''}
+          ${g.hint ? `<small class="fix"><b>${T.fix}</b> ${esc(g.hint)}</small>` : ''}
+          ${g.screen ? `<details class="more"><summary>${T.lastScreen}</summary><pre class="output">${esc(g.screen)}</pre></details>` : ''}</span>
         ${order.map(btn).join('')}</div>`;
     }
 
