@@ -13,7 +13,8 @@
       "!!**/design",
       "!!**/docs",
       "!!**/dist",
-      "!!**/src/assets/packs/meta.js"
+      "!!**/src/assets/packs/meta.js",
+      "!!**/src/ui/components/ui"
     ]
   },
   "formatter": {
@@ -111,5 +112,10 @@
         }
       }
     }
-  ]
+  ],
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
 }

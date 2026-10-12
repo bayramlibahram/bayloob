@@ -116,7 +116,7 @@ class AppWindow {
       const view = new WebContentsView({ webPreferences: { preload: paths.preload(name) } });
       view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#121118" : "#ffffff");
       this.win.contentView.addChildView(view);
-      v = { view, ready: view.webContents.loadFile(paths.page(name), query ? { query } : {}) };
+      v = { view, ready: paths.load(view.webContents, name, query) };
       view.webContents.on("did-finish-load", () => view.webContents.setZoomFactor(uiScale.factor));
       this.#views.set(name, v);
     }
@@ -231,7 +231,7 @@ class AppWindow {
       this.win = null;
       this.#ready = null;
     });
-    this.#ready = this.win.loadFile(paths.page(this.name), this.query ? { query: this.query } : {});
+    this.#ready = paths.load(this.win.webContents, this.name, this.query);
     this.win.webContents.on("did-finish-load", () =>
       this.win?.webContents.setZoomFactor(uiScale.factor)
     );

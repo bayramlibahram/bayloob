@@ -1,0 +1,79 @@
+/* The React windows' styles: Tailwind, and shadcn/ui themed from Bayloob's own tokens (theme.css) — one source
+   of colours for every window, old or React, so light and dark stay what they are. */
+@import "tailwindcss";
+@import "../../renderer/shared/theme.css";
+
+/* Light / dark: theme.css switches the tokens on <html data-theme>; Tailwind's dark: follows the same switch */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* shadcn's variables, pointing at Bayloob's tokens (components use some of them raw, e.g. var(--secondary)).
+   One name clashes: Bayloob's --muted is a text colour, shadcn's "muted" a surface — so Bayloob keeps --muted
+   and shadcn's muted lives only in the Tailwind colours below (bg-muted, text-muted-foreground). */
+:root {
+  --radius: 10px;
+  --background: var(--backdrop);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--primary-bg);
+  --primary-foreground: var(--primary-fg);
+  --secondary: var(--raised-2);
+  --secondary-foreground: var(--text);
+  --accent: var(--hover);
+  --accent-foreground: var(--text);
+  --destructive: var(--error);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--focus);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--raised);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-done: var(--done);
+  --color-working: var(--working);
+  --color-waiting: var(--waiting);
+  --color-thinking: var(--thinking);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif;
+  --font-mono: ui-monospace, "Ubuntu Mono", monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 13px;
+  }
+}

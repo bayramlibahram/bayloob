@@ -1,7 +1,9 @@
-// electron-vite: builds the main process and the preload scripts into out/ (and, window by window, the pages
-// moved to React). Pages not moved yet load as they are from src/renderer (see src/main/app/paths.js).
-import { readdirSync } from "node:fs";
+// electron-vite: builds the main process, the preload scripts and the windows moved to React into out/. Windows
+// not moved yet load as they are from src/renderer (see src/main/app/paths.js).
+import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 
 // One preload per window (src/preload/<window>.js → out/preload/<window>.js)
@@ -10,6 +12,42 @@ const preloads = Object.fromEntries(
     .filter(f => f.endsWith(".js"))
     .map(f => [f.slice(0, -3), resolve("src/preload", f)])
 );
+
+// One page per React window (src/ui/<window>/index.html → out/renderer/<window>/index.html)
+const UI = resolve("src/ui");
+const pages = Object.fromEntries(
+  readdirSync(UI, { withFileTypes: true })
+    .filter(d => d.isDirectory() && existsSync(resolve(UI, d.name, "index.html")))
+    .map(d => [d.name, resolve(UI, d.name, "index.html")])
+);
+
+// The pages' Content-Security-Policy. Built: scripts from the app only — no inline script at all. In
+// development React's fast refresh adds an inline script and Vite talks to its dev server over a socket.
+const csp = dev =>
+  [
+    "default-src 'self'",
+    `script-src 'self'${dev ? " 'unsafe-inline'" : ""}`,
+    "style-src 'self' 'unsafe-inline'", // Radix positions popovers with inline styles
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    `connect-src 'self'${dev ? " ws: http://localhost:*" : ""}`,
+  ].join("; ");
+const cspPlugin = () => {
+  let dev = false;
+  return {
+    name: "bayloob-csp",
+    configResolved: c => {
+      dev = c.command === "serve";
+    },
+    transformIndexHtml: () => [
+      {
+        tag: "meta",
+        attrs: { "http-equiv": "Content-Security-Policy", content: csp(dev) },
+        injectTo: "head-prepend",
+      },
+    ],
+  };
+};
 
 export default defineConfig({
   main: {
@@ -25,6 +63,17 @@ export default defineConfig({
       outDir: "out/preload",
       // sandboxed preloads: one CommonJS file each, nothing to load but electron
       rollupOptions: { input: preloads, output: { format: "cjs", entryFileNames: "[name].js" } },
+    },
+  },
+  renderer: {
+    root: UI,
+    base: "./", // file:// in the app: relative asset paths
+    resolve: { alias: { "@": UI } },
+    plugins: [react(), tailwindcss(), cspPlugin()],
+    build: {
+      outDir: resolve("out/renderer"),
+      minify: true, // electron-vite leaves the renderer unminified by default
+      rollupOptions: { input: pages },
     },
   },
 });

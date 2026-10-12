@@ -5,3 +5,5 @@ out/
 .idea/
 *.log
 __pycache__/
+test-results/
+playwright-report/

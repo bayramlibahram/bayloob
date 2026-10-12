@@ -57,6 +57,8 @@ const { Converters } = require("../modules/attachments/converters");
 const { inspect, preview, inside } = require("../modules/attachments/preview");
 const PromptFormat = require("../../shared/prompt-format");
 const Roles = require("../../shared/roles");
+const { checked } = require("../ipc/checked");
+const { SettingsSave } = require("../ipc/schemas");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
@@ -2152,10 +2154,13 @@ class BayloobApp {
             connection: out.connection,
           };
     });
-    ipcMain.handle("settings:save", (_e, values) =>
-      result(() => {
-        this.settings.save(values || {});
-      })
+    ipcMain.handle(
+      "settings:save",
+      checked(SettingsSave, (_e, values) =>
+        result(() => {
+          this.settings.save(values);
+        })
+      )
     );
     ipcMain.handle("settings:install-hooks", () =>
       result(() => {

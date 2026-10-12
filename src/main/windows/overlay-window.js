@@ -75,7 +75,7 @@ class OverlayWindow {
     if (IS_LINUX) {
       this.win.once("ready-to-show", () => this.win?.showInactive());
     }
-    this.win.loadFile(paths.page("overlay"), { query: { mascot: this.mascot } });
+    paths.load(this.win.webContents, "overlay", { mascot: this.mascot });
     // The exact top bar comes from the GNOME extension (async); screens and scaling can change any time
     this.place();
     for (const ev of ["display-metrics-changed", "display-added", "display-removed"]) {
@@ -120,7 +120,9 @@ class OverlayWindow {
   /** Switches the mascot style ('novi' | 'svg') by reloading the page. */
   setMascot(mascot) {
     this.mascot = mascot;
-    this.win?.loadFile(paths.page("overlay"), { query: { mascot } });
+    if (this.win) {
+      paths.load(this.win.webContents, "overlay", { mascot });
+    }
   }
 
   onLoad(fn) {

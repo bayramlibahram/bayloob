@@ -82,7 +82,7 @@ class PopupWindow {
       this.win = null;
       this.#ready = null;
     });
-    this.#ready = this.win.loadFile(paths.page(this.opts.name));
+    this.#ready = paths.load(this.win.webContents, this.opts.name);
     this.win.webContents.on("did-finish-load", () =>
       this.win?.webContents.setZoomFactor(uiScale.factor)
     );

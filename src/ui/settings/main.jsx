@@ -1,0 +1,14 @@
+import "@/styles/globals.css";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { followTheme } from "@/lib/theme";
+import { App } from "./App";
+import { connect } from "./store";
+
+followTheme();
+connect(window.settingsAPI);
+createRoot(document.getElementById("root")).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
