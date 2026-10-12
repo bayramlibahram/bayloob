@@ -14,7 +14,9 @@
   const ARTIFACT = /^[\w-][\w.-]{0,58}\.(md|txt)$/;
 
   const rules = (...lines) => lines.join("\n");
-  const SEPARATOR = "\n\n---\n\n"; // between the role's instructions and the task (wrap / unwrap)
+  // Between the role's instructions and the task (wrap / unwrap). One line no prompt is likely to hold, so what
+  // was asked can be found without knowing the role (a hook's "New prompt" line, a workflow stage's session)
+  const SEPARATOR = "\n\n--- The task ---\n\n";
   const NO_TASK = "(no task given — ask what to do)";
   const BUILTIN = [
     {
@@ -154,11 +156,14 @@
     return `${role.instructions}${save}${SEPARATOR}${p || NO_TASK}`;
   }
 
-  /** What the owner asked, from a prompt as the role's engine got it (wrap's instructions taken off again). */
-  function unwrap(prompt, role) {
+  /**
+   * What the owner asked, from a prompt as a role's engine got it (wrap's instructions taken off again). With
+   * `role`, only that role's prompt; without, any role's (the separator says where the task starts).
+   */
+  function unwrap(prompt, role = null) {
     const p = String(prompt ?? "");
     const cut = p.indexOf(SEPARATOR);
-    if (!role?.instructions || !p.startsWith(role.instructions) || cut < 0) {
+    if (cut < 0 || (role && !(role.instructions && p.startsWith(role.instructions)))) {
       return p;
     }
     const asked = p.slice(cut + SEPARATOR.length);

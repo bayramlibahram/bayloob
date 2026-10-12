@@ -61,7 +61,7 @@ test("roles: the engine gets the role's instructions, then the task", () => {
   const p = Roles.wrap("  Compare the two queue libraries  ", r);
   assert.ok(p.startsWith(r.instructions));
   assert.ok(p.includes("research.md"));
-  assert.ok(p.endsWith("---\n\nCompare the two queue libraries"));
+  assert.ok(p.endsWith("--- The task ---\n\nCompare the two queue libraries"));
   assert.equal(Roles.wrap("as it is", null), "as it is");
 });
 
@@ -80,4 +80,9 @@ test("roles: unwrap gives back what the owner asked (for the console)", () => {
   assert.equal(Roles.unwrap(Roles.wrap("Make the cart page", r), r), "Make the cart page");
   assert.equal(Roles.unwrap(Roles.wrap("", r), r), "");
   assert.equal(Roles.unwrap("Not a role prompt\n\n---\n\nx", r), "Not a role prompt\n\n---\n\nx");
+  assert.equal(Roles.unwrap(Roles.wrap("Any role", Roles.get(null, "data"))), "Any role"); // without knowing the role
+  assert.equal(
+    Roles.unwrap(Roles.wrap("Theirs", Roles.get(null, "data")), r),
+    Roles.wrap("Theirs", Roles.get(null, "data"))
+  );
 });

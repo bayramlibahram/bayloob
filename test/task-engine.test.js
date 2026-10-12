@@ -2065,7 +2065,7 @@ test("Role chain: each stage runs as its role agent, hands its answer on, you ap
   assert.equal(research.mode, "read-only");
   assert.ok(research.prompt.startsWith(Roles.get(roles, "research").instructions));
   assert.match(research.prompt, /Bayloob saves it as research\.md/);
-  assert.match(research.prompt, /---\n\nAdd a discount rule to orders/);
+  assert.match(research.prompt, /--- The task ---\n\nAdd a discount rule to orders/);
   await endTurn(env, task, research, "Two libraries; A is smaller.");
 
   const data = env.runner.sessions[1];

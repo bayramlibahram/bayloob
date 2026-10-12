@@ -1,6 +1,7 @@
 // Turns hook events into short, human-readable activity lines for the workspace panel:
 // "Editing Header.jsx · src/components", "Running a command · npm test", …
 const path = require("node:path");
+const Roles = require("../../../shared/roles");
 
 const MAX_DETAIL = 140;
 
@@ -101,7 +102,8 @@ function describeActivity(ev, cwd) {
     case "SessionStart":
       return { title: "Session started", detail: ev.source ? `source: ${ev.source}` : "" };
     case "UserPromptSubmit":
-      return { title: "New prompt", detail: short(ev.prompt) };
+      // a role agent's prompt: what was asked, not the role's instructions before it
+      return { title: "New prompt", detail: short(Roles.unwrap(ev.prompt)) };
     case "PreToolUse":
       return toolActivity(ev.tool_name, ev.tool_input, cwd);
     case "PermissionRequest":

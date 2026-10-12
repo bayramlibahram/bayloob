@@ -177,15 +177,13 @@ class BayloobApp {
   speech = new SpeechEngine(); // voice prompts: local speech-to-text only
   system = new SystemStats(); // whole-machine CPU / memory for the panel's footer
   // turns read from agents' transcripts, for the panel's agent console — each prompt as the owner typed it
-  agentConsole = new AgentConsole({ typed: (text, s) => this.#typed(text, s) });
+  agentConsole = new AgentConsole({ typed: text => this.#typed(text) });
 
-  #typed(text, session) {
-    const role = session?.persona ? Roles.get(this.settings.get("roles"), session.persona) : null;
-    return PromptFormat.unwrap(
-      role ? Roles.unwrap(text, role) : text,
-      this.settings.get("promptFormat")
-    );
+  // A role agent's instructions (a single session or a workflow stage) and a response format come off
+  #typed(text) {
+    return PromptFormat.unwrap(Roles.unwrap(text), this.settings.get("promptFormat"));
   }
+
   #handoffs = new Map(); // session id -> { agent, cwd, sessionId, pid, at }: waiting to continue in tmux
   // Questions agents ask only in their terminal (folder trust, update offers…), read from tmux panes
   menus = new MenuWatcher({
