@@ -2,8 +2,9 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import { errorText } from "@/lib/window";
 import { pickedFor, preferredTab, STATUS } from "./model";
+import { copyOf, editable, issuesOf } from "./workflow";
 
-// The Tasks window: the board (as columns, a list or a timeline), one task's detail, and — later — the
+// The Tasks window: the board (as columns, a list or a timeline), one task's detail, the templates and the
 // workflow builder. main sends the tasks on tasks:show and each change on tasks:task. It opens in the
 // Workspace window (?embedded=1: no logo or window controls of its own) and in the discussion window
 // (?mode=discussion: one task's discussion, full size).
@@ -68,7 +69,9 @@ export const useTasks = create((set, get) => ({
   tasks: {}, // id → task
   usage: null,
   templates: [],
-  view: "board", // board | detail | templates
+  agents: {}, // the agents a stage can pick: id → { name, installed }
+  roles: [], // role agents a stage can run as (Settings → Agents → Roles)
+  view: "board", // board | detail | templates | builder
   open: null, // the task in the detail
   tab: "overview",
   filter: "",
@@ -91,8 +94,12 @@ export const useTasks = create((set, get) => ({
       tasks,
       usage: state.usage || null,
       templates: state.templates || [],
+      agents: state.agents || {},
+      roles: state.roles || [],
     });
-    if (state.focus && tasks[state.focus]) {
+    if (state.builder) {
+      get().openBuilder(state.builder);
+    } else if (state.focus && tasks[state.focus]) {
       get().openTask(state.focus);
     } else if (get().discussionMode) {
       set({ view: "detail" });
@@ -130,8 +137,13 @@ export const useTasks = create((set, get) => ({
 
   // ---------- views ----------
 
+  /** Board or Templates; the builder with unsaved changes asks first. */
   go(view) {
-    set({ view, open: null, composing: null });
+    const { edit } = get();
+    if (edit?.dirty) {
+      return set({ edit: { ...edit, confirmLeave: true } });
+    }
+    set({ view, open: null, composing: null, edit: null, deleting: null });
   },
 
   openTask(id) {
@@ -381,6 +393,129 @@ export const useTasks = create((set, get) => ({
       toast.error(r?.error || "Something went wrong");
     }
   },
+
+  // ---------- templates and the workflow builder ----------
+
+  edit: null, // { template, draftId, copyOf, dirty, issues, confirmLeave } while the builder is open
+  deleting: null, // the template whose Delete is being confirmed
+
+  /** What each agent may run at once, as templates are checked against. */
+  capacity() {
+    const agents = get().usage?.agents || {};
+    return Object.fromEntries(
+      Object.entries(agents)
+        .filter(([, u]) => u.enabled)
+        .map(([a, u]) => [a, u.max])
+    );
+  },
+
+  /** The builder on a template; `draftId` when it came from New task's Customize. */
+  openBuilder({ template, draftId = null, copyOf: from = null }) {
+    const t = editable(template);
+    set({
+      view: "builder",
+      open: null,
+      deleting: null,
+      edit: {
+        template: t,
+        draftId,
+        copyOf: from,
+        dirty: !!from,
+        confirmLeave: false,
+        issues: issuesOf(t, get().capacity()),
+      },
+    });
+  },
+
+  /** A change to the template being edited: `fn(template)` → the new template (null: no change). */
+  change(fn) {
+    const { edit } = get();
+    const t = edit && fn(edit.template);
+    if (t) {
+      set({
+        edit: {
+          ...edit,
+          template: t,
+          dirty: true,
+          confirmLeave: false,
+          issues: issuesOf(t, get().capacity()),
+        },
+      });
+    }
+  },
+
+  async duplicate(id) {
+    const { templates, api } = get();
+    const src = templates.find(t => t.id === id);
+    if (!src) {
+      return;
+    }
+    const newId =
+      (await api?.templates?.idFor(`${src.name} (copy)`)) ||
+      `copy-${Date.now().toString(36).slice(-4)}`;
+    get().openBuilder({ template: copyOf(src, newId), copyOf: src.builtin ? src.id : null });
+  },
+
+  editOwn(id) {
+    const src = get().templates.find(t => t.id === id);
+    if (src && !src.builtin) {
+      get().openBuilder({ template: src });
+    }
+  },
+
+  askDelete: id => set({ deleting: id }),
+
+  async removeTemplate(id) {
+    const { api, templates } = get();
+    await api?.templates?.remove(id);
+    const list = (await api?.templates?.list()) || templates.filter(t => t.id !== id);
+    set({ templates: list, deleting: null });
+  },
+
+  /** Saves the template (main checks it again); back to the list, or to New task for a draft. */
+  async saveTemplate() {
+    const { edit, api } = get();
+    if (!edit) {
+      return false;
+    }
+    const issues = issuesOf(edit.template, get().capacity());
+    if (issues.length) {
+      set({ edit: { ...edit, issues } });
+      toast.error(`${issues.length} problem${issues.length === 1 ? "" : "s"}`);
+      return false;
+    }
+    const r = await api?.templates?.save(edit.template, { draftId: edit.draftId });
+    if (!r?.ok) {
+      set({
+        edit: {
+          ...get().edit,
+          issues: r?.issues || [{ stage: null, text: "Could not save the template" }],
+        },
+      });
+      return false;
+    }
+    toast("Template saved");
+    const templates = (await api.templates.list()) || get().templates;
+    set({ templates, edit: null, view: "templates" });
+    return true;
+  },
+
+  /** Back from the builder: unsaved changes ask first (`force` leaves without them). */
+  leaveBuilder(force = false) {
+    const { edit, api } = get();
+    if (!edit) {
+      return;
+    }
+    if (edit.dirty && !force) {
+      return set({ edit: { ...edit, confirmLeave: true } });
+    }
+    set({ edit: null, view: "templates" });
+    if (edit.draftId) {
+      api?.newTask(); // the New task dialog comes back on its draft
+    }
+  },
+
+  stayInBuilder: () => set(s => ({ edit: s.edit && { ...s.edit, confirmLeave: false } })),
 
   newTask: () => get().api?.newTask(),
   control: action => get().api?.control(action),

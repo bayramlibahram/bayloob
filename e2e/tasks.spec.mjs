@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { expect, test } from "@playwright/test";
 import { launch } from "./app.mjs";
 
@@ -118,6 +119,63 @@ test("a message into the discussion, and a runbook step run from its card", asyn
         ["tasks:discussion", talk.id, "message", { text: "keep it short", to: null }],
         ["tasks:runbook", inc.id, "s1", "run", {}],
       ]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("templates: duplicate a built-in, change it, save it through main", async () => {
+  const W = createRequire(import.meta.url)("../src/shared/workflow-templates.js");
+  const app = await launch();
+  try {
+    const win = await openTasks(app);
+    await app.evaluate(({ ipcMain }) => {
+      for (const ch of ["templates:id-for", "templates:save", "templates:list"]) {
+        ipcMain.removeHandler(ch);
+      }
+      ipcMain.handle("templates:id-for", () => "pipeline-copy");
+      ipcMain.handle("templates:save", (_e, t, opts) => {
+        globalThis.sent.push(["templates:save", t.id, t.name, t.stages.length, opts]);
+        return { ok: true, template: t };
+      });
+      ipcMain.handle("templates:list", () => []);
+    });
+    await app.evaluate((_, st) => globalThis.tasksPage.webContents.send("tasks:show", st), {
+      tasks: [],
+      usage: {
+        agents: {
+          claude: { enabled: true, max: 4, running: 0, queued: 0 },
+          codex: { enabled: true, max: 2, running: 0, queued: 0 },
+        },
+      },
+      agents: {
+        claude: { name: "Claude Code", installed: true },
+        codex: { name: "Codex", installed: true },
+      },
+      roles: [],
+      home: "/home/u",
+      templates: Object.values(W.BUILTINS),
+    });
+    await win.getByRole("button", { name: "Templates" }).click();
+    const pipe = win.getByRole("group", { name: "Pipeline", exact: true });
+    await pipe.getByRole("button", { name: "Duplicate" }).click();
+    await win.getByLabel("Template name").fill("Fast pipeline");
+    await win.getByRole("button", { name: "Remove stage 4" }).click();
+    // {{ completion in the Arbiter's prompt (now stage 4)
+    const prompt = win
+      .getByRole("article", { name: /^Stage 4/ })
+      .getByRole("combobox", { name: /Prompt/ });
+    await prompt.click();
+    await prompt.press("Control+End");
+    await prompt.pressSequentially(" {{plan");
+    await expect(win.getByRole("listbox", { name: "Values" })).toBeVisible();
+    await prompt.press("Enter");
+    await expect(prompt).toHaveValue(/\{\{artifact:plan\.md\}\}$/);
+    await win.keyboard.press("Control+s");
+    await expect
+      .poll(() => app.evaluate(() => globalThis.sent))
+      .toEqual([["templates:save", "pipeline-copy", "Fast pipeline", 5, { draftId: null }]]);
+    await expect(win.getByRole("heading", { name: "Templates" })).toBeVisible();
   } finally {
     await app.close();
   }

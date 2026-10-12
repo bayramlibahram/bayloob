@@ -7,12 +7,15 @@ import { Toaster } from "@/components/ui/sonner";
 import { displayName } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { Board } from "./Board";
+import { Builder } from "./Builder";
 import { Detail } from "./Detail";
 import { COLS } from "./model";
-import { Nothing, Slots } from "./parts";
+import { Slots } from "./parts";
 import { useTasks } from "./store";
+import { Templates } from "./Templates";
 
-/** The Tasks window: its header (views, agents running, New task), then the board, a task, or templates. */
+/** The Tasks window: its header (views, agents running, New task), then the board, a task, the templates or
+ * the workflow builder. */
 export function App() {
   const s = useTasks();
   // the times on the cards ("4m") move on while nothing else changes
@@ -36,11 +39,10 @@ export function App() {
           <Loading />
         ) : detail ? (
           <Detail />
+        ) : s.view === "builder" && s.edit ? (
+          <Builder />
         ) : s.view === "templates" ? (
-          <Nothing
-            title="Templates come to this window in a later step"
-            hint="The workflow builder is still in the Tasks window as before (without BAYLOOB_REACT=tasks)."
-          />
+          <Templates />
         ) : (
           <Board />
         )}
@@ -55,7 +57,7 @@ export function App() {
 
 function Header() {
   const s = useTasks();
-  const editing = s.view === "templates";
+  const editing = s.view === "templates" || s.view === "builder";
   return (
     <header
       className={cn(
