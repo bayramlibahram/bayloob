@@ -1766,7 +1766,7 @@
       // What happened lately: each agent's last step and each task's last change, newest first
       const events = [
         ...sessions.map(s => ({ at: s.activity?.at || s.updatedAt, name: roleOf(s)?.name || Agent.displayName(s.agent), text: s.activity?.title || s.summary || T.status[s.state] || '', c: `var(--${s.state === 'waiting' ? 'waiting' : s.state === 'done' ? 'done' : s.state === 'idle' ? 'idle' : 'thinking'})`, key: `agent:${s.id}` })),
-        ...tasks.map(t => ({ at: t.updatedAt, name: t.title, text: D.tstatus[t.status] || t.status, c: (ORDER.find(([k]) => k === t.status) || [, 'var(--idle)'])[1], task: t.id })),
+        ...tasks.map(t => ({ at: t.updatedAt, name: t.title, text: D.tstatus[t.status] || t.status, c: (ORDER.find(([k]) => k === t.status) || [null, 'var(--idle)'])[1], task: t.id })),
       ].filter(e => e.at).sort((a, b) => b.at - a.at).slice(0, 7);
       const activity = `<section class="dcard"><h3>${D.activity}</h3>${events.length ? `<ul class="dlist">${events.map(e => `<li><span class="m"><span class="dot" style="--c:${e.c}"></span></span><span class="t"><b>${esc(e.name)}</b><small>${esc(e.text)}</small></span><span class="r">${timeAgo(e.at)}</span></li>`).join('')}</ul>` : `<p class="dempty">${D.noActivity}</p>`}</section>`;
 
@@ -1820,7 +1820,7 @@
       const name = id => f.formats.find(x => x.id === id)?.name;
       const asSet = set && set !== 'none' ? name(set) : 'none';
       // In the menu "as set" reads "Default" with the format under it; the formats sit under a divider
-      sel.innerHTML = [['', `Format: ${asSet}`, ' data-label="Default" data-hint="' + esc(set && set !== 'none' ? `${asSet} · as set in Settings` : 'No format · as set in Settings') + '"'],
+      sel.innerHTML = [['', `Format: ${asSet}`, ` data-label="Default" data-hint="${esc(set && set !== 'none' ? `${asSet} · as set in Settings` : 'No format · as set in Settings')}"`],
         ['none', 'No format', ''], ...f.formats.map((x, i) => [x.id, x.name, i ? '' : ' data-sep'])]
         .map(([id, n, extra]) => `<option value="${esc(id)}"${extra}>${esc(n)}</option>`).join('');
       sel.value = keep;
@@ -1863,7 +1863,7 @@
         `<button type="button" data-sugg="${i}" title="${esc(x.prompt)}\n${T.useSuggestion}">${esc(x.label)}</button>`).join('')}` : '';
     }
 
-    #useSuggestion(i) {
+    #takeSuggestion(i) {
       const x = this.sessions.find(v => v.id === this.sayFor)?.suggestions?.[i];
       if (!x) { return; }
       this.sayBox.value = x.prompt;
@@ -2489,7 +2489,7 @@
       });
       this.el.saySugg.addEventListener('click', e => {
         const b = e.target.closest('[data-sugg]');
-        if (b) { this.#useSuggestion(Number(b.dataset.sugg)); }
+        if (b) { this.#takeSuggestion(Number(b.dataset.sugg)); }
       });
       this.el.sayMode.addEventListener('click', async e => {
         if (e.target.closest('[data-handoff]')) {

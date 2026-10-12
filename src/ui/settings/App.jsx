@@ -35,7 +35,8 @@ const SECTIONS = [
 export function App() {
   const { state, draft, tab, setTab, message, saving, save, api } = useSettings();
   const scroller = useRef(null);
-  // another section starts at its top
+  // another section starts at its top (the effect reads no state: tab is only its trigger)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on each tab change
   useEffect(() => {
     if (scroller.current) {
       scroller.current.scrollTop = 0;

@@ -5,7 +5,7 @@ const { SettingsSave } = require("../src/main/ipc/schemas");
 const { checked } = require("../src/main/ipc/checked");
 const { DEFAULTS } = require("../src/main/config/settings");
 
-// Settings → Save as the page sends it (src/renderer/settings: #save)
+// Settings → Save as the page sends it (src/ui/settings/store.js: payloadOf)
 const page = {
   agents: { claude: { enabled: true, max: 4, notes: "" } },
   ollama: { url: "http://127.0.0.1:11434", model: "", coder: "" },
