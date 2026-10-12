@@ -98,3 +98,72 @@
   border-color: color-mix(in srgb, var(--brand) 45%, transparent);
   color: var(--text);
 }
+
+/* Agent text as Markdown (components/markdown.jsx: markdown-lite, escaped first) — as the old pages show it */
+@layer components {
+  .md {
+    font-size: 13px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .md :is(p, ul, ol, pre, blockquote, .tablewrap) {
+    margin: 0 0 8px;
+  }
+  .md > :last-child {
+    margin-bottom: 0;
+  }
+  .md p.h {
+    font-weight: 700;
+    margin-top: 10px;
+  }
+  .md :is(ul, ol) {
+    padding-left: 20px;
+  }
+  .md ul {
+    list-style: disc;
+  }
+  .md ol {
+    list-style: decimal;
+  }
+  .md code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--code-bg);
+  }
+  .md pre {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--code-bg);
+    overflow-x: auto;
+  }
+  .md pre code {
+    padding: 0;
+    background: none;
+  }
+  .md hr {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 10px 0;
+  }
+  .md blockquote {
+    padding-left: 10px;
+    border-left: 2px solid var(--line);
+    color: var(--soft);
+  }
+  .md .tablewrap {
+    overflow-x: auto;
+  }
+  .md table {
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .md :is(th, td) {
+    padding: 4px 9px;
+    border: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+  }
+}

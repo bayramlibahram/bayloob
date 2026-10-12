@@ -1,0 +1,1046 @@
+import {
+  BotIcon,
+  CheckIcon,
+  DownloadIcon,
+  SquareIcon,
+  SquareTerminalIcon,
+  TriangleAlertIcon,
+  UserIcon,
+  XIcon,
+  ZapIcon,
+} from "lucide-react";
+import { Markdown } from "@/components/markdown";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { displayName } from "@/lib/agents";
+import { cn } from "@/lib/utils";
+import { clockTime, findingsIn, LIVE, logText, OPEN_TASK, tilde, waitingText } from "./model";
+import {
+  ArtifactState,
+  Banner,
+  Chip,
+  Diff,
+  Face,
+  Label,
+  ModeBadge,
+  Nothing,
+  Output,
+  useArtifact,
+} from "./parts";
+import { useTasks } from "./store";
+
+const ISTATUS = {
+  queued: "queued",
+  starting: "starting",
+  running: "working",
+  done: "done",
+  failed: "failed",
+  stopped: "stopped",
+  interrupted: "interrupted",
+};
+
+// ---------- Overview ----------
+
+function Overview({ t }) {
+  const s = useTasks();
+  const home = s.home;
+  const facts = [
+    [
+      "Project",
+      <span key="p" title={t.project.root}>
+        {tilde(t.project.root, home)}
+      </span>,
+    ],
+    [
+      "Started from",
+      <span key="b" className="font-mono">
+        {t.base.fromWorktree
+          ? `your files on ${t.base.branch} (uncommitted included)`
+          : `${t.base.branch} @ ${t.base.sha.slice(0, 8)}`}
+      </span>,
+    ],
+    t.review && [
+      "Reviews",
+      <span key="r" className="font-mono" title={`${t.review.from}..${t.review.to}`}>
+        {t.review.label}
+      </span>,
+    ],
+    [
+      "Read-only worktree",
+      <span key="ro" title={t.roDir}>
+        {tilde(t.roDir, home)}
+      </span>,
+    ],
+    [
+      "Test command",
+      <span key="tc" className="font-mono">
+        {t.testCommand || "none found — tests are skipped"}
+      </span>,
+    ],
+  ].filter(Boolean);
+  return (
+    <div className="flex max-w-5xl flex-col gap-4">
+      <Card size="sm">
+        <CardContent>
+          <Markdown text={t.text} />
+        </CardContent>
+      </Card>
+      <dl className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2">
+        {facts.map(([k, v]) => (
+          <div
+            key={k}
+            className="flex min-w-0 flex-col gap-0.5 rounded-xl border bg-card px-3 py-2"
+          >
+            <dt>
+              <Label>{k}</Label>
+            </dt>
+            <dd className="truncate text-[13px] font-semibold">{v}</dd>
+          </div>
+        ))}
+        {t.attachments?.length > 0 && (
+          <div className="col-span-full flex flex-col gap-0.5 rounded-xl border bg-card px-3 py-2">
+            <dt>
+              <Label>Attached files</Label>
+            </dt>
+            <dd className="flex flex-wrap gap-x-2 text-[13px] font-semibold">
+              {t.attachments.map(f => (
+                <span
+                  key={f.file}
+                  className="font-mono"
+                  title={[
+                    f.name,
+                    f.note,
+                    f.secrets ? "flagged as a possible secret, sent anyway" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                >
+                  {f.file}
+                  {f.secrets ? " ⚠" : ""}
+                </span>
+              ))}
+            </dd>
+            <small className="text-xs text-muted-foreground">
+              In .bayloob/attachments/ where each agent works · read-only
+            </small>
+          </div>
+        )}
+      </dl>
+      <div className="flex flex-col gap-2">
+        <Label>Agents</Label>
+        {t.instances.length ? (
+          <div className="overflow-hidden rounded-xl border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Agent</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {t.instances.map(i => (
+                  <InstanceRow key={i.id} t={t} i={i} />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No agent has started yet</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InstanceRow({ t, i }) {
+  const s = useTasks();
+  const asking = s.composing?.action === "stop-inst" && s.composing.inst === i.id;
+  const canTerm =
+    i.handle && (LIVE.has(i.status) || (t.status !== "done" && t.status !== "stopped"));
+  const canStop = (LIVE.has(i.status) || i.status === "queued") && OPEN_TASK.has(t.status);
+  return (
+    <TableRow>
+      <TableCell>
+        <span className="flex items-center gap-2">
+          <Face agent={i.adapter} />
+          <span className="flex flex-col">
+            {displayName(i.adapter)}
+            <small className="font-mono text-muted-foreground">{i.id}</small>
+          </span>
+        </span>
+      </TableCell>
+      <TableCell>{i.role}</TableCell>
+      <TableCell>
+        <ModeBadge mode={i.mode} />
+      </TableCell>
+      <TableCell className="whitespace-normal">
+        {ISTATUS[i.status] || i.status}
+        {i.waiting && <small className="block text-working">{waitingText(i.waiting)}</small>}
+        {i.error && <small className="block text-waiting">{i.error}</small>}
+      </TableCell>
+      <TableCell className="tabular-nums">{i.startedAt ? clockTime(i.startedAt) : "—"}</TableCell>
+      <TableCell>
+        <span className="flex justify-end gap-1.5">
+          {asking ? (
+            <>
+              <span className="text-xs text-waiting">Stop this agent? Its worktree stays.</span>
+              <Button size="xs" variant="destructive" onClick={() => s.stop("instance", i.id)}>
+                Stop it
+              </Button>
+              <Button size="xs" variant="outline" onClick={() => s.compose(null)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {canTerm && (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  title="Open a terminal attached to this agent"
+                  onClick={() => s.terminal(i.id)}
+                >
+                  <SquareTerminalIcon data-icon="inline-start" />
+                  Terminal
+                </Button>
+              )}
+              {canStop && (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  title="Stop this agent — its worktree stays"
+                  aria-label="Stop this agent — its worktree stays"
+                  onClick={() => s.compose({ gate: null, action: "stop-inst", inst: i.id })}
+                >
+                  <SquareIcon data-icon="inline-start" />
+                  Stop
+                </Button>
+              )}
+            </>
+          )}
+        </span>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// ---------- Plan (and Split work's subtasks) ----------
+
+function Plan({ t }) {
+  const { text, entry } = useArtifact(t.id, "plan.md");
+  const state = <ArtifactState id={t.id} name="plan.md" entry={entry} />;
+  if (entry?.status !== "ok") {
+    return state;
+  }
+  if (!text) {
+    return <Nothing title="No plan yet" hint="The planner is working — its answer appears here." />;
+  }
+  // Split work: the subtasks block shows as cards above; the raw JSON stays one click away
+  let body = text;
+  let raw = "";
+  if (t.subtasks) {
+    const last = [...text.matchAll(/```(?:json)?\s*\n[\s\S]*?```/g)]
+      .filter(m => m[0].includes('"subtasks"'))
+      .at(-1);
+    if (last) {
+      body = text.slice(0, last.index) + text.slice(last.index + last[0].length);
+      raw = last[0].replace(/^```(?:json)?\s*\n|```$/g, "");
+    }
+  }
+  return (
+    <div className="flex max-w-5xl flex-col gap-4">
+      <Subtasks t={t} />
+      <Card size="sm">
+        <CardContent className="flex flex-col gap-3">
+          <Markdown text={body} />
+          {raw && (
+            <details>
+              <summary className="cursor-pointer text-xs text-muted-foreground">
+                Subtasks as the planner wrote them (JSON)
+              </summary>
+              <Output>{raw}</Output>
+            </details>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/** Split work: who owns which files — overlaps marked, before any builder starts. */
+function Subtasks({ t }) {
+  const st = t.subtasks;
+  if (!st) {
+    return null;
+  }
+  if (st.error) {
+    return (
+      <Banner>
+        <b>The plan has no usable subtasks — ask for changes</b>
+        <br />
+        {st.error}
+      </Banner>
+    );
+  }
+  const clash = st.overlaps.map(o => o.file);
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>
+        Subtasks · {st.list.length}{" "}
+        <span className="tracking-normal normal-case">
+          — Each builder gets one subtask and changes only its files.
+        </span>
+      </Label>
+      {st.overlaps.length > 0 && (
+        <Banner>
+          {st.overlaps.map(o => (
+            <span key={`${o.a}:${o.b}:${o.file}`} className="block">
+              {o.a} and {o.b} both own {o.file}
+            </span>
+          ))}
+        </Banner>
+      )}
+      {st.list.map(x => {
+        const c = t.candidates.find(cand => cand.subtask === x.id);
+        return (
+          <div key={x.id} className="flex items-start gap-3 rounded-xl border bg-card px-3 py-2">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <b className="text-[13px]">{x.title}</b>
+              <small className="font-mono text-muted-foreground">
+                {x.id}
+                {c ? ` · ${c.id} · ${displayName(c.adapter)}` : ""}
+              </small>
+            </div>
+            <div className="flex flex-wrap justify-end gap-1">
+              {x.files.map(f => (
+                <code
+                  key={f}
+                  className={cn(
+                    "rounded bg-muted px-1.5 py-0.5 font-mono text-[11.5px]",
+                    clash.some(k => k === f || k.startsWith(f)) && "bg-waiting/15 text-waiting"
+                  )}
+                >
+                  {f}
+                </code>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Candidates ----------
+
+function Candidates({ t }) {
+  if (!t.candidates.length) {
+    return <Nothing title="No candidates yet" hint="Builders start after the plan is approved." />;
+  }
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-3">
+      {t.candidates.map(c => (
+        <Candidate key={c.id} t={t} c={c} />
+      ))}
+    </div>
+  );
+}
+
+function testsLook(c) {
+  if (c.status === "part") {
+    return ["var(--idle)", "Tested as part of integrate-1"];
+  }
+  if (!c.tests) {
+    return ["var(--idle)", "Not tested yet"];
+  }
+  if (c.tests.skipped) {
+    return ["var(--idle)", "No test command — skipped"];
+  }
+  return c.tests.ok
+    ? ["var(--done)", "Tests pass"]
+    : ["var(--waiting)", `Tests fail (exit ${c.tests.code})`];
+}
+
+function Candidate({ t, c }) {
+  const s = useTasks();
+  const builder = [...t.instances]
+    .reverse()
+    .find(i => i.candidate === c.id && i.role === "builder");
+  const review = useArtifact(t.id, `review.${c.id}.md`).text;
+  const answer = useArtifact(t.id, builder ? `msg.${builder.id}.md` : null).text;
+  const [color, testsText] = testsLook(c);
+  const n = review ? findingsIn(review) : 0;
+  const win = t.winner === c.id;
+  const picking = !!t.gate?.actions.includes("pick");
+  const picked = s.picked[t.id];
+  const out = c.status === "out" || c.status === "part";
+  return (
+    <article
+      className={cn(
+        "flex flex-col gap-2.5 rounded-xl border bg-card p-3",
+        win && "border-brand",
+        !win && picked === c.id && "border-primary",
+        out && "opacity-70"
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        <Face agent={c.adapter} className="size-9" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <b>{c.id}</b>
+          <small className="truncate text-muted-foreground" title={c.branch || ""}>
+            {displayName(c.adapter)}
+            {c.branch ? ` · ${c.branch}` : ""}
+          </small>
+        </div>
+        {c.subtask && (
+          <Chip color="var(--idle)" dot={false}>
+            Part · {c.subtask}
+          </Chip>
+        )}
+        {c.parts && (
+          <Chip color="var(--brand)" dot={false}>
+            All parts
+          </Chip>
+        )}
+        {win ? (
+          <Chip color="var(--brand)" dot={false}>
+            Chosen
+          </Chip>
+        ) : (
+          c.status === "out" && (
+            <Chip color="var(--waiting)" dot={false}>
+              Out
+            </Chip>
+          )
+        )}
+      </div>
+      <div
+        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+        style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
+      >
+        {color === "var(--done)" ? (
+          <CheckIcon className="size-3.5" />
+        ) : color === "var(--waiting)" ? (
+          <XIcon className="size-3.5" />
+        ) : null}
+        {testsText}
+      </div>
+      <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1 text-xs">
+        <dt className="text-muted-foreground">Diff</dt>
+        <dd>
+          {c.diff ? (
+            <>
+              <Diff diff={c.diff} /> · {c.diff.files} file{c.diff.files === 1 ? "" : "s"}
+            </>
+          ) : (
+            "—"
+          )}
+        </dd>
+        {review != null && (
+          <>
+            <dt className="text-muted-foreground">Review</dt>
+            <dd className={n ? "text-working" : "text-done"}>
+              {n ? `${n} finding${n === 1 ? "" : "s"}` : "no findings"}
+            </dd>
+          </>
+        )}
+        {c.parts && (
+          <>
+            <dt className="text-muted-foreground">All parts</dt>
+            <dd>{c.parts.join(", ")}</dd>
+          </>
+        )}
+        <dt className="text-muted-foreground">Status</dt>
+        <dd>
+          {win
+            ? t.merged
+              ? `Chosen · ${t.merged.applied ? "applied to" : "merged into"} ${t.merged.into}`
+              : "Chosen"
+            : c.status === "part"
+              ? "Merged into integrate-1"
+              : c.status === "out"
+                ? c.out || "Out"
+                : "In the race"}
+        </dd>
+      </dl>
+      {review && (
+        <details>
+          <summary className="cursor-pointer text-xs text-muted-foreground">Review</summary>
+          <Markdown text={review} className="pt-2" />
+        </details>
+      )}
+      {answer && (
+        <details>
+          <summary className="cursor-pointer text-xs text-muted-foreground">
+            Builder’s answer
+          </summary>
+          <Markdown text={answer} className="pt-2" />
+        </details>
+      )}
+      <div className="mt-auto flex gap-2">
+        {builder?.handle && t.status !== "done" && t.status !== "stopped" && (
+          <Button
+            size="sm"
+            variant="outline"
+            title="Open a terminal attached to this agent"
+            onClick={() => s.terminal(builder.id)}
+          >
+            <SquareTerminalIcon data-icon="inline-start" />
+            Terminal
+          </Button>
+        )}
+        {picking && c.status === "active" && <ChooseButton t={t} id={c.id} />}
+      </div>
+    </article>
+  );
+}
+
+function ChooseButton({ t, id }) {
+  const s = useTasks();
+  const on = s.picked[t.id] === id;
+  return (
+    <Button size="sm" variant={on ? "default" : "outline"} onClick={() => s.pick(t.id, id)}>
+      {on && <CheckIcon data-icon="inline-start" />}
+      {on ? "Picked" : "Choose this one"}
+    </Button>
+  );
+}
+
+// ---------- Decision ----------
+
+const VERDICT = {
+  select: "Keeps",
+  retry: "Wants another round",
+  merge_ideas: "Merge ideas into",
+  escalate: "Leaves it to you",
+};
+
+function Decision({ t }) {
+  const s = useTasks();
+  const d = t.arbiter;
+  const answer = [...t.instances].reverse().find(i => i.role === "arbiter" && i.artifact);
+  const text = useArtifact(t.id, d && answer ? answer.artifact : null).text;
+  if (!d) {
+    const own = !t.template.stages.some(x => x.role === "arbiter" && x.agents?.length);
+    return (
+      <Nothing
+        title="No decision yet"
+        hint={
+          own
+            ? "This workflow has no Arbiter agent — you pick in Candidates."
+            : "The Arbiter decides after the tests and reviews — its ranking appears here."
+        }
+      />
+    );
+  }
+  const picking = !!t.gate?.actions.includes("pick");
+  const picked = s.picked[t.id];
+  const ranked = [
+    ...d.ranking,
+    ...t.candidates
+      .filter(c => c.status === "active" && !d.ranking.some(r => r.candidate === c.id))
+      .map(c => ({ candidate: c.id, score: null, reasons: [] })),
+  ];
+  const confColor = d.confidence >= 0.6 ? "var(--done)" : "var(--working)";
+  return (
+    <div className="flex max-w-5xl flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Face agent={d.adapter || "codex"} className="size-8" />
+        <b className="text-base">
+          {VERDICT[d.decision] || d.decision}
+          {d.winner ? ` ${d.winner}` : ""}
+        </b>
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            role="img"
+            aria-label={`confidence ${d.confidence}`}
+            className="h-1.5 w-24 overflow-hidden rounded-full bg-muted"
+          >
+            <i
+              className="block h-full"
+              style={{ width: `${d.confidence * 100}%`, background: confColor }}
+            />
+          </span>
+          confidence {d.confidence.toFixed(2)}
+        </span>
+        {d.retry && <span className="text-[12.5px] text-muted-foreground">“{d.retry}”</span>}
+      </div>
+      {d.risks.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <Label>Risks</Label>
+          <ul className="flex flex-col gap-1 text-[13px]">
+            {d.risks.map(r => (
+              <li key={r.text} className={cn("flex items-start gap-2", r.high && "text-waiting")}>
+                {r.high ? (
+                  <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+                ) : (
+                  <span>·</span>
+                )}
+                <span>{r.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {ranked.map((r, i) => {
+        const c = t.candidates.find(x => x.id === r.candidate);
+        const tests = c?.tests
+          ? c.tests.skipped
+            ? "No test command — skipped"
+            : c.tests.ok
+              ? "Tests pass"
+              : "Tests fail"
+          : "Not tested yet";
+        const mine = picked === r.candidate || (t.winner === r.candidate && t.winner !== d.winner);
+        return (
+          <div
+            key={r.candidate}
+            className={cn(
+              "grid grid-cols-[1.5rem_minmax(10rem,14rem)_8rem_1fr_auto] items-start gap-3 rounded-xl border bg-card p-3",
+              r.candidate === d.winner && "border-brand",
+              mine && "border-primary"
+            )}
+          >
+            <span className="text-lg font-bold text-muted-foreground tabular-nums">{i + 1}</span>
+            <span className="flex items-center gap-2">
+              <Face agent={c?.adapter || "claude"} />
+              <span className="flex flex-col">
+                <b>{r.candidate}</b>
+                <small className="text-muted-foreground">
+                  {tests}
+                  {c?.diff ? ` · +${c.diff.added} −${c.diff.deleted}` : ""}
+                </small>
+              </span>
+            </span>
+            <span className="flex items-center gap-2 text-xs tabular-nums">
+              {r.score === null ? (
+                "—"
+              ) : (
+                <>
+                  <span className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+                    <i className="block h-full bg-brand" style={{ width: `${r.score * 10}%` }} />
+                  </span>
+                  {r.score}/10
+                </>
+              )}
+            </span>
+            <ul className="flex list-disc flex-col gap-0.5 pl-4 text-[13px]">
+              {r.reasons.map(x => (
+                <li key={x}>{x}</li>
+              ))}
+            </ul>
+            {picking && c?.status === "active" ? <ChooseButton t={t} id={r.candidate} /> : <span />}
+          </div>
+        );
+      })}
+      {text && (
+        <details>
+          <summary className="cursor-pointer text-xs text-muted-foreground">
+            The Arbiter’s answer
+          </summary>
+          <Markdown text={text} className="pt-2" />
+        </details>
+      )}
+    </div>
+  );
+}
+
+// ---------- Tests ----------
+
+function Tests({ t }) {
+  const tested = t.candidates.filter(c => c.tests);
+  if (!tested.length) {
+    return (
+      <Nothing title="Not tested yet" hint={t.testCommand || "none found — tests are skipped"} />
+    );
+  }
+  return (
+    <div className="flex max-w-5xl flex-col gap-4">
+      {tested.map(c => (
+        <TestOutput key={c.id} t={t} c={c} />
+      ))}
+    </div>
+  );
+}
+
+function TestOutput({ t, c }) {
+  const name = `test-output.${c.id}.txt`;
+  const { text, entry } = useArtifact(t.id, name);
+  const ok = c.tests.skipped ? null : c.tests.ok;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <Face agent={c.adapter} />
+        <b>{c.id}</b>
+        <Chip color={ok === null ? "var(--idle)" : ok ? "var(--done)" : "var(--waiting)"}>
+          {ok === null ? "No test command — skipped" : ok ? "Tests pass" : "Tests fail"}
+        </Chip>
+      </div>
+      {entry?.status === "ok" ? (
+        <Output>{text || "No output yet"}</Output>
+      ) : (
+        <ArtifactState id={t.id} name={name} entry={entry} />
+      )}
+    </div>
+  );
+}
+
+// ---------- Reviews (a review board's, an analysis's) ----------
+
+function Reviews({ t }) {
+  const done = t.instances.filter(
+    i => i.artifact && (i.role === "reviewer" || i.role === "analyst")
+  );
+  if (!done.length) {
+    return (
+      <Nothing
+        title="No reviews yet"
+        hint="The reviewers are reading — each answer appears here."
+      />
+    );
+  }
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] gap-3">
+      {done.map(i => (
+        <Review key={i.id} t={t} i={i} />
+      ))}
+    </div>
+  );
+}
+
+function Review({ t, i }) {
+  const { text, entry } = useArtifact(t.id, i.artifact);
+  const n = text ? findingsIn(text) : 0;
+  return (
+    <article className="flex flex-col gap-2.5 rounded-xl border bg-card p-3">
+      <div className="flex items-center gap-2.5">
+        <Face agent={i.adapter} className="size-9" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <b>{displayName(i.adapter)}</b>
+          <small className="font-mono text-muted-foreground">{i.artifact}</small>
+        </div>
+        <Chip color={n ? "var(--working)" : "var(--done)"}>
+          {n ? `${n} finding${n === 1 ? "" : "s"}` : "no findings"}
+        </Chip>
+      </div>
+      {entry?.status === "ok" ? (
+        <Markdown text={text || ""} />
+      ) : (
+        <ArtifactState id={t.id} name={i.artifact} entry={entry} />
+      )}
+    </article>
+  );
+}
+
+// ---------- Report (the Arbiter's one list, duplicates merged, by severity) ----------
+
+const SEV_COLOR = { high: "var(--waiting)", medium: "var(--working)", low: "var(--idle)" };
+const SEV_NAME = { high: "High", medium: "Medium", low: "Low" };
+
+function Report({ t }) {
+  const s = useTasks();
+  const r = t.report;
+  const logs = useArtifact(t.id, "logs.md").text;
+  const audit = useArtifact(t.id, "audit.md").text;
+  const inputs = [logs, audit].filter(Boolean);
+  const collected = inputs.length > 0 && (
+    <details>
+      <summary className="cursor-pointer text-xs text-muted-foreground">
+        What Bayloob collected for the analysts (read-only)
+      </summary>
+      {inputs.map(x => (
+        <Markdown key={x.slice(0, 40)} text={x} className="pt-2" />
+      ))}
+    </details>
+  );
+  if (!r) {
+    return (
+      <>
+        <Nothing
+          title="No report yet"
+          hint="The Arbiter merges the reviews when they are all in."
+        />
+        {collected}
+      </>
+    );
+  }
+  if (r.error) {
+    return (
+      <div className="flex flex-col gap-3">
+        <Banner>
+          <b>The Arbiter’s report couldn’t be read — see each review in Reviews</b>
+          <br />
+          {r.error}
+        </Banner>
+        {collected}
+      </div>
+    );
+  }
+  const only = s.sevFilter[t.id] || null;
+  const count = sev => r.findings.filter(f => f.severity === sev).length;
+  const shown = r.findings.filter(f => !only || f.severity === only);
+  const rich = r.findings.some(f => f.recommendation || f.evidence || f.confidence != null);
+  return (
+    <div className="flex flex-col gap-4">
+      {r.summary && (
+        <Card size="sm">
+          <CardContent>
+            <Markdown text={r.summary} />
+          </CardContent>
+        </Card>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          spacing={1}
+          aria-label="Show findings of"
+          value={only || "all"}
+          onValueChange={v => v && s.setSev(t.id, v === "all" ? null : v)}
+        >
+          <ToggleGroupItem value="all">All · {r.findings.length}</ToggleGroupItem>
+          {["high", "medium", "low"].map(sv => (
+            <ToggleGroupItem key={sv} value={sv} disabled={!count(sv)}>
+              <span className="size-1.5 rounded-full" style={{ background: SEV_COLOR[sv] }} />
+              {SEV_NAME[sv]} · {count(sv)}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <Button size="sm" variant="outline" className="ml-auto" onClick={s.exportReport}>
+          <DownloadIcon data-icon="inline-start" />
+          Export Markdown
+        </Button>
+      </div>
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Severity</TableHead>
+              <TableHead>Where</TableHead>
+              <TableHead>Problem</TableHead>
+              {rich && <TableHead>Recommendation</TableHead>}
+              {rich && <TableHead>Confidence</TableHead>}
+              <TableHead>Found by</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {shown.map((f, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: findings have no id but their place
+              <TableRow key={i}>
+                <TableCell>
+                  <Chip color={SEV_COLOR[f.severity]}>{SEV_NAME[f.severity]}</Chip>
+                </TableCell>
+                <TableCell className="font-mono text-xs" title={f.evidence || ""}>
+                  {f.file ? `${f.file}${f.line ? `:${f.line}` : ""}` : f.evidence || "—"}
+                </TableCell>
+                <TableCell className="whitespace-normal">
+                  {f.problem}
+                  {f.evidence && f.file && f.evidence !== `${f.file}:${f.line}` && (
+                    <small className="block font-mono text-muted-foreground">{f.evidence}</small>
+                  )}
+                </TableCell>
+                {rich && (
+                  <TableCell className="whitespace-normal">{f.recommendation || "—"}</TableCell>
+                )}
+                {rich && (
+                  <TableCell className="tabular-nums">
+                    {f.confidence == null ? "—" : f.confidence.toFixed(2)}
+                  </TableCell>
+                )}
+                <TableCell>{f.reviewers.join(", ")}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {collected}
+    </div>
+  );
+}
+
+// ---------- Log ----------
+
+const ACTOR = { you: UserIcon, agent: BotIcon };
+
+function Log({ t }) {
+  const home = useTasks(s => s.home);
+  const { text: entries, entry } = useArtifact(t.id, "#log");
+  if (entry?.status !== "ok") {
+    return <ArtifactState id={t.id} name="#log" entry={entry} />;
+  }
+  if (!entries?.length) {
+    return (
+      <Nothing
+        title="Nothing logged yet"
+        hint="Every stage, agent and decision is written here as it happens."
+      />
+    );
+  }
+  return (
+    <ul className="flex max-w-4xl flex-col">
+      {entries
+        .map((e, n) => ({ e, n }))
+        .reverse()
+        .map(({ e, n }) => {
+          const Icon = ACTOR[e.actor] || ZapIcon;
+          return (
+            <li
+              key={n}
+              className="grid grid-cols-[3.5rem_1.5rem_1fr] items-start gap-2 border-b py-1.5 text-[13px]"
+            >
+              <span className="text-xs text-muted-foreground tabular-nums">{clockTime(e.at)}</span>
+              <span
+                title={e.actor}
+                className={cn(
+                  "grid size-5 place-items-center rounded-full bg-muted text-muted-foreground",
+                  e.actor === "you" && "bg-brand/15 text-brand"
+                )}
+              >
+                <Icon className="size-3" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span>{logText(e)}</span>
+                {(e.cwd || e.dir) && (
+                  <small className="truncate text-muted-foreground">
+                    {tilde(e.cwd || e.dir, home)}
+                  </small>
+                )}
+              </span>
+            </li>
+          );
+        })}
+    </ul>
+  );
+}
+
+// ---------- Delegation (the orchestrator) ----------
+
+const WSTATUS = {
+  queued: "waiting",
+  running: "working",
+  done: "done",
+  failed: "failed",
+  interrupted: "cut off",
+  stopped: "stopped",
+};
+
+function Delegation({ t }) {
+  const o = t.orchestrator;
+  if (!o) {
+    return (
+      <Nothing
+        title="No workers yet"
+        hint="The orchestrator asks for them at the end of its turn"
+      />
+    );
+  }
+  const mins = Math.round((Math.min(Date.now(), t.endedAt || Date.now()) - o.startedAt) / 60000);
+  return (
+    <div className="flex max-w-5xl flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        <b className="text-foreground">Turn {o.turns}</b> · {o.workers.length} of {o.budget.workers}{" "}
+        workers · {o.turns} of {o.budget.turns} turns · {Math.min(mins, o.budget.minutes)} of{" "}
+        {o.budget.minutes} min
+      </p>
+      <Label>Workers</Label>
+      {o.workers.length ? (
+        <ul className="flex flex-col gap-1.5">
+          {o.workers.map(w => {
+            const c = w.candidate ? t.candidates.find(x => x.id === w.candidate) : null;
+            return (
+              <li
+                key={w.id}
+                className="flex items-center gap-2.5 rounded-xl border bg-card px-3 py-2 text-[13px]"
+              >
+                <Face agent={w.agent} />
+                <span className="flex min-w-0 flex-col">
+                  <span>
+                    <b>{w.id}</b> · {displayName(w.agent)} ·{" "}
+                    {w.mode === "writes" ? (
+                      <>
+                        writes{" "}
+                        <code className="font-mono text-xs">{(w.files || []).join(", ")}</code>
+                      </>
+                    ) : (
+                      "read-only"
+                    )}
+                  </span>
+                  <small className="text-muted-foreground">
+                    {WSTATUS[w.status] || w.status}
+                    {c?.diff ? ` · ${c.diff.files} files +${c.diff.added} −${c.diff.deleted}` : ""}
+                  </small>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No workers yet — the orchestrator asks for them at the end of its turn
+        </p>
+      )}
+      {o.turns > 0 && <Label>The orchestrator’s turns</Label>}
+      {Array.from({ length: o.turns }, (_, k) => o.turns - k).map(n => (
+        <Turn key={n} t={t} n={n} open={n === o.turns} />
+      ))}
+    </div>
+  );
+}
+
+function Turn({ t, n, open }) {
+  const name = `orchestrator.${n}.md`;
+  const { text, entry } = useArtifact(t.id, name);
+  return (
+    <details open={open} className="rounded-xl border bg-card px-3 py-2">
+      <summary className="cursor-pointer text-[13px] font-semibold">Turn {n}</summary>
+      <div className="pt-2">
+        {entry?.status === "ok" ? (
+          <Output>{text || ""}</Output>
+        ) : (
+          <ArtifactState id={t.id} name={name} entry={entry} />
+        )}
+      </div>
+    </details>
+  );
+}
+
+// ---------- not yet in the React window (step 6b) ----------
+
+function Later({ name }) {
+  return (
+    <Nothing
+      title={`${name} comes to this window in the next step`}
+      hint="Until then it's in the Tasks window as before (without BAYLOOB_REACT=tasks)."
+    />
+  );
+}
+
+export const PANES = {
+  overview: Overview,
+  plan: Plan,
+  candidates: Candidates,
+  decision: Decision,
+  tests: Tests,
+  reviews: Reviews,
+  report: Report,
+  log: Log,
+  delegation: Delegation,
+  discussion: () => <Later name="The discussion" />,
+  runbook: () => <Later name="The runbook" />,
+};

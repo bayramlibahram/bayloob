@@ -160,4 +160,6 @@ function plainMarkdown(text) {
 
 if (typeof module !== "undefined") {
   module.exports = { renderMarkdown, plainMarkdown };
+} else {
+  globalThis.MarkdownLite = { renderMarkdown, plainMarkdown }; // the React windows import it (src/ui/lib/shared.js)
 }

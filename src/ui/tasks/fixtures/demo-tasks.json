@@ -1,0 +1,1979 @@
+{
+  "tasks": [
+    {
+      "id": "20261013-0027-c313",
+      "title": "Add a 10% discount for orders over 100",
+      "text": "Add a 10% discount for orders over 100",
+      "category": "workflow",
+      "template": {
+        "id": "pipeline",
+        "name": "Pipeline",
+        "description": "Plan → build → tests → review → you pick → you merge",
+        "builtin": true,
+        "stages": [
+          {
+            "id": "plan",
+            "title": "Plan",
+            "role": "planner",
+            "mode": "plan",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 1
+              }
+            ],
+            "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\n{{task}}",
+            "artifact": "plan.md",
+            "gate": "human"
+          },
+          {
+            "id": "build",
+            "title": "Build",
+            "role": "builder",
+            "mode": "writes",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 1
+              }
+            ],
+            "parallel": true,
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\n{{task}}\n\nPlan:\n{{artifact:plan.md}}",
+            "gate": "always"
+          },
+          {
+            "id": "tests",
+            "title": "Tests",
+            "role": "tester",
+            "action": "run-tests",
+            "perCandidate": true,
+            "gate": "tests-pass",
+            "onFail": {
+              "goto": "build",
+              "prompt": "The tests fail on your change. Fix it and run the tests again.\n\nTest output (last lines):\n{{artifact:test-output}}",
+              "maxLoops": 2
+            }
+          },
+          {
+            "id": "review",
+            "title": "Review",
+            "role": "reviewer",
+            "mode": "read-only",
+            "agents": [
+              {
+                "adapter": "codex",
+                "count": 1
+              }
+            ],
+            "perCandidate": true,
+            "prompt": "Review the change on branch {{branch}} against {{base}}: run `git diff {{base}}...{{branch}}` and read what you need.\nTry to break it: bugs, missed cases, risky edits, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nTask:\n{{task}}",
+            "artifact": "review.md",
+            "gate": "always"
+          },
+          {
+            "id": "decide",
+            "title": "Arbiter",
+            "role": "arbiter",
+            "mode": "read-only",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 1
+              }
+            ],
+            "prompt": "You are the Arbiter: decide which candidate to keep. Judge by this rubric:\n{{rubric}}\nEverything you need is below; you may also run read-only git commands (git diff, git show). Do not change any file.\nAnswer with your reasoning in a few lines, then end with exactly one JSON block:\n```json\n{\"decision\": \"select\", \"winner\": \"build-2\", \"ranking\": [{\"candidate\": \"build-2\", \"score\": 8.5, \"reasons\": [\"...\"]}], \"retry_instructions\": null, \"risks\": [], \"confidence\": 0.8}\n```\n- decision: select (keep the winner) · retry (they should all try again — say how in retry_instructions) ·\nmerge_ideas (the winner should take the good ideas of the others) · escalate (the owner has to decide).\n- Rank every candidate, score 0–10. Start a risk with \"high:\" when it is serious. confidence: 0 to 1.\n\n{{artifact:arbiter-input.md}}",
+            "rubric": "correctness against the task and the plan; tests passing; size and scope of the diff; risk; readability; review findings resolved",
+            "artifact": "decision.md",
+            "gate": "arbiter"
+          },
+          {
+            "id": "merge",
+            "title": "Merge",
+            "role": "you",
+            "action": "merge",
+            "gate": "human"
+          }
+        ]
+      },
+      "project": {
+        "cwd": "/home/u/projects/shop",
+        "root": "/home/u/projects/shop",
+        "name": "shop"
+      },
+      "base": {
+        "sha": "e54e692f3fef795d9faf15b211b7b25cefc7e7e9",
+        "branch": "main",
+        "head": "e54e692f3fef795d9faf15b211b7b25cefc7e7e9",
+        "fromWorktree": false
+      },
+      "roDir": "/home/u/projects/shop-20261013-0027-c313-ro",
+      "review": null,
+      "subtasks": null,
+      "attachments": [],
+      "testCommand": "npm test",
+      "status": "done",
+      "stage": 5,
+      "stages": [
+        {
+          "id": "plan",
+          "status": "done",
+          "loops": 0,
+          "round": 2,
+          "startedAt": 1791836871159,
+          "endedAt": 1791836871638
+        },
+        {
+          "id": "build",
+          "status": "done",
+          "loops": 0,
+          "round": 2,
+          "startedAt": 1791836872271,
+          "endedAt": 1791836872714
+        },
+        {
+          "id": "tests",
+          "status": "done",
+          "loops": 1,
+          "round": 2,
+          "startedAt": 1791836872714,
+          "endedAt": 1791836872891
+        },
+        {
+          "id": "review",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836872891,
+          "endedAt": 1791836873318
+        },
+        {
+          "id": "decide",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836873318,
+          "endedAt": 1791836873750,
+          "reasked": false
+        },
+        {
+          "id": "merge",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836873750,
+          "endedAt": 1791836873813
+        }
+      ],
+      "candidates": [
+        {
+          "id": "build-1",
+          "adapter": "claude",
+          "status": "active",
+          "dir": "/home/u/projects/shop-20261013-0027-c313-build-1",
+          "branch": "bayloob/20261013-0027-c313/build-1",
+          "handle": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "head": "cfd6d5efcab9371847705e9a646956c1805fa5c5",
+          "tests": {
+            "ok": true,
+            "code": 0,
+            "head": "cfd6d5efcab9371847705e9a646956c1805fa5c5",
+            "at": 1791836872891
+          },
+          "diff": {
+            "files": 1,
+            "added": 2,
+            "deleted": 0
+          }
+        }
+      ],
+      "instances": [
+        {
+          "id": "plan.1.1",
+          "stage": "plan",
+          "round": 1,
+          "n": 1,
+          "candidate": null,
+          "adapter": "claude",
+          "role": "planner",
+          "mode": "plan",
+          "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\n{{task}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-1",
+            "paneId": "%1",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+            "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\nAdd a 10% discount for orders over 100",
+            "mode": "plan",
+            "role": "planner",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Plan"
+          },
+          "queuedAt": 1791836870678,
+          "schedId": "i1",
+          "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+          "startedAt": 1791836870681,
+          "endedAt": 1791836871104,
+          "artifact": "plan.md"
+        },
+        {
+          "id": "plan.2.1",
+          "stage": "plan",
+          "round": 2,
+          "n": 1,
+          "candidate": null,
+          "adapter": "claude",
+          "role": "planner",
+          "mode": "plan",
+          "prompt": "The owner asked for changes:\n{{note}}\n\nDo it, then answer again in the same form as before.",
+          "vars": {
+            "note": "Only over 100, and keep total() unchanged"
+          },
+          "reuse": {
+            "name": "stub-1",
+            "paneId": "%1",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+            "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\nAdd a 10% discount for orders over 100",
+            "mode": "plan",
+            "role": "planner",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Plan"
+          },
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-1",
+            "paneId": "%1",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+            "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\nAdd a 10% discount for orders over 100",
+            "mode": "plan",
+            "role": "planner",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Plan"
+          },
+          "queuedAt": 1791836871159,
+          "schedId": "i2",
+          "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+          "startedAt": 1791836871161,
+          "endedAt": 1791836871584,
+          "artifact": "plan.md"
+        },
+        {
+          "id": "build.1.1.build-1",
+          "stage": "build",
+          "round": 1,
+          "n": 1,
+          "candidate": "build-1",
+          "adapter": "claude",
+          "role": "builder",
+          "mode": "writes",
+          "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\n{{task}}\n\nPlan:\n{{artifact:plan.md}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "queuedAt": 1791836871638,
+          "schedId": "i3",
+          "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+          "startedAt": 1791836871652,
+          "endedAt": 1791836872075
+        },
+        {
+          "id": "build.2.1.build-1",
+          "stage": "build",
+          "round": 2,
+          "n": 1,
+          "candidate": "build-1",
+          "adapter": "claude",
+          "role": "builder",
+          "mode": "writes",
+          "prompt": "The tests fail on your change. Fix it and run the tests again.\n\nTest output (last lines):\n{{artifact:test-output}}",
+          "vars": {},
+          "reuse": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "queuedAt": 1791836872271,
+          "schedId": "i4",
+          "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+          "startedAt": 1791836872273,
+          "endedAt": 1791836872697
+        },
+        {
+          "id": "review.1.1.build-1",
+          "stage": "review",
+          "round": 1,
+          "n": 1,
+          "candidate": "build-1",
+          "adapter": "codex",
+          "role": "reviewer",
+          "mode": "read-only",
+          "prompt": "Review the change on branch {{branch}} against {{base}}: run `git diff {{base}}...{{branch}}` and read what you need.\nTry to break it: bugs, missed cases, risky edits, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nTask:\n{{task}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-3",
+            "paneId": "%3",
+            "adapter": "codex",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+            "prompt": "Review the change on branch bayloob/20261013-0027-c313/build-1 against e54e692f3fef: run `git diff e54e692f3fef...bayloob/20261013-0027-c313/build-1` and read what you need.\nTry to break it: bugs, missed cases, risky edits, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nTask:\nAdd a 10% discount for orders over 100",
+            "mode": "read-only",
+            "role": "reviewer",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Review · build-1"
+          },
+          "queuedAt": 1791836872891,
+          "schedId": "i5",
+          "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+          "startedAt": 1791836872893,
+          "endedAt": 1791836873315,
+          "artifact": "review.build-1.md"
+        },
+        {
+          "id": "decide.1.1",
+          "stage": "decide",
+          "round": 1,
+          "n": 1,
+          "candidate": null,
+          "adapter": "claude",
+          "role": "arbiter",
+          "mode": "read-only",
+          "prompt": "You are the Arbiter: decide which candidate to keep. Judge by this rubric:\n{{rubric}}\nEverything you need is below; you may also run read-only git commands (git diff, git show). Do not change any file.\nAnswer with your reasoning in a few lines, then end with exactly one JSON block:\n```json\n{\"decision\": \"select\", \"winner\": \"build-2\", \"ranking\": [{\"candidate\": \"build-2\", \"score\": 8.5, \"reasons\": [\"...\"]}], \"retry_instructions\": null, \"risks\": [], \"confidence\": 0.8}\n```\n- decision: select (keep the winner) · retry (they should all try again — say how in retry_instructions) ·\nmerge_ideas (the winner should take the good ideas of the others) · escalate (the owner has to decide).\n- Rank every candidate, score 0–10. Start a risk with \"high:\" when it is serious. confidence: 0 to 1.\n\n{{artifact:arbiter-input.md}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-4",
+            "paneId": "%4",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+            "prompt": "You are the Arbiter: decide which candidate to keep. Judge by this rubric:\ncorrectness against the task and the plan; tests passing; size and scope of the diff; risk; readability; review findings resolved\nEverything you need is below; you may also run read-only git commands (git diff, git show). Do not change any file.\nAnswer with your reasoning in a few lines, then end with exactly one JSON block:\n```json\n{\"decision\": \"select\", \"winner\": \"build-2\", \"ranking\": [{\"candidate\": \"build-2\", \"score\": 8.5, \"reasons\": [\"...\"]}], \"retry_instructions\": null, \"risks\": [], \"confidence\": 0.8}\n```\n- decision: select (keep the winner) · retry (they should all try again — say how in retry_instructions) ·\nmerge_ideas (the winner should take the good ideas of the others) · escalate (the owner has to decide).\n- Rank every candidate, score 0–10. Start a risk with \"high:\" when it is serious. confidence: 0 to 1.\n\n# Goal\n\nAdd a 10% discount for orders over 100\n\n# Approved plan\n\n1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is\n\n# Candidate build-1\n- Agent: claude\n- Branch: bayloob/20261013-0027-c313/build-1\n- Change: 1 files, +2 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..843485c 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,4 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => a;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```\n\n## Review 1\n\ncart.js:2 — discount() accepts negative amounts",
+            "mode": "read-only",
+            "role": "arbiter",
+            "taskId": "20261013-0027-c313",
+            "label": "Add a 10% discount for orders over 100 · Arbiter"
+          },
+          "queuedAt": 1791836873322,
+          "schedId": "i6",
+          "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+          "startedAt": 1791836873323,
+          "endedAt": 1791836873745,
+          "artifact": "decision.md"
+        }
+      ],
+      "gate": null,
+      "winner": "build-1",
+      "merged": {
+        "branch": "bayloob/20261013-0027-c313/build-1",
+        "into": "main",
+        "applied": false,
+        "at": 1791836873813
+      },
+      "createdAt": 1791836870677,
+      "updatedAt": 1791836873837,
+      "endedAt": 1791836873813,
+      "arbiter": {
+        "decision": "select",
+        "winner": "build-1",
+        "ranking": [
+          {
+            "candidate": "build-1",
+            "score": 8,
+            "reasons": ["smallest change"]
+          }
+        ],
+        "retry": null,
+        "risks": [],
+        "confidence": 0.9,
+        "adapter": "claude",
+        "at": 1791836873749
+      }
+    },
+    {
+      "id": "20261013-0027-aa33",
+      "title": "Add a 10% discount for orders over 100",
+      "text": "Add a 10% discount for orders over 100",
+      "category": "workflow",
+      "template": {
+        "id": "bestofn",
+        "name": "Best-of-N",
+        "description": "Plan → N builders in parallel → tests on each → you pick the best → you merge",
+        "builtin": true,
+        "stages": [
+          {
+            "id": "plan",
+            "title": "Plan",
+            "role": "planner",
+            "mode": "plan",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 1
+              }
+            ],
+            "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\n{{task}}",
+            "artifact": "plan.md",
+            "gate": "human"
+          },
+          {
+            "id": "build",
+            "title": "Build",
+            "role": "builder",
+            "mode": "writes",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 2
+              },
+              {
+                "adapter": "codex",
+                "count": 1
+              }
+            ],
+            "parallel": true,
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\n{{task}}\n\nPlan:\n{{artifact:plan.md}}",
+            "gate": "always"
+          },
+          {
+            "id": "tests",
+            "title": "Tests",
+            "role": "tester",
+            "action": "run-tests",
+            "perCandidate": true,
+            "gate": "tests-pass",
+            "onFail": {
+              "goto": "build",
+              "prompt": "The tests fail on your change. Fix it and run the tests again.\n\nTest output (last lines):\n{{artifact:test-output}}",
+              "maxLoops": 1
+            }
+          },
+          {
+            "id": "decide",
+            "title": "Arbiter",
+            "role": "arbiter",
+            "mode": "read-only",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 1
+              }
+            ],
+            "prompt": "You are the Arbiter: decide which candidate to keep. Judge by this rubric:\n{{rubric}}\nEverything you need is below; you may also run read-only git commands (git diff, git show). Do not change any file.\nAnswer with your reasoning in a few lines, then end with exactly one JSON block:\n```json\n{\"decision\": \"select\", \"winner\": \"build-2\", \"ranking\": [{\"candidate\": \"build-2\", \"score\": 8.5, \"reasons\": [\"...\"]}], \"retry_instructions\": null, \"risks\": [], \"confidence\": 0.8}\n```\n- decision: select (keep the winner) · retry (they should all try again — say how in retry_instructions) ·\nmerge_ideas (the winner should take the good ideas of the others) · escalate (the owner has to decide).\n- Rank every candidate, score 0–10. Start a risk with \"high:\" when it is serious. confidence: 0 to 1.\n\n{{artifact:arbiter-input.md}}",
+            "rubric": "correctness against the task and the plan; tests passing; size and scope of the diff; risk; readability; review findings resolved",
+            "artifact": "decision.md",
+            "gate": "arbiter"
+          },
+          {
+            "id": "merge",
+            "title": "Merge",
+            "role": "you",
+            "action": "merge",
+            "gate": "human"
+          }
+        ]
+      },
+      "project": {
+        "cwd": "/home/u/projects/shop",
+        "root": "/home/u/projects/shop",
+        "name": "shop"
+      },
+      "base": {
+        "sha": "d72139b3c8e811164f4e0e8406bbfa2a3c2a0665",
+        "branch": "main",
+        "head": "d72139b3c8e811164f4e0e8406bbfa2a3c2a0665",
+        "fromWorktree": false
+      },
+      "roDir": "/home/u/projects/shop-20261013-0027-aa33-ro",
+      "review": null,
+      "subtasks": null,
+      "attachments": [],
+      "testCommand": "npm test",
+      "status": "done",
+      "stage": 4,
+      "stages": [
+        {
+          "id": "plan",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836873868,
+          "endedAt": 1791836874348
+        },
+        {
+          "id": "build",
+          "status": "done",
+          "loops": 0,
+          "round": 2,
+          "startedAt": 1791836875775,
+          "endedAt": 1791836876217
+        },
+        {
+          "id": "tests",
+          "status": "done",
+          "loops": 1,
+          "round": 2,
+          "startedAt": 1791836876217,
+          "endedAt": 1791836876391
+        },
+        {
+          "id": "decide",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836876391,
+          "endedAt": 1791836876877,
+          "reasked": false
+        },
+        {
+          "id": "merge",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836876877,
+          "endedAt": 1791836876942
+        }
+      ],
+      "candidates": [
+        {
+          "id": "build-1",
+          "adapter": "claude",
+          "status": "active",
+          "dir": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+          "branch": "bayloob/20261013-0027-aa33/build-1",
+          "handle": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "head": "6a70d1faa1cb7f3528efd42177a810ee7e69c19d",
+          "tests": {
+            "ok": true,
+            "code": 0,
+            "head": "6a70d1faa1cb7f3528efd42177a810ee7e69c19d",
+            "at": 1791836876391
+          },
+          "diff": {
+            "files": 1,
+            "added": 2,
+            "deleted": 0
+          }
+        },
+        {
+          "id": "build-2",
+          "adapter": "claude",
+          "status": "active",
+          "dir": "/home/u/projects/shop-20261013-0027-aa33-build-2",
+          "branch": "bayloob/20261013-0027-aa33/build-2",
+          "handle": {
+            "name": "stub-4",
+            "paneId": "%4",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-2",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-2"
+          },
+          "head": "06edc0b3508f284464d303af4830427e5ae7e0d6",
+          "tests": {
+            "ok": true,
+            "code": 0,
+            "head": "06edc0b3508f284464d303af4830427e5ae7e0d6",
+            "at": 1791836875599
+          },
+          "diff": {
+            "files": 1,
+            "added": 1,
+            "deleted": 0
+          }
+        },
+        {
+          "id": "build-3",
+          "adapter": "codex",
+          "status": "active",
+          "dir": "/home/u/projects/shop-20261013-0027-aa33-build-3",
+          "branch": "bayloob/20261013-0027-aa33/build-3",
+          "handle": {
+            "name": "stub-3",
+            "paneId": "%3",
+            "adapter": "codex",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-3",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-3"
+          },
+          "head": "dc45cc6fcec08f007c1f159c30966b5b53f93c16",
+          "tests": {
+            "ok": true,
+            "code": 0,
+            "head": "dc45cc6fcec08f007c1f159c30966b5b53f93c16",
+            "at": 1791836875775
+          },
+          "diff": {
+            "files": 1,
+            "added": 1,
+            "deleted": 0
+          }
+        }
+      ],
+      "instances": [
+        {
+          "id": "plan.1.1",
+          "stage": "plan",
+          "round": 1,
+          "n": 1,
+          "candidate": null,
+          "adapter": "claude",
+          "role": "planner",
+          "mode": "plan",
+          "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\n{{task}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-1",
+            "paneId": "%1",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-ro",
+            "prompt": "Make a step-by-step implementation plan for this task. Read the code you need; do not change any file.\nAnswer with the plan only, as Markdown: the files to change, what changes in each, and how to test it.\n\nTask:\nAdd a 10% discount for orders over 100",
+            "mode": "plan",
+            "role": "planner",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Plan"
+          },
+          "queuedAt": 1791836873868,
+          "schedId": "i1",
+          "cwd": "/home/u/projects/shop-20261013-0027-aa33-ro",
+          "startedAt": 1791836873869,
+          "endedAt": 1791836874294,
+          "artifact": "plan.md"
+        },
+        {
+          "id": "build.1.1.build-1",
+          "stage": "build",
+          "round": 1,
+          "n": 1,
+          "candidate": "build-1",
+          "adapter": "claude",
+          "role": "builder",
+          "mode": "writes",
+          "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\n{{task}}\n\nPlan:\n{{artifact:plan.md}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "queuedAt": 1791836874348,
+          "schedId": "i2",
+          "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+          "startedAt": 1791836874361,
+          "endedAt": 1791836874783
+        },
+        {
+          "id": "build.1.2.build-2",
+          "stage": "build",
+          "round": 1,
+          "n": 2,
+          "candidate": "build-2",
+          "adapter": "claude",
+          "role": "builder",
+          "mode": "writes",
+          "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\n{{task}}\n\nPlan:\n{{artifact:plan.md}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-4",
+            "paneId": "%4",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-2",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-2"
+          },
+          "queuedAt": 1791836874348,
+          "schedId": "i3",
+          "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-2",
+          "startedAt": 1791836874814,
+          "endedAt": 1791836875237
+        },
+        {
+          "id": "build.1.3.build-3",
+          "stage": "build",
+          "round": 1,
+          "n": 3,
+          "candidate": "build-3",
+          "adapter": "codex",
+          "role": "builder",
+          "mode": "writes",
+          "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\n{{task}}\n\nPlan:\n{{artifact:plan.md}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-3",
+            "paneId": "%3",
+            "adapter": "codex",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-3",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-3"
+          },
+          "queuedAt": 1791836874348,
+          "schedId": "i4",
+          "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-3",
+          "startedAt": 1791836874373,
+          "endedAt": 1791836874814
+        },
+        {
+          "id": "build.2.1.build-1",
+          "stage": "build",
+          "round": 2,
+          "n": 1,
+          "candidate": "build-1",
+          "adapter": "claude",
+          "role": "builder",
+          "mode": "writes",
+          "prompt": "The tests fail on your change. Fix it and run the tests again.\n\nTest output (last lines):\n{{artifact:test-output}}",
+          "vars": {},
+          "reuse": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+            "prompt": "Implement this approved plan. Run the project's tests when you are done.\n\nTask:\nAdd a 10% discount for orders over 100\n\nPlan:\n1. Add discount(amount) to cart.js",
+            "mode": "writes",
+            "role": "builder",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Build · build-1"
+          },
+          "queuedAt": 1791836875775,
+          "schedId": "i5",
+          "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+          "startedAt": 1791836875777,
+          "endedAt": 1791836876200
+        },
+        {
+          "id": "decide.1.1",
+          "stage": "decide",
+          "round": 1,
+          "n": 1,
+          "candidate": null,
+          "adapter": "claude",
+          "role": "arbiter",
+          "mode": "read-only",
+          "prompt": "You are the Arbiter: decide which candidate to keep. Judge by this rubric:\n{{rubric}}\nEverything you need is below; you may also run read-only git commands (git diff, git show). Do not change any file.\nAnswer with your reasoning in a few lines, then end with exactly one JSON block:\n```json\n{\"decision\": \"select\", \"winner\": \"build-2\", \"ranking\": [{\"candidate\": \"build-2\", \"score\": 8.5, \"reasons\": [\"...\"]}], \"retry_instructions\": null, \"risks\": [], \"confidence\": 0.8}\n```\n- decision: select (keep the winner) · retry (they should all try again — say how in retry_instructions) ·\nmerge_ideas (the winner should take the good ideas of the others) · escalate (the owner has to decide).\n- Rank every candidate, score 0–10. Start a risk with \"high:\" when it is serious. confidence: 0 to 1.\n\n{{artifact:arbiter-input.md}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-5",
+            "paneId": "%5",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-aa33-ro",
+            "prompt": "You are the Arbiter: decide which candidate to keep. Judge by this rubric:\ncorrectness against the task and the plan; tests passing; size and scope of the diff; risk; readability; review findings resolved\nEverything you need is below; you may also run read-only git commands (git diff, git show). Do not change any file.\nAnswer with your reasoning in a few lines, then end with exactly one JSON block:\n```json\n{\"decision\": \"select\", \"winner\": \"build-2\", \"ranking\": [{\"candidate\": \"build-2\", \"score\": 8.5, \"reasons\": [\"...\"]}], \"retry_instructions\": null, \"risks\": [], \"confidence\": 0.8}\n```\n- decision: select (keep the winner) · retry (they should all try again — say how in retry_instructions) ·\nmerge_ideas (the winner should take the good ideas of the others) · escalate (the owner has to decide).\n- Rank every candidate, score 0–10. Start a risk with \"high:\" when it is serious. confidence: 0 to 1.\n\n# Goal\n\nAdd a 10% discount for orders over 100\n\n# Approved plan\n\n1. Add discount(amount) to cart.js\n\n# Candidate build-1\n- Agent: claude\n- Branch: bayloob/20261013-0027-aa33/build-1\n- Change: 1 files, +2 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..843485c 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,4 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => a;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```\n\n# Candidate build-2\n- Agent: claude\n- Branch: bayloob/20261013-0027-aa33/build-2\n- Change: 1 files, +1 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..22b7b6b 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,3 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```\n\n# Candidate build-3\n- Agent: codex\n- Branch: bayloob/20261013-0027-aa33/build-3\n- Change: 1 files, +1 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..22b7b6b 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,3 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```",
+            "mode": "read-only",
+            "role": "arbiter",
+            "taskId": "20261013-0027-aa33",
+            "label": "Add a 10% discount for orders over 100 · Arbiter"
+          },
+          "queuedAt": 1791836876400,
+          "schedId": "i6",
+          "cwd": "/home/u/projects/shop-20261013-0027-aa33-ro",
+          "startedAt": 1791836876402,
+          "endedAt": 1791836876823,
+          "artifact": "decision.md"
+        }
+      ],
+      "gate": null,
+      "winner": "build-3",
+      "merged": {
+        "branch": "bayloob/20261013-0027-aa33/build-3",
+        "into": "main",
+        "applied": false,
+        "at": 1791836876942
+      },
+      "createdAt": 1791836873867,
+      "updatedAt": 1791836876966,
+      "endedAt": 1791836876942,
+      "arbiter": {
+        "decision": "select",
+        "winner": "build-3",
+        "ranking": [
+          {
+            "candidate": "build-3",
+            "score": 8,
+            "reasons": ["smallest change"]
+          },
+          {
+            "candidate": "build-1",
+            "score": 6,
+            "reasons": ["tests pass"]
+          },
+          {
+            "candidate": "build-2",
+            "score": 6,
+            "reasons": ["tests pass"]
+          }
+        ],
+        "retry": null,
+        "risks": [],
+        "confidence": 0.4,
+        "adapter": "claude",
+        "at": 1791836876827
+      }
+    },
+    {
+      "id": "20261013-0027-73c9",
+      "title": "Review count()",
+      "text": "Review count()",
+      "category": "workflow",
+      "template": {
+        "id": "board",
+        "name": "Review board",
+        "description": "Reviewers × N, read-only, on your branch or your uncommitted changes",
+        "builtin": true,
+        "stages": [
+          {
+            "id": "review",
+            "title": "Reviewers",
+            "role": "reviewer",
+            "mode": "read-only",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 1
+              },
+              {
+                "adapter": "codex",
+                "count": 1
+              }
+            ],
+            "parallel": true,
+            "prompt": "Review this change: run `{{diff}}` and read what you need around it.\nTry to break it: bugs, missed cases, risky edits, security, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nWhat the change is for (from the owner):\n{{task}}",
+            "artifact": "review.md",
+            "gate": "always"
+          },
+          {
+            "id": "consolidate",
+            "title": "Arbiter",
+            "role": "arbiter",
+            "mode": "read-only",
+            "agents": [
+              {
+                "adapter": "claude",
+                "count": 1
+              }
+            ],
+            "prompt": "You are the Arbiter of a review board. Merge the reviewers' findings below into one list: remove duplicates\n(the same problem in other words), drop findings that are wrong (check the code with read-only git commands\nif you need to), and rank them by severity. Do not change any file.\nAnswer with a short summary, then end with exactly one JSON block:\n```json\n{\"summary\": \"One or two sentences.\", \"findings\": [{\"severity\": \"high\", \"file\": \"src/a.js\", \"line\": 12, \"problem\": \"...\", \"reviewers\": [\"claude\", \"codex\"]}]}\n```\nseverity: high, medium or low.\n\n{{artifact:arbiter-input.md}}",
+            "artifact": "report.md",
+            "gate": "always"
+          }
+        ]
+      },
+      "project": {
+        "cwd": "/home/u/projects/shop",
+        "root": "/home/u/projects/shop",
+        "name": "shop"
+      },
+      "base": {
+        "sha": "477efcbcfad2d3be4ae8f37675868c7c72bae19a",
+        "branch": "main",
+        "head": "477efcbcfad2d3be4ae8f37675868c7c72bae19a",
+        "fromWorktree": false
+      },
+      "roDir": "/home/u/projects/shop-20261013-0027-73c9-ro",
+      "review": {
+        "from": "73f98b5ae3908c31ad5fb9aed755b8f62e8872d1",
+        "to": "477efcbcfad2d3be4ae8f37675868c7c72bae19a",
+        "label": "the last commit"
+      },
+      "subtasks": null,
+      "attachments": [],
+      "testCommand": "npm test",
+      "status": "done",
+      "stage": 1,
+      "stages": [
+        {
+          "id": "review",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836879758,
+          "endedAt": 1791836880188
+        },
+        {
+          "id": "consolidate",
+          "status": "done",
+          "loops": 0,
+          "round": 1,
+          "startedAt": 1791836880188,
+          "endedAt": 1791836880616,
+          "reasked": false
+        }
+      ],
+      "candidates": [],
+      "instances": [
+        {
+          "id": "review.1.1",
+          "stage": "review",
+          "round": 1,
+          "n": 1,
+          "candidate": null,
+          "adapter": "claude",
+          "role": "reviewer",
+          "mode": "read-only",
+          "prompt": "Review this change: run `{{diff}}` and read what you need around it.\nTry to break it: bugs, missed cases, risky edits, security, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nWhat the change is for (from the owner):\n{{task}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-1",
+            "paneId": "%1",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+            "prompt": "Review this change: run `git diff 73f98b5ae3908c31ad5fb9aed755b8f62e8872d1..477efcbcfad2d3be4ae8f37675868c7c72bae19a` and read what you need around it.\nTry to break it: bugs, missed cases, risky edits, security, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nWhat the change is for (from the owner):\nReview count()",
+            "mode": "read-only",
+            "role": "reviewer",
+            "taskId": "20261013-0027-73c9",
+            "label": "Review count() · Reviewers"
+          },
+          "queuedAt": 1791836879758,
+          "schedId": "i1",
+          "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+          "startedAt": 1791836879759,
+          "endedAt": 1791836880181,
+          "artifact": "review.md"
+        },
+        {
+          "id": "review.1.2",
+          "stage": "review",
+          "round": 1,
+          "n": 2,
+          "candidate": null,
+          "adapter": "codex",
+          "role": "reviewer",
+          "mode": "read-only",
+          "prompt": "Review this change: run `{{diff}}` and read what you need around it.\nTry to break it: bugs, missed cases, risky edits, security, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nWhat the change is for (from the owner):\n{{task}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-2",
+            "paneId": "%2",
+            "adapter": "codex",
+            "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+            "prompt": "Review this change: run `git diff 73f98b5ae3908c31ad5fb9aed755b8f62e8872d1..477efcbcfad2d3be4ae8f37675868c7c72bae19a` and read what you need around it.\nTry to break it: bugs, missed cases, risky edits, security, missing tests. Do not change any file.\nAnswer with findings, one per line as `path:line — problem`, most severe first. If there are none, answer \"No findings\".\n\nWhat the change is for (from the owner):\nReview count()",
+            "mode": "read-only",
+            "role": "reviewer",
+            "taskId": "20261013-0027-73c9",
+            "label": "Review count() · Reviewers"
+          },
+          "queuedAt": 1791836879758,
+          "schedId": "i2",
+          "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+          "startedAt": 1791836879761,
+          "endedAt": 1791836880185,
+          "artifact": "review.2.md"
+        },
+        {
+          "id": "consolidate.1.1",
+          "stage": "consolidate",
+          "round": 1,
+          "n": 1,
+          "candidate": null,
+          "adapter": "claude",
+          "role": "arbiter",
+          "mode": "read-only",
+          "prompt": "You are the Arbiter of a review board. Merge the reviewers' findings below into one list: remove duplicates\n(the same problem in other words), drop findings that are wrong (check the code with read-only git commands\nif you need to), and rank them by severity. Do not change any file.\nAnswer with a short summary, then end with exactly one JSON block:\n```json\n{\"summary\": \"One or two sentences.\", \"findings\": [{\"severity\": \"high\", \"file\": \"src/a.js\", \"line\": 12, \"problem\": \"...\", \"reviewers\": [\"claude\", \"codex\"]}]}\n```\nseverity: high, medium or low.\n\n{{artifact:arbiter-input.md}}",
+          "vars": {},
+          "reuse": null,
+          "status": "done",
+          "waiting": null,
+          "handle": {
+            "name": "stub-3",
+            "paneId": "%3",
+            "adapter": "claude",
+            "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+            "prompt": "You are the Arbiter of a review board. Merge the reviewers' findings below into one list: remove duplicates\n(the same problem in other words), drop findings that are wrong (check the code with read-only git commands\nif you need to), and rank them by severity. Do not change any file.\nAnswer with a short summary, then end with exactly one JSON block:\n```json\n{\"summary\": \"One or two sentences.\", \"findings\": [{\"severity\": \"high\", \"file\": \"src/a.js\", \"line\": 12, \"problem\": \"...\", \"reviewers\": [\"claude\", \"codex\"]}]}\n```\nseverity: high, medium or low.\n\n# Goal\n\nReview count()\n\n# Under review\n\n`git diff 73f98b5ae3908c31ad5fb9aed755b8f62e8872d1..477efcbcfad2d3be4ae8f37675868c7c72bae19a` — the last commit\n\n## Reviewer: claude (review.md)\n\ncart.js:2 — discount() accepts negative amounts\n\n## Reviewer: codex (review.2.md)\n\ncart.js:2 — discount() accepts negative amounts",
+            "mode": "read-only",
+            "role": "arbiter",
+            "taskId": "20261013-0027-73c9",
+            "label": "Review count() · Arbiter"
+          },
+          "queuedAt": 1791836880188,
+          "schedId": "i3",
+          "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+          "startedAt": 1791836880189,
+          "endedAt": 1791836880613,
+          "artifact": "report.md"
+        }
+      ],
+      "gate": null,
+      "winner": null,
+      "merged": null,
+      "createdAt": 1791836879747,
+      "updatedAt": 1791836880637,
+      "endedAt": 1791836880616,
+      "report": {
+        "summary": "One problem, found by every agent.",
+        "findings": [
+          {
+            "severity": "medium",
+            "file": "cart.js",
+            "line": 2,
+            "problem": "count() is off by one",
+            "evidence": null,
+            "recommendation": null,
+            "confidence": null,
+            "reviewers": ["claude", "codex"]
+          }
+        ]
+      }
+    }
+  ],
+  "logs": {
+    "20261013-0027-c313": [
+      {
+        "at": 1791836870678,
+        "actor": "engine",
+        "event": "started",
+        "template": "pipeline",
+        "base": "e54e692f3fef795d9faf15b211b7b25cefc7e7e9",
+        "branch": "main",
+        "fromWorktree": false,
+        "tests": "npm test"
+      },
+      {
+        "at": 1791836870678,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "plan",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836870681,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "plan.1.1",
+        "adapter": "claude",
+        "mode": "plan",
+        "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+        "session": "stub-1",
+        "reused": false
+      },
+      {
+        "at": 1791836871104,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "plan.1.1",
+        "chars": 34,
+        "artifact": "plan.md"
+      },
+      {
+        "at": 1791836871108,
+        "actor": "engine",
+        "event": "gate",
+        "kind": "approve",
+        "stage": "plan",
+        "title": "Plan is ready — approve it?"
+      },
+      {
+        "at": 1791836871159,
+        "actor": "you",
+        "event": "gate:changes",
+        "gate": "approve",
+        "stage": "plan",
+        "note": "Only over 100, and keep total() unchanged",
+        "candidate": null
+      },
+      {
+        "at": 1791836871159,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "plan",
+        "round": 2,
+        "only": null
+      },
+      {
+        "at": 1791836871161,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "plan.2.1",
+        "adapter": "claude",
+        "mode": "plan",
+        "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+        "session": "stub-1",
+        "reused": true
+      },
+      {
+        "at": 1791836871584,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "plan.2.1",
+        "chars": 77,
+        "artifact": "plan.md"
+      },
+      {
+        "at": 1791836871588,
+        "actor": "engine",
+        "event": "gate",
+        "kind": "approve",
+        "stage": "plan",
+        "title": "Plan is ready — approve it?"
+      },
+      {
+        "at": 1791836871638,
+        "actor": "you",
+        "event": "gate:approve",
+        "gate": "approve",
+        "stage": "plan",
+        "note": "",
+        "candidate": null
+      },
+      {
+        "at": 1791836871638,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "build",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836871650,
+        "actor": "engine",
+        "event": "worktree",
+        "candidate": "build-1",
+        "dir": "/home/u/projects/shop-20261013-0027-c313-build-1",
+        "branch": "bayloob/20261013-0027-c313/build-1"
+      },
+      {
+        "at": 1791836871652,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "build.1.1.build-1",
+        "adapter": "claude",
+        "mode": "writes",
+        "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+        "session": "stub-2",
+        "reused": false
+      },
+      {
+        "at": 1791836872075,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "build.1.1.build-1",
+        "chars": 16,
+        "artifact": null
+      },
+      {
+        "at": 1791836872093,
+        "actor": "engine",
+        "event": "candidate",
+        "candidate": "build-1",
+        "head": "18a82afc600bf94f8ab911408010155391598050",
+        "diff": {
+          "files": 1,
+          "added": 1,
+          "deleted": 0
+        }
+      },
+      {
+        "at": 1791836872093,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "tests",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836872271,
+        "actor": "engine",
+        "event": "tests",
+        "candidate": "build-1",
+        "ok": false,
+        "code": 1
+      },
+      {
+        "at": 1791836872271,
+        "actor": "engine",
+        "event": "loop",
+        "stage": "tests",
+        "to": "build",
+        "loop": 1,
+        "candidates": ["build-1"]
+      },
+      {
+        "at": 1791836872271,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "build",
+        "round": 2,
+        "only": ["build-1"]
+      },
+      {
+        "at": 1791836872273,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "build.2.1.build-1",
+        "adapter": "claude",
+        "mode": "writes",
+        "cwd": "/home/u/projects/shop-20261013-0027-c313-build-1",
+        "session": "stub-2",
+        "reused": true
+      },
+      {
+        "at": 1791836872697,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "build.2.1.build-1",
+        "chars": 34,
+        "artifact": null
+      },
+      {
+        "at": 1791836872714,
+        "actor": "engine",
+        "event": "candidate",
+        "candidate": "build-1",
+        "head": "cfd6d5efcab9371847705e9a646956c1805fa5c5",
+        "diff": {
+          "files": 1,
+          "added": 2,
+          "deleted": 0
+        }
+      },
+      {
+        "at": 1791836872714,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "tests",
+        "round": 2,
+        "only": null
+      },
+      {
+        "at": 1791836872891,
+        "actor": "engine",
+        "event": "tests",
+        "candidate": "build-1",
+        "ok": true,
+        "code": 0
+      },
+      {
+        "at": 1791836872891,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "review",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836872893,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "review.1.1.build-1",
+        "adapter": "codex",
+        "mode": "read-only",
+        "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+        "session": "stub-3",
+        "reused": false
+      },
+      {
+        "at": 1791836873315,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "review.1.1.build-1",
+        "chars": 47,
+        "artifact": "review.build-1.md"
+      },
+      {
+        "at": 1791836873318,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "decide",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836873322,
+        "actor": "engine",
+        "event": "arbiter-input",
+        "chars": 737
+      },
+      {
+        "at": 1791836873323,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "decide.1.1",
+        "adapter": "claude",
+        "mode": "read-only",
+        "cwd": "/home/u/projects/shop-20261013-0027-c313-ro",
+        "session": "stub-4",
+        "reused": false
+      },
+      {
+        "at": 1791836873746,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "decide.1.1",
+        "chars": 182,
+        "artifact": "decision.md"
+      },
+      {
+        "at": 1791836873750,
+        "actor": "agent",
+        "event": "arbiter",
+        "decision": "select",
+        "winner": "build-1",
+        "confidence": 0.9,
+        "high": 0
+      },
+      {
+        "at": 1791836873750,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "merge",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836873750,
+        "actor": "engine",
+        "event": "gate",
+        "kind": "merge",
+        "stage": "merge",
+        "title": "Merge build-1 (the Arbiter's pick)?"
+      },
+      {
+        "at": 1791836873800,
+        "actor": "you",
+        "event": "gate:merge",
+        "gate": "merge",
+        "stage": "merge",
+        "note": "",
+        "candidate": null
+      },
+      {
+        "at": 1791836873813,
+        "actor": "engine",
+        "event": "merged",
+        "branch": "bayloob/20261013-0027-c313/build-1",
+        "into": "main",
+        "error": null,
+        "conflicts": null
+      },
+      {
+        "at": 1791836873813,
+        "actor": "engine",
+        "event": "finished",
+        "status": "done",
+        "why": "merged"
+      }
+    ],
+    "20261013-0027-aa33": [
+      {
+        "at": 1791836873868,
+        "actor": "engine",
+        "event": "started",
+        "template": "bestofn",
+        "base": "d72139b3c8e811164f4e0e8406bbfa2a3c2a0665",
+        "branch": "main",
+        "fromWorktree": false,
+        "tests": "npm test"
+      },
+      {
+        "at": 1791836873868,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "plan",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836873869,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "plan.1.1",
+        "adapter": "claude",
+        "mode": "plan",
+        "cwd": "/home/u/projects/shop-20261013-0027-aa33-ro",
+        "session": "stub-1",
+        "reused": false
+      },
+      {
+        "at": 1791836874294,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "plan.1.1",
+        "chars": 34,
+        "artifact": "plan.md"
+      },
+      {
+        "at": 1791836874297,
+        "actor": "engine",
+        "event": "gate",
+        "kind": "approve",
+        "stage": "plan",
+        "title": "Plan is ready — approve it?"
+      },
+      {
+        "at": 1791836874348,
+        "actor": "you",
+        "event": "gate:approve",
+        "gate": "approve",
+        "stage": "plan",
+        "note": "",
+        "candidate": null
+      },
+      {
+        "at": 1791836874348,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "build",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836874359,
+        "actor": "engine",
+        "event": "worktree",
+        "candidate": "build-1",
+        "dir": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+        "branch": "bayloob/20261013-0027-aa33/build-1"
+      },
+      {
+        "at": 1791836874361,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "build.1.1.build-1",
+        "adapter": "claude",
+        "mode": "writes",
+        "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+        "session": "stub-2",
+        "reused": false
+      },
+      {
+        "at": 1791836874371,
+        "actor": "engine",
+        "event": "worktree",
+        "candidate": "build-3",
+        "dir": "/home/u/projects/shop-20261013-0027-aa33-build-3",
+        "branch": "bayloob/20261013-0027-aa33/build-3"
+      },
+      {
+        "at": 1791836874373,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "build.1.3.build-3",
+        "adapter": "codex",
+        "mode": "writes",
+        "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-3",
+        "session": "stub-3",
+        "reused": false
+      },
+      {
+        "at": 1791836874783,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "build.1.1.build-1",
+        "chars": 16,
+        "artifact": null
+      },
+      {
+        "at": 1791836874803,
+        "actor": "engine",
+        "event": "candidate",
+        "candidate": "build-1",
+        "head": "2f789b1268bd386a7573ede2bfc593208d044491",
+        "diff": {
+          "files": 1,
+          "added": 1,
+          "deleted": 0
+        }
+      },
+      {
+        "at": 1791836874812,
+        "actor": "engine",
+        "event": "worktree",
+        "candidate": "build-2",
+        "dir": "/home/u/projects/shop-20261013-0027-aa33-build-2",
+        "branch": "bayloob/20261013-0027-aa33/build-2"
+      },
+      {
+        "at": 1791836874814,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "build.1.2.build-2",
+        "adapter": "claude",
+        "mode": "writes",
+        "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-2",
+        "session": "stub-4",
+        "reused": false
+      },
+      {
+        "at": 1791836874814,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "build.1.3.build-3",
+        "chars": 34,
+        "artifact": null
+      },
+      {
+        "at": 1791836874833,
+        "actor": "engine",
+        "event": "candidate",
+        "candidate": "build-3",
+        "head": "dc45cc6fcec08f007c1f159c30966b5b53f93c16",
+        "diff": {
+          "files": 1,
+          "added": 1,
+          "deleted": 0
+        }
+      },
+      {
+        "at": 1791836875237,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "build.1.2.build-2",
+        "chars": 34,
+        "artifact": null
+      },
+      {
+        "at": 1791836875255,
+        "actor": "engine",
+        "event": "candidate",
+        "candidate": "build-2",
+        "head": "06edc0b3508f284464d303af4830427e5ae7e0d6",
+        "diff": {
+          "files": 1,
+          "added": 1,
+          "deleted": 0
+        }
+      },
+      {
+        "at": 1791836875255,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "tests",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836875426,
+        "actor": "engine",
+        "event": "tests",
+        "candidate": "build-1",
+        "ok": false,
+        "code": 1
+      },
+      {
+        "at": 1791836875599,
+        "actor": "engine",
+        "event": "tests",
+        "candidate": "build-2",
+        "ok": true,
+        "code": 0
+      },
+      {
+        "at": 1791836875775,
+        "actor": "engine",
+        "event": "tests",
+        "candidate": "build-3",
+        "ok": true,
+        "code": 0
+      },
+      {
+        "at": 1791836875775,
+        "actor": "engine",
+        "event": "loop",
+        "stage": "tests",
+        "to": "build",
+        "loop": 1,
+        "candidates": ["build-1"]
+      },
+      {
+        "at": 1791836875775,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "build",
+        "round": 2,
+        "only": ["build-1"]
+      },
+      {
+        "at": 1791836875777,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "build.2.1.build-1",
+        "adapter": "claude",
+        "mode": "writes",
+        "cwd": "/home/u/projects/shop-20261013-0027-aa33-build-1",
+        "session": "stub-2",
+        "reused": true
+      },
+      {
+        "at": 1791836876200,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "build.2.1.build-1",
+        "chars": 34,
+        "artifact": null
+      },
+      {
+        "at": 1791836876217,
+        "actor": "engine",
+        "event": "candidate",
+        "candidate": "build-1",
+        "head": "6a70d1faa1cb7f3528efd42177a810ee7e69c19d",
+        "diff": {
+          "files": 1,
+          "added": 2,
+          "deleted": 0
+        }
+      },
+      {
+        "at": 1791836876217,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "tests",
+        "round": 2,
+        "only": null
+      },
+      {
+        "at": 1791836876391,
+        "actor": "engine",
+        "event": "tests",
+        "candidate": "build-1",
+        "ok": true,
+        "code": 0
+      },
+      {
+        "at": 1791836876391,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "decide",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836876400,
+        "actor": "engine",
+        "event": "arbiter-input",
+        "chars": 1641
+      },
+      {
+        "at": 1791836876402,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "decide.1.1",
+        "adapter": "claude",
+        "mode": "read-only",
+        "cwd": "/home/u/projects/shop-20261013-0027-aa33-ro",
+        "session": "stub-5",
+        "reused": false
+      },
+      {
+        "at": 1791836876823,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "decide.1.1",
+        "chars": 300,
+        "artifact": "decision.md"
+      },
+      {
+        "at": 1791836876827,
+        "actor": "agent",
+        "event": "arbiter",
+        "decision": "select",
+        "winner": "build-3",
+        "confidence": 0.4,
+        "high": 0
+      },
+      {
+        "at": 1791836876827,
+        "actor": "engine",
+        "event": "gate",
+        "kind": "decision",
+        "stage": "decide",
+        "title": "The Arbiter isn't sure (confidence 0.40 < 0.6)"
+      },
+      {
+        "at": 1791836876877,
+        "actor": "you",
+        "event": "gate:accept",
+        "gate": "decision",
+        "stage": "decide",
+        "note": "",
+        "candidate": "build-3"
+      },
+      {
+        "at": 1791836876877,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "merge",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836876877,
+        "actor": "engine",
+        "event": "gate",
+        "kind": "merge",
+        "stage": "merge",
+        "title": "Merge build-3 (the Arbiter's pick)?"
+      },
+      {
+        "at": 1791836876928,
+        "actor": "you",
+        "event": "gate:merge",
+        "gate": "merge",
+        "stage": "merge",
+        "note": "",
+        "candidate": null
+      },
+      {
+        "at": 1791836876942,
+        "actor": "engine",
+        "event": "merged",
+        "branch": "bayloob/20261013-0027-aa33/build-3",
+        "into": "main",
+        "error": null,
+        "conflicts": null
+      },
+      {
+        "at": 1791836876942,
+        "actor": "engine",
+        "event": "finished",
+        "status": "done",
+        "why": "merged"
+      }
+    ],
+    "20261013-0027-73c9": [
+      {
+        "at": 1791836879758,
+        "actor": "engine",
+        "event": "started",
+        "template": "board",
+        "base": "477efcbcfad2d3be4ae8f37675868c7c72bae19a",
+        "branch": "main",
+        "fromWorktree": false,
+        "tests": "npm test"
+      },
+      {
+        "at": 1791836879758,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "review",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836879759,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "review.1.1",
+        "adapter": "claude",
+        "mode": "read-only",
+        "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+        "session": "stub-1",
+        "reused": false
+      },
+      {
+        "at": 1791836879761,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "review.1.2",
+        "adapter": "codex",
+        "mode": "read-only",
+        "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+        "session": "stub-2",
+        "reused": false
+      },
+      {
+        "at": 1791836880181,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "review.1.1",
+        "chars": 47,
+        "artifact": "review.md"
+      },
+      {
+        "at": 1791836880185,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "review.1.2",
+        "chars": 47,
+        "artifact": "review.2.md"
+      },
+      {
+        "at": 1791836880188,
+        "actor": "engine",
+        "event": "stage",
+        "stage": "consolidate",
+        "round": 1,
+        "only": null
+      },
+      {
+        "at": 1791836880188,
+        "actor": "engine",
+        "event": "arbiter-input",
+        "chars": 316
+      },
+      {
+        "at": 1791836880189,
+        "actor": "engine",
+        "event": "launched",
+        "instance": "consolidate.1.1",
+        "adapter": "claude",
+        "mode": "read-only",
+        "cwd": "/home/u/projects/shop-20261013-0027-73c9-ro",
+        "session": "stub-3",
+        "reused": false
+      },
+      {
+        "at": 1791836880613,
+        "actor": "agent",
+        "event": "turn-ended",
+        "instance": "consolidate.1.1",
+        "chars": 186,
+        "artifact": "report.md"
+      },
+      {
+        "at": 1791836880616,
+        "actor": "agent",
+        "event": "report",
+        "findings": 1
+      },
+      {
+        "at": 1791836880616,
+        "actor": "engine",
+        "event": "finished",
+        "status": "done",
+        "why": "all stages done"
+      }
+    ]
+  },
+  "arts": {
+    "20261013-0027-c313:arbiter-input.md": "# Goal\n\nAdd a 10% discount for orders over 100\n\n# Approved plan\n\n1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is\n\n# Candidate build-1\n- Agent: claude\n- Branch: bayloob/20261013-0027-c313/build-1\n- Change: 1 files, +2 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..843485c 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,4 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => a;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```\n\n## Review 1\n\ncart.js:2 — discount() accepts negative amounts",
+    "20261013-0027-c313:decision.md": "```json\n{\"decision\":\"select\",\"winner\":\"build-1\",\"ranking\":[{\"candidate\":\"build-1\",\"score\":8,\"reasons\":[\"smallest change\"]}],\"retry_instructions\":null,\"risks\":[],\"confidence\":0.9}\n```",
+    "20261013-0027-c313:msg.build.1.1.build-1.md": "Added discount()",
+    "20261013-0027-c313:msg.build.2.1.build-1.md": "Added discount() with 10% over 100",
+    "20261013-0027-c313:msg.decide.1.1.md": "```json\n{\"decision\":\"select\",\"winner\":\"build-1\",\"ranking\":[{\"candidate\":\"build-1\",\"score\":8,\"reasons\":[\"smallest change\"]}],\"retry_instructions\":null,\"risks\":[],\"confidence\":0.9}\n```",
+    "20261013-0027-c313:msg.plan.1.1.md": "1. Add discount(amount) to cart.js",
+    "20261013-0027-c313:msg.plan.2.1.md": "1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is",
+    "20261013-0027-c313:msg.review.1.1.build-1.md": "cart.js:2 — discount() accepts negative amounts",
+    "20261013-0027-c313:plan.md": "1. Add discount(amount) to cart.js: 10% off over 100\n2. Keep total() as it is",
+    "20261013-0027-c313:review.build-1.md": "cart.js:2 — discount() accepts negative amounts",
+    "20261013-0027-c313:test-output.build-1.txt": "$ npm test\n\n> test\n> node test.js\n\ntests pass",
+    "20261013-0027-aa33:arbiter-input.md": "# Goal\n\nAdd a 10% discount for orders over 100\n\n# Approved plan\n\n1. Add discount(amount) to cart.js\n\n# Candidate build-1\n- Agent: claude\n- Branch: bayloob/20261013-0027-aa33/build-1\n- Change: 1 files, +2 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..843485c 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,4 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => a;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```\n\n# Candidate build-2\n- Agent: claude\n- Branch: bayloob/20261013-0027-aa33/build-2\n- Change: 1 files, +1 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..22b7b6b 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,3 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```\n\n# Candidate build-3\n- Agent: codex\n- Branch: bayloob/20261013-0027-aa33/build-3\n- Change: 1 files, +1 −0\n- Tests: pass\n- Build time: 0 min\n\n## Diff\n```diff\ndiff --git a/cart.js b/cart.js\nindex 34b72f0..22b7b6b 100644\n--- a/cart.js\n+++ b/cart.js\n@@ -1,2 +1,3 @@\n exports.total = items => items.reduce((s, i) => s + i, 0);\n exports.count = items => items.length + 1;\n+exports.discount = a => (a > 100 ? a * 0.9 : a);\n\n```\n\n## Test output (last lines)\n```\n$ npm test\n\n> test\n> node test.js\n\ntests pass\n```",
+    "20261013-0027-aa33:decision.md": "```json\n{\"decision\":\"select\",\"winner\":\"build-3\",\"ranking\":[{\"candidate\":\"build-1\",\"score\":6,\"reasons\":[\"tests pass\"]},{\"candidate\":\"build-2\",\"score\":6,\"reasons\":[\"tests pass\"]},{\"candidate\":\"build-3\",\"score\":8,\"reasons\":[\"smallest change\"]}],\"retry_instructions\":null,\"risks\":[],\"confidence\":0.4}\n```",
+    "20261013-0027-aa33:msg.build.1.1.build-1.md": "Added discount()",
+    "20261013-0027-aa33:msg.build.1.2.build-2.md": "Added discount() with 10% over 100",
+    "20261013-0027-aa33:msg.build.1.3.build-3.md": "Added discount() with 10% over 100",
+    "20261013-0027-aa33:msg.build.2.1.build-1.md": "Added discount() with 10% over 100",
+    "20261013-0027-aa33:msg.decide.1.1.md": "```json\n{\"decision\":\"select\",\"winner\":\"build-3\",\"ranking\":[{\"candidate\":\"build-1\",\"score\":6,\"reasons\":[\"tests pass\"]},{\"candidate\":\"build-2\",\"score\":6,\"reasons\":[\"tests pass\"]},{\"candidate\":\"build-3\",\"score\":8,\"reasons\":[\"smallest change\"]}],\"retry_instructions\":null,\"risks\":[],\"confidence\":0.4}\n```",
+    "20261013-0027-aa33:msg.plan.1.1.md": "1. Add discount(amount) to cart.js",
+    "20261013-0027-aa33:plan.md": "1. Add discount(amount) to cart.js",
+    "20261013-0027-aa33:test-output.build-1.txt": "$ npm test\n\n> test\n> node test.js\n\ntests pass",
+    "20261013-0027-aa33:test-output.build-2.txt": "$ npm test\n\n> test\n> node test.js\n\ntests pass",
+    "20261013-0027-aa33:test-output.build-3.txt": "$ npm test\n\n> test\n> node test.js\n\ntests pass",
+    "20261013-0027-73c9:arbiter-input.md": "# Goal\n\nReview count()\n\n# Under review\n\n`git diff 73f98b5ae3908c31ad5fb9aed755b8f62e8872d1..477efcbcfad2d3be4ae8f37675868c7c72bae19a` — the last commit\n\n## Reviewer: claude (review.md)\n\ncart.js:2 — discount() accepts negative amounts\n\n## Reviewer: codex (review.2.md)\n\ncart.js:2 — discount() accepts negative amounts",
+    "20261013-0027-73c9:findings.json": "[\n  {\n    \"severity\": \"medium\",\n    \"file\": \"cart.js\",\n    \"line\": 2,\n    \"problem\": \"count() is off by one\",\n    \"evidence\": null,\n    \"recommendation\": null,\n    \"confidence\": null,\n    \"reviewers\": [\n      \"claude\",\n      \"codex\"\n    ]\n  }\n]",
+    "20261013-0027-73c9:msg.consolidate.1.1.md": "```json\n{\"summary\":\"One problem, found by every agent.\",\"findings\":[{\"severity\":\"medium\",\"file\":\"cart.js\",\"line\":2,\"problem\":\"count() is off by one\",\"reviewers\":[\"claude\",\"codex\"]}]}\n```",
+    "20261013-0027-73c9:msg.review.1.1.md": "cart.js:2 — discount() accepts negative amounts",
+    "20261013-0027-73c9:msg.review.1.2.md": "cart.js:2 — discount() accepts negative amounts",
+    "20261013-0027-73c9:report.md": "```json\n{\"summary\":\"One problem, found by every agent.\",\"findings\":[{\"severity\":\"medium\",\"file\":\"cart.js\",\"line\":2,\"problem\":\"count() is off by one\",\"reviewers\":[\"claude\",\"codex\"]}]}\n```",
+    "20261013-0027-73c9:review.2.md": "cart.js:2 — discount() accepts negative amounts",
+    "20261013-0027-73c9:review.md": "cart.js:2 — discount() accepts negative amounts"
+  }
+}
