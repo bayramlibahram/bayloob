@@ -143,8 +143,14 @@ class ClaudeAdapter {
         }
       }
       const prompt = textOf(content);
-      // A message the person typed (not a tool result, not a local command's echo)
-      if (!results.length && prompt && !/^<(command-|local-command|bash-)/.test(prompt.trim())) {
+      // A message the person typed — not a tool result, not a local command's echo, and not one Claude Code put
+      // in itself: it marks who wrote each one (origin.kind "human" for a person; "task-notification" for a
+      // background task finishing, "peer" for another agent's hand-back). Older transcripts have no origin.
+      const byPerson = !e.origin || e.origin.kind === "human";
+      const harness = /^<(command-|local-command|bash-|task-notification|system-reminder)/.test(
+        prompt.trim()
+      );
+      if (!results.length && prompt && byPerson && !harness) {
         if (this.#log.turns.length) {
           const last = this.#log.current;
           last.status = last.status === "running" ? "done" : last.status;

@@ -164,6 +164,28 @@
       .trim();
   }
 
+  /**
+   * What the owner typed, from a prompt as an agent got it: the format taken off again (any of the formats,
+   * as wrap put it on). An agent without a hidden channel (Codex, Gemini…) gets its format in the prompt itself,
+   * so its transcript has it — the console shows only what was typed.
+   */
+  function unwrap(prompt, v) {
+    const p = String(prompt ?? "");
+    for (const f of formats(v)) {
+      const template = f.text.includes(PLACEHOLDER) ? f.text : `${PLACEHOLDER}\n\n${f.text}`;
+      const [before, after = ""] = template.split(PLACEHOLDER);
+      if (
+        (before || after.trim()) &&
+        p.length > before.length + after.length &&
+        p.startsWith(before) &&
+        p.endsWith(after)
+      ) {
+        return p.slice(before.length, p.length - after.length);
+      }
+    }
+    return p;
+  }
+
   /** The prompt as the agent gets it (see resolve). */
   function apply(prompt, v, ctx = {}) {
     return wrap(prompt, resolve(v, ctx)?.text);
@@ -172,6 +194,7 @@
   const api = {
     apply,
     wrap,
+    unwrap,
     resolve,
     instructions,
     formats,

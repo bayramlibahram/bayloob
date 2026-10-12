@@ -74,3 +74,17 @@ test("response format: a format's rules on their own, for Claude Code's hidden c
   );
   assert.equal(F.instructions(""), "");
 });
+
+test("unwrap: the console shows what was typed — a format put on for an agent without a hidden channel comes off", () => {
+  const teacher = F.BUILTIN.find(f => f.id === "teacher").text;
+  assert.equal(
+    F.unwrap(F.wrap("process kimde ilishib ?", teacher), null),
+    "process kimde ilishib ?"
+  );
+  const v = { custom: [{ id: "c-x", name: "X", text: "Be brief." }] }; // no {{prompt}}: the prompt goes first
+  assert.equal(F.unwrap(F.wrap("Fix it", "Be brief."), v), "Fix it");
+  assert.equal(
+    F.unwrap("A prompt with --- in it\n\nand more", null),
+    "A prompt with --- in it\n\nand more"
+  );
+});

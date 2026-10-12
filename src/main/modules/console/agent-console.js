@@ -13,8 +13,11 @@ class AgentConsole {
   #feeds = new Map(); // session id -> { file, tail, adapter }
   #rollouts = new Map(); // codex session id -> rollout path (found once)
 
-  constructor({ home = os.homedir() } = {}) {
+  // typed(text, session): what the owner typed, from a prompt as the agent got it (its response format or a
+  // role agent's instructions taken off — they were added for the agent, not written by the owner)
+  constructor({ home = os.homedir(), typed = text => text } = {}) {
     this.home = home;
+    this.typed = typed;
   }
 
   /**
@@ -49,7 +52,11 @@ class AgentConsole {
     if (DONE.has(session.state)) {
       feed.adapter.finish(session.updatedAt);
     }
-    return { turns: feed.adapter.turns };
+    return {
+      turns: feed.adapter.turns.map(t =>
+        t.prompt ? { ...t, prompt: this.typed(t.prompt, session) } : t
+      ),
+    };
   }
 
   /** Drops what's kept for sessions that are gone. */

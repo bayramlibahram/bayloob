@@ -122,6 +122,37 @@ test("Claude: prompts and answers keep their lines (the console renders Markdown
   assert.equal(a.turns[0].summary, "## Done\n\n| a | b |\n|---|---|\n| 1 | 2 |");
 });
 
+test("Claude: what Claude Code puts in itself (a finished task, an agent's report) is not a turn", () => {
+  const a = new ClaudeAdapter("/w/shop");
+  a.feed({
+    type: "user",
+    uuid: "u1",
+    origin: { kind: "human" },
+    message: { content: "Map the task engine" },
+  });
+  a.feed({
+    type: "user",
+    origin: { kind: "task-notification", producer: "session-task" },
+    message: { content: "<task-notification>\n<status>completed</status>\n</task-notification>" },
+  });
+  a.feed({
+    type: "user",
+    isMeta: true,
+    origin: { kind: "peer", from: "agent-1" },
+    message: { content: "[Subagent hand-back] the report" },
+  });
+  // older transcripts: no origin, recognised by the tag
+  a.feed({
+    type: "user",
+    message: { content: "<task-notification><status>failed</status></task-notification>" },
+  });
+  a.feed({ type: "user", uuid: "u2", message: { content: "Now the dashboard" } });
+  assert.deepEqual(
+    a.turns.map(t => t.prompt),
+    ["Map the task engine", "Now the dashboard"]
+  );
+});
+
 const codex = [
   { type: "session_meta", payload: { id: "x-1", cwd: "/w/api" } },
   { type: "event_msg", timestamp: ts(0), payload: { type: "task_started", turn_id: "t1" } },
