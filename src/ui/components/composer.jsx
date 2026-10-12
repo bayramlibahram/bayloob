@@ -29,6 +29,7 @@ const ATTACH_TIP = "Attach files — or drop them here, or paste a screenshot (C
  *
  * value / onValueChange: the text. pastes / onPastesChange: large pasted text, kept out of the box as chips.
  * files: a store from createFiles (lib/files.js) — its chips show here, and a drop or a pasted file goes to it.
+ * autoFocus takes the focus without scrolling the page; caretStart puts the caret at the start.
  */
 export function Composer({
   value,
@@ -43,6 +44,7 @@ export function Composer({
   rows = 3,
   mono = false,
   autoFocus = false,
+  caretStart = false,
   count = false,
   note = "",
   attachTip = ATTACH_TIP,
@@ -56,10 +58,16 @@ export function Composer({
 
   // `autoFocus` without scrolling the page to the box (what is above it stays in view)
   useEffect(() => {
-    if (autoFocus) {
-      text.current?.focus({ preventScroll: true });
+    const ta = text.current;
+    if (autoFocus && ta) {
+      ta.focus({ preventScroll: true });
+      if (caretStart) {
+        // a handed-in prompt ("Fix this error: …") reads from its first line, not scrolled to the end
+        ta.setSelectionRange(0, 0);
+        ta.scrollTop = 0;
+      }
     }
-  }, [autoFocus]);
+  }, [autoFocus, caretStart]);
 
   useEffect(() => {
     if (caret.current !== null && text.current) {
