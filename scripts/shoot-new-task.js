@@ -1,5 +1,5 @@
 // Screenshots of the real New task dialog (real preload, TaskStore, ProjectInfo) with demo git repos in a temp dir.
-// electron --no-sandbox scripts/shoot-new-task.js <repo root> <out dir> <dark|light>
+// bunx electron-vite build && electron --no-sandbox scripts/shoot-new-task.js <repo root> <out dir> <dark|light>
 // Drives the real New task page (real preload, TaskStore, ProjectInfo) with demo projects; takes screenshots.
 const { app, BrowserWindow, ipcMain, nativeTheme } = require("electron");
 const fs = require("node:fs");
@@ -59,6 +59,7 @@ ipcMain.handle("newtask:launch", (_e, opts, id) => {
   return { ok: true };
 });
 ipcMain.handle("newtask:pick-folder", () => null);
+ipcMain.handle("newtask:validate-source", () => ({ ok: true }));
 ipcMain.handle("launcher:clipboard", () => "");
 ipcMain.on("newtask:close", () => {});
 ipcMain.on("newtask:resize", (_e, h) =>
@@ -94,9 +95,17 @@ const click = sel =>
   js(
     `(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) throw new Error('no ' + ${JSON.stringify(sel)}); b.click(); })()`
   );
+// A React input changes through the native value setter and an input event
 const type = (sel, text) =>
   js(
-    `(() => { const t = document.querySelector(${JSON.stringify(sel)}); t.value = ${JSON.stringify(text)}; t.dispatchEvent(new Event('input', { bubbles: true })); })()`
+    `(() => { const t = document.querySelector(${JSON.stringify(sel)}); if (!t) throw new Error('no ' + ${JSON.stringify(sel)});
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(t), 'value').set.call(t, ${JSON.stringify(text)});
+      t.dispatchEvent(new Event('input', { bubbles: true })); })()`
+  );
+// A button by what it says
+const press = text =>
+  js(
+    `(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim().startsWith(${JSON.stringify(text)})); if (!b) throw new Error('no button ' + ${JSON.stringify(text)}); b.click(); })()`
   );
 const shot = async name => {
   await wait(450);
@@ -113,14 +122,14 @@ app.whenReady().then(async () => {
       height: 600,
       useContentSize: true,
       backgroundColor: theme === "dark" ? "#2b2a33" : "#d9d7e3",
-      webPreferences: { preload: path.join(ROOT, "src/preload/newtask.js") },
+      webPreferences: { preload: path.join(ROOT, "out/preload/newtask.js") },
     });
     win.webContents.on("console-message", (_e, level, msg) => {
       if (level >= 2 && !/Security Warning/.test(msg)) {
         errs.push(msg);
       }
     });
-    await win.loadFile(path.join(ROOT, "src/renderer/newtask/index.html"));
+    await win.loadFile(path.join(ROOT, "out/renderer/newtask/index.html")); // the React page, as built
     await js(
       `document.head.insertAdjacentHTML('beforeend', '<style>*{animation:none!important;transition:none!important}</style>')`
     );
@@ -129,19 +138,19 @@ app.whenReady().then(async () => {
     await wait(600);
     await click('[data-cwd$="/shop"]');
     await shot("1-project");
-    await click("#next");
+    await click("[data-next]");
     await click('[data-cat="workflow"]');
     await shot("2-category");
-    await click("#next");
+    await click("[data-next]");
     await type(
-      "#text",
+      "textarea",
       "Add coupon codes to checkout: a code field in the cart, validation against the coupons table, the discount in the totals."
     );
     await shot("3-configure-workflow");
-    await click("#next");
+    await click("[data-next]");
     await shot("4-confirm-workflow");
     const startDisabled = await js(
-      `document.getElementById('next').disabled + ' / ' + document.getElementById('nextWrap').title`
+      `document.querySelector('[data-next]').disabled + ' / ' + document.querySelector('[data-next]').parentElement.title`
     );
     // Close and reopen: the draft comes back
     await wait(600);
@@ -149,35 +158,35 @@ app.whenReady().then(async () => {
     win.webContents.send("newtask:show", state({ draft: d1 }));
     await wait(600);
     const restored = await js(
-      `document.getElementById('msg').textContent + ' | step ' + document.querySelector('.steps [aria-current]').textContent + ' | ' + document.getElementById('text').value.slice(0, 20)`
+      `document.querySelector('[role=status]').textContent + ' | step ' + document.querySelector('[aria-current=step]').textContent + ' | ' + document.querySelector('textarea').value.slice(0, 20)`
     );
-    await click("#startOver");
+    await press("Start over");
     await wait(600);
     await click('[data-cwd$="/api"]');
     await wait(300);
-    await click("#next");
+    await click("[data-next]");
     await click('[data-cat="analysis"]');
-    await click("#next");
-    await click('[data-preset="incident"]');
-    await type("#text", "Why does checkout return 502 on staging since this morning?");
-    await type("#source", 'journalctl -u php8.3-fpm --since "-6h"');
-    await click("[data-addsource]");
-    await click("[data-ops]");
+    await click("[data-next]");
+    await press("Incident / log analysis");
+    await type("textarea", "Why does checkout return 502 on staging since this morning?");
+    await type('[aria-label="Log source"]', 'journalctl -u php8.3-fpm --since "-6h"');
+    await press("Add");
+    await click("#sw-also-prepare-an-operations-plan");
     await shot("3-configure-analysis");
-    await click("#next");
+    await click("[data-next]");
     await shot("4-confirm-analysis");
-    await click("#startOver");
+    await press("Start over");
     await wait(600);
     await click('[data-cwd$="/blog"]');
     await wait(300);
-    await click("#next");
+    await click("[data-next]");
     await click('[data-cat="single"]');
-    await click("#next");
-    await type("#text", "Fix the broken image links in the 2024 posts.");
+    await click("[data-next]");
+    await type("textarea", "Fix the broken image links in the 2024 posts.");
     await shot("3-configure-single");
-    await click("#next");
+    await click("[data-next]");
     await shot("4-confirm-single");
-    await click("#next");
+    await click("[data-next]");
     await wait(500);
     console.log(
       theme,
