@@ -23,6 +23,12 @@
   button { font: inherit; color: inherit; border: 0; cursor: pointer; background: none; }
   button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
+  /* Tooltips are drawn inside the pill: the window's shape is the pill, so a native one is cut off at its edge */
+  .tip { position: absolute; z-index: 50; max-width: 300px; max-height: 9.6em; overflow: hidden; padding: 5px 9px; border-radius: 8px;
+    background: var(--text); color: var(--surface-solid); font-size: 12px; font-weight: 500; line-height: 1.35; white-space: pre-line;
+    pointer-events: none; box-shadow: 0 2px 8px rgb(var(--shade) / calc(.3 * var(--shade-k))); }
+  .tip[hidden] { display: none; }
+
   /* ---------- Pill ---------- */
   .pill {
     position: relative;
@@ -101,7 +107,7 @@
   @keyframes dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
   /* small bar buttons (sound, workspace panel): shown while the pill is open; the sound one also stays
      visible while muted, so a silent Bayloob is never a mystery */
-  .barbtn { flex: none; width: 28px; height: 28px; display: none; place-items: center; border-radius: 9px; color: var(--muted);
+  .barbtn { flex: none; width: 30px; height: 30px; display: none; place-items: center; border-radius: 9px; color: var(--muted);
     transition: background .15s, color .15s; }
   .pill.open .barbtn, .barbtn.muted { display: grid; }
   .barbtn:hover { background: rgb(var(--ink) / .08); color: var(--text); }
@@ -116,12 +122,17 @@
   .barbtn.ws { display: grid; position: relative; color: var(--brand-soft); }
   .barbtn.ws em { position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
     background: var(--primary-bg); color: var(--primary-fg); font: 700 10px/16px inherit; font-style: normal; font-variant-numeric: tabular-nums; text-align: center; }
-  .barbtn + .barbtn { margin-left: -6px; } /* the bar's tools sit as one group */
+  .barbtn + .barbtn { margin-left: -4px; } /* the bar's tools sit as one group */
   .barbtn.on { color: var(--brand-soft); background: color-mix(in srgb, var(--brand) 16%, transparent); }
   .barbtn .shrink, .pill.full .barbtn .grow { display: none; }
   .pill.full .barbtn .shrink { display: block; }
-  .chev { flex: none; width: 18px; height: 18px; color: var(--muted); transition: transform .3s, color .2s; }
-  .pill.open .chev { transform: rotate(180deg); color: var(--text); }
+  /* the chevron opens and closes the list (hover does too) */
+  .chev { flex: none; width: 26px; height: 26px; margin-right: -6px; display: grid; place-items: center; border-radius: 8px; color: var(--muted);
+    transition: background .15s, color .2s; }
+  .chev:hover { background: rgb(var(--ink) / .08); color: var(--text); }
+  .chev svg { width: 18px; height: 18px; transition: transform .3s; }
+  .pill.open .chev { color: var(--text); }
+  .pill.open .chev svg { transform: rotate(180deg); }
   /* the top agent's own to-do list (TodoWrite / tasks): done / total along the bottom of the bar */
   .progress { position: absolute; left: 62px; right: 22px; bottom: 6px; height: 3px; border-radius: 2px;
     background: rgb(var(--ink) / .07); overflow: hidden; display: none; }
@@ -368,23 +379,36 @@
     border-radius: 12px; transition: background .15s; }
   .row + .row { margin-top: 2px; }
   .row:hover, .row:focus-within { background: rgb(var(--ink) / .05); }
+  .row[data-act="agent"] { cursor: pointer; }
   /* the agent's mascot on a small tile (like the manager's), with its state as a dot on the corner */
   .row .avatar { position: relative; flex: none; width: var(--avatar); height: var(--avatar); display: grid; place-items: center;
     border-radius: 10px; background: rgb(var(--ink) / .05); border: 1px solid rgb(var(--ink) / .07); }
   .row .avatar .mascot.mini { width: 26px; height: 26px; }
-  .row .avatar::after { content: ''; position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%;
-    background: var(--c); box-shadow: 0 0 0 2px var(--surface-solid); }
+  .row .avatar { transition: box-shadow .2s, border-color .2s; }
+  .row:hover .avatar, .row .avatar:focus-visible { border-color: color-mix(in srgb, var(--c) 55%, transparent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--c) 35%, transparent); }
+  /* one agent: the bar's chip already says its state */
+  .pill.solo .row .tag.st { display: none; }
   .row .name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   .row .l1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
   .row .l1 b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 650; font-size: 13.5px; color: var(--text); }
   .row .agent { flex: 0 0 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; font-weight: 500; }
   .row .tok { flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
-  .row .tok::before { content: '·'; margin-right: 6px; }
+  .row .tok::before, .row .age::before { content: '·'; margin-right: 6px; }
+  .row .age { flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  /* waiting on you: the tool and its command, in the waiting colour */
+  .row .out.err { color: var(--waiting); }
+  .row .out.ask { color: var(--waiting); font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 11.5px; }
+  .tag.task { gap: 4px; max-width: 120px; cursor: pointer; }
+  .tag.task span { overflow: hidden; text-overflow: ellipsis; }
+  .tag.task:hover { color: var(--text); background: rgb(var(--ink) / .12); }
   /* the agent's latest message, as plain text (markdown stripped); the whole of it on hover */
   .row .out { display: block; color: var(--muted); font-size: 12px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .meta { flex: none; display: flex; align-items: center; gap: 4px; }
-  .row .acts { flex: none; display: flex; align-items: center; gap: 1px; opacity: .62; transition: opacity .15s; }
-  .row:hover .acts, .row:focus-within .acts, .row .acts:has(.armed) { opacity: 1; }
+  .row .acts { flex: none; display: flex; align-items: center; gap: 3px; }
+  /* stop sits last, a little apart from the harmless ones */
+  .row .acts .icon.stop { margin-left: 5px; position: relative; }
+  .row .acts .icon.stop::before { content: ''; position: absolute; left: -5px; top: 8px; bottom: 8px; width: 1px; background: var(--line); }
 
   /* Tags: one chip family across the list — the same height, radius and type as the bar's status chip.
      --c (a token) colours the state ones; the rest are neutral */
@@ -400,11 +424,17 @@
   .tag svg { width: 11px; height: 11px; fill: currentColor; }
   .row .clash { margin: 0 2px; }
 
-  .icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px;
+  .icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 12px;
     transition: background .15s, color .15s; }
   .icon:hover { background: rgb(var(--ink) / .1); color: var(--text); }
   .icon svg { width: 15px; height: 15px; fill: currentColor; }
   .icon.stop:hover { color: var(--waiting); }
+  .icon.allow { color: var(--done); }
+  .icon.allow:hover { background: color-mix(in srgb, var(--done) 18%, transparent); color: var(--done); }
+  .icon.deny:hover { background: color-mix(in srgb, var(--waiting) 18%, transparent); color: var(--waiting); }
+  .icon:disabled { opacity: .4; cursor: not-allowed; }
+  .icon.stop.armed span { font-size: 11.5px; font-weight: 700; }
+  .row .acts .icon.stop.armed { width: auto; padding: 0 8px; }
   .icon.stop.armed { background: color-mix(in srgb, var(--waiting) 22%, transparent); color: var(--waiting); }
 
   /* "+ New session": an outlined slot that lines up with the avatars above it */
@@ -482,11 +512,11 @@
       <span class="status" id="status"><span class="dots"><i></i><i></i><i></i></span><span id="statusText"></span></span>
       <div class="count" id="count"></div>
       <button type="button" class="barbtn" id="soundBtn" data-bar="sound"><svg class="i on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg><svg class="i off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5Z"/><path class="w" d="m16 9.5 5 5m0-5-5 5"/></svg></button>
-      <button type="button" class="barbtn" id="voiceBtn" data-bar="voice" title="Voice prompt (recorded and transcribed on this machine)" aria-label="Voice prompt"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect class="w" x="9" y="3.5" width="6" height="11" rx="3"/><path class="w" d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3"/></svg></button>
+      <button type="button" class="barbtn" id="voiceBtn" data-bar="voice" title="Voice prompt · transcribed on this machine" aria-label="Voice prompt" aria-pressed="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect class="w" x="9" y="3.5" width="6" height="11" rx="3"/><path class="w" d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3"/></svg></button>
       <button type="button" class="barbtn" id="fullBtn" data-bar="full" title="Full view" aria-label="Full view"><svg class="i grow" viewBox="0 0 24 24" aria-hidden="true"><path class="w" d="M14 4.5h5.5V10M10 19.5H4.5V14M19.5 4.5 13.5 10.5M4.5 19.5l6-6"/></svg><svg class="i shrink" viewBox="0 0 24 24" aria-hidden="true"><path class="w" d="M19.5 10H14V4.5M4.5 14H10v5.5M14 10l5.5-5.5M10 14l-5.5 5.5"/></svg></button>
-      <button type="button" class="barbtn" id="moreBtn" data-bar="more" title="More: sounds, full view" aria-label="More" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg></button>
+      <button type="button" class="barbtn" id="moreBtn" data-bar="more" title="More" aria-label="More" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg></button>
       <button type="button" class="barbtn" id="panelBtn" data-bar="panel" title="Workspace panel" aria-label="Open the workspace panel"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect class="w" x="3.5" y="4.5" width="17" height="15" rx="3"/><path class="w" d="M9.5 4.5v15M13 9.5h4M13 13h4"/></svg></button>
-      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      <button type="button" class="chev" id="chevBtn" data-bar="toggle" aria-label="Show the agents" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
       <div class="progress" id="progress"><i></i></div>
       <span class="plabel" id="plabel"></span>
     </div>
@@ -502,6 +532,7 @@
         <span class="vbtns"><button type="button" data-voice="cancel" id="vcancel">Cancel</button><button type="button" class="primary" data-voice="stop" id="vstop">Stop</button><button type="button" class="primary" data-voice="use" id="vuse" hidden>Review &amp; send</button></span></div>
     </div>
     <div class="listwrap"><div class="list" id="list"></div></div>
+    <div class="tip" id="tip" role="tooltip" hidden></div>
   </div>
 
 <script src="../shared/ui-common.js"></script>
@@ -576,6 +607,9 @@
       ready: 'Check it in the prompt box before it’s sent', limit: 'Stopped at the 2-minute limit',
     },
     fullTip: 'Full view', shrinkTip: 'Back to the pill',
+    stopShort: 'Stop?', collapse: 'Hide the agents', expand: 'Show the agents',
+    allowTool: tool => `Allow ${tool}`, denyTool: tool => `Deny ${tool}`, startedAgo: when => `Started ${when}`, now: 'now', task: 'Task',
+    openAgent: (project, state) => `Open ${project} in the Workspace · ${state}`,
     newSession: 'New session', sendPrompt: 'Send a prompt', stop: 'Stop this session', confirmStop: 'Click again to stop',
   };
 
@@ -587,6 +621,9 @@
   const STACK_MAX = 3; // agent tiles in the pill before "+N"
   const TASKS_SHOWN = 2; // open tasks listed under the usage band before "+N more"
   const REMIND_MS = 60_000; // an unanswered permission card gets a reminder sound this often
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const TIP_DELAY_MS = 450;
+  const ROW_NOTE_MS = 5000;
   const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
   const RECEIPT_MARK = { passed: ' ✓', failed: ' ✗', untested: ' ⚠' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
@@ -602,6 +639,11 @@
   const MASCOT_MODE = new URLSearchParams(location.search).get('mascot') === 'svg' || !window.Novi || !window.NOVI_META ? 'svg' : 'novi';
 
   const ICON_PROMPT = '<svg viewBox="0 0 16 16"><path d="M2.5 2h11A1.5 1.5 0 0 1 15 3.5v7a1.5 1.5 0 0 1-1.5 1.5H6l-3.2 2.6A.5.5 0 0 1 2 14.2V12h.5A1.5 1.5 0 0 1 1 10.5v-7A1.5 1.5 0 0 1 2.5 2Zm1.5 3v1.3h8V5H4Zm0 2.7V9h5.5V7.7H4Z"/></svg>';
+  const ICON_CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.4 11.6 2.8 8l1.1-1.1 2.5 2.5 5.7-5.7 1.1 1.1Z"/></svg>';
+  const ICON_X = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.1 3 3.9 3.9L11.9 3 13 4.1 9.1 8l3.9 3.9-1.1 1.1L8 9.1 4.1 13 3 11.9 6.9 8 3 4.1Z"/></svg>';
+  const ICON_FLOW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a4 4 0 0 1 4 4v5.5"/></svg>';
+  // 45_000 → "now", 720_000 → "12m", 3_780_000 → "1h 3m", 2 days → "2d"
+  const formatAge = ms => { const m = Math.floor(ms / 60000); return m < 1 ? T.now : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${Math.floor(m / 1440)}d`; };
   const ICON_STOP = '<svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="2"/></svg>';
   const ICON_PLUS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>';
   const ICON_QUEUE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2h8v2.6L9.3 8l2.7 3.4V14H4v-2.6L6.7 8 4 4.6Z"/></svg>';
@@ -788,6 +830,8 @@
     diffs = {};            // session id -> { files, added, deleted, untracked } of its repo
     tokens = {};           // session id -> { input, output, cacheWrite, cacheRead, total }
     queues = {};           // session id -> number of prompts waiting for it
+    rowNote = null;        // { sid, text, until }: a short note in place of a row's latest line
+    taskTitles = new Map(); // workflow task id -> title (from the task summary), for the rows' task chips
     waits = {};            // session id -> when it started waiting on a card
     receipts = {};         // session id -> { status, command? } of its last finished turn
     progress = {};         // session id -> { done, total } of its own to-do list
@@ -804,6 +848,8 @@
     taskGates = null;       // null until the first update: no sound for gates that were already open
     #ruleTimer = null;
     #hoverTimer = null;
+    #tipFor = null; // the element the tooltip is showing (or about to show) for
+    #tipTimer = null;
     #pressing = false;     // a mouse button is down on the pill: hold re-renders until it's released
     #paintLater = false;
     #painted = new WeakMap(); // element -> the HTML last put into it
@@ -820,7 +866,7 @@
       const $ = id => document.getElementById(id);
       this.el = { pill: $('pill'), mascot: $('mascot'), label: $('label'), count: $('count'), status: $('status'), statusText: $('statusText'), soundBtn: $('soundBtn'), progress: $('progress'), plabel: $('plabel'), card: $('card'), list: $('list'),
         voice: $('voice'), vtarget: $('vtarget'), vwave: $('vwave'), vtext: $('vtext'), vtime: $('vtime'), vnote: $('vnote'),
-        vstop: $('vstop'), vcancel: $('vcancel'), vuse: $('vuse'), voiceBtn: $('voiceBtn'), fullBtn: $('fullBtn') };
+        vstop: $('vstop'), vcancel: $('vcancel'), vuse: $('vuse'), voiceBtn: $('voiceBtn'), fullBtn: $('fullBtn'), chevBtn: $('chevBtn'), tip: $('tip') };
       // The manager falls asleep after a long idle and wakes on the next change: a soft sound for each
       this.mascot = new MascotView(this.el.mascot, { onSleep: asleep => asleep ? this.sounds.play('sleep') : this.sounds.playIfQuiet('wake') });
       this.#bindEvents();
@@ -959,7 +1005,8 @@
       const box = document.getElementById('tasksum');
       const all = list || [];
       box.classList.toggle('on', all.length > 0);
-      const flow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a4 4 0 0 1 4 4v5.5"/></svg>';
+      const flow = ICON_FLOW;
+      this.taskTitles = new Map(all.map(t => [t.id, t.title]));
       box.innerHTML = all.slice(0, TASKS_SHOWN).map(t => `<button type="button" data-act="open-task" data-task="${esc(t.id)}"
           title="${esc(`${t.title} — ${t.project}\n${T.taskStageOf(t.stage, t.stageNo, t.stages)}`)}" aria-label="${esc(`${T.openTask}: ${t.title}`)}">
           ${flow}<span class="tt">${esc(t.title)}</span>
@@ -996,6 +1043,65 @@
     setHealth(health) { this.health = health || { ok: true, issues: [] }; this.render(); }
 
     open() { this.el.pill.classList.add('open'); }
+
+    #tipShow(el, delay = TIP_DELAY_MS) {
+      if (el.hasAttribute('title')) {
+        if (el.title) { el.dataset.tip = el.title; }
+        el.removeAttribute('title');
+      }
+      this.#tipHide();
+      if (!el.dataset.tip) { return; }
+      this.#tipFor = el;
+      this.#tipTimer = setTimeout(() => this.#tipPlace(el), delay);
+    }
+
+    // Below the element when it fits in the pill, else above, else to its left; always inside the pill
+    #tipPlace(el) {
+      const tip = this.el.tip;
+      if (!el.isConnected || !el.dataset.tip) { return; }
+      tip.textContent = el.dataset.tip;
+      tip.hidden = false;
+      const p = this.el.pill.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      const w = tip.offsetWidth;
+      const h = tip.offsetHeight;
+      const gap = 6;
+      const edge = 6;
+      const top = r.top - p.top;
+      const bottom = r.bottom - p.top;
+      let x = r.left - p.left + r.width / 2 - w / 2;
+      let y;
+      if (bottom + gap + h <= p.height - edge) { y = bottom + gap; }
+      else if (top - gap - h >= edge) { y = top - gap - h; }
+      else {
+        x = r.left - p.left - gap - w;
+        y = top + r.height / 2 - h / 2;
+      }
+      tip.style.left = `${Math.round(Math.max(edge, Math.min(x, p.width - w - edge)))}px`;
+      tip.style.top = `${Math.round(Math.max(edge, Math.min(y, p.height - h - edge)))}px`;
+    }
+
+    #tipHide() {
+      clearTimeout(this.#tipTimer);
+      this.#tipFor = null;
+      if (this.el?.tip) { this.el.tip.hidden = true; }
+    }
+
+    // The chevron: closes the list (full view and the voice panel with it) or opens it
+    #toggleOpen() {
+      const pill = this.el.pill;
+      clearTimeout(this.#hoverTimer);
+      if (!pill.classList.contains('open')) {
+        this.open();
+        this.sounds.play('expand');
+        return this.render();
+      }
+      if (this.full) { this.#setFull(false); }
+      if (this.voice.s !== 'off') { this.#voiceClose(); }
+      this.sounds.play('collapse');
+      pill.classList.remove('open');
+      this.render();
+    }
 
     // The Workspace window went to the pill (or came back): { minimized }
     setWorkspace(ws) {
@@ -1036,6 +1142,7 @@
       const n = this.sessions.length;
       this.#paint(this.el.count, n > 1 ? this.#stackHtml() : '');
       this.el.pill.classList.toggle('multi', n > 1);
+      this.el.pill.classList.toggle('solo', n === 1 && this.el.status.classList.contains('on') && !this.receipts[top?.id]);
       this.el.count.title = n > 1 ? this.#byPriority().map(s => `${Agent.displayName(s.agent)} · ${s.project} — ${T.state[s.state]}`).join('\n') : '';
 
       this.#expireToast();
@@ -1058,6 +1165,11 @@
       this.#paint(this.el.list, this.#listHtml() + this.#newSessionHtml() + this.#musicHtml());
       // The ⋯ row closes with the pill
       if (!this.el.pill.classList.contains('open')) { this.#more = false; }
+      const isOpen = this.el.pill.classList.contains('open');
+      this.el.chevBtn.setAttribute('aria-expanded', String(isOpen));
+      this.el.chevBtn.setAttribute('aria-label', isOpen ? T.collapse : T.expand);
+      this.el.chevBtn.dataset.tip = isOpen ? T.collapse : T.expand;
+      if (this.#tipFor && !this.#tipFor.isConnected) { this.#tipHide(); }
       this.#renderMore();
     }
 
@@ -1080,7 +1192,7 @@
       const text = top?.perm?.kind === 'question' ? T.asksYou : T.state[state];
       this.el.status.classList.toggle('on', on);
       this.el.status.classList.toggle('busy', state === 'thinking' || state === 'working');
-      this.el.statusText.textContent = on ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+      this.el.statusText.textContent = on ? cap(text) : '';
       const p = top && this.progress[top.id];
       this.el.progress.classList.toggle('on', !!p);
       this.el.progress.style.setProperty('--p', p ? `${Math.round((p.done / p.total) * 100)}%` : '0%');
@@ -1421,10 +1533,11 @@
       if (!this.sessions.length) { return `<div class="empty">${T.noActive}</div>`; }
       // project (strong) · agent and tokens (quiet) on top, the latest message as plain text under them;
       // the tags on the right all share one chip style, the actions brighten on hover
-      return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}" style="--c:${COLORS[s.state]}">
-          <div class="avatar" title="${esc(T.state[s.state])}"><div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div></div>
-          <span class="name"><span class="l1"><b title="${esc(s.project)}">${esc(s.project)}</b><span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}</span>${this.#tokensHtml(s.id)}</span>${this.#outHtml(s.id)}${this.full ? this.#histHtml(s) : ''}</span>
-          <span class="meta">${this.queues[s.id] ? `<span class="tag queue" title="${T.queuedTip(this.queues[s.id])}">${ICON_QUEUE}${this.queues[s.id]}</span>` : ''}${this.#diffHtml(s.id)}${this.#collisionHtml(s.id)}<span class="tag st">${T.state[s.state]}${s.state === 'done' && this.receipts[s.id] ? (RECEIPT_MARK[this.receipts[s.id].status] || '') : ''}</span></span>
+      // A click anywhere on the row but its buttons opens the agent in the Workspace; the avatar is its keyboard stop
+      return this.sessions.map((s, i, all) => `<div class="row${i === all.length - 1 ? ' last' : ''}" data-act="agent" data-sid="${esc(s.id)}" style="--c:${COLORS[s.state]}">
+          <button type="button" class="avatar" data-act="agent" data-sid="${esc(s.id)}" title="${esc(T.openAgent(s.project, T.state[s.state]))}" aria-label="${esc(T.openAgent(s.project, T.state[s.state]))}"><div class="mascot mini" data-s="${s.state}" style="--ring:${COLORS[s.state]}">${MascotView.thumb(s.agent)}</div></button>
+          <span class="name"><span class="l1"><b title="${esc(s.project)}">${esc(s.project)}</b><span class="agent">${esc(Agent.displayName(s.agent))}${s.role === 'challenger' ? ` · <span class="role">${T.challenger}</span>` : ''}</span>${this.#tokensHtml(s.id)}${this.#ageHtml(s)}</span>${this.#rowNoteHtml(s.id) || (s.perm ? this.#askHtml(s) : this.#outHtml(s.id))}${this.full ? this.#histHtml(s) : ''}</span>
+          <span class="meta">${this.queues[s.id] ? `<span class="tag queue" title="${T.queuedTip(this.queues[s.id])}">${ICON_QUEUE}${this.queues[s.id]}</span>` : ''}${this.#diffHtml(s.id)}${this.#collisionHtml(s.id)}${this.#taskTagHtml(s)}<span class="tag st">${cap(T.state[s.state])}${s.state === 'done' && this.receipts[s.id] ? (RECEIPT_MARK[this.receipts[s.id].status] || '') : ''}</span></span>
           <span class="acts">${this.#rowControls(s)}</span></div>`).join('');
     }
 
@@ -1434,14 +1547,48 @@
       return text ? `<span class="out" title="${esc(text)}">${esc(text)}</span>` : '';
     }
 
-    // Prompt needs a tmux pane (and no pending permission); stop only for sessions Bayloob launched
+    // A short note in place of a row's latest line (e.g. its terminal could not be opened), for a few seconds
+    #noteRow(sid, text) {
+      this.rowNote = { sid, text, until: Date.now() + ROW_NOTE_MS };
+      setTimeout(() => this.render(), ROW_NOTE_MS + 50);
+    }
+    #rowNoteHtml(sid) {
+      const n = this.rowNote;
+      return n?.sid === sid && Date.now() < n.until ? `<span class="out err" role="alert" title="${esc(n.text)}">${esc(n.text)}</span>` : '';
+    }
+
+    // What the agent waits on, in place of its latest line: the tool and its command, so ✓ / ✗ aren't blind
+    #askHtml(s) {
+      const { tool, detail, kind } = s.perm;
+      const text = kind === 'question' ? T.asksYou : [tool, detail].filter(Boolean).join(' · ');
+      return `<span class="out ask" title="${esc(text)}">${esc(text)}</span>`;
+    }
+
+    // " · 12m" since the session started, with the start time on hover
+    #ageHtml(s) {
+      if (!s.startedAt) { return ''; }
+      return `<span class="age" title="${esc(T.startedAgo(ago(s.startedAt)))}">${formatAge(Date.now() - s.startedAt)}</span>`;
+    }
+
+    // The workflow task this agent works for: a chip that opens it in Tasks
+    #taskTagHtml(s) {
+      if (!s.task) { return ''; }
+      const title = this.taskTitles.get(s.task) || T.task;
+      return `<button type="button" class="tag task" data-act="open-task" data-task="${esc(s.task)}" title="${esc(`${T.openTask}: ${title}`)}" aria-label="${esc(`${T.openTask}: ${title}`)}">${ICON_FLOW}<span>${esc(title)}</span></button>`;
+    }
+
+    // ✗ / ✓ for a pending permission right on the row (a question is answered on the card); prompt needs a
+    // tmux pane and no pending permission; stop (only for sessions Bayloob launched) always sits last
     #rowControls(s) {
       const sid = esc(s.id);
       const armed = this.confirmStop === s.id;
+      const perm = s.perm && s.perm.kind !== 'question' ? s.perm : null;
       return [
+        perm ? `<button type="button" class="icon deny" data-act="deny" data-id="${esc(perm.id)}" title="${esc(T.denyTool(perm.tool))}" aria-label="${esc(T.denyTool(perm.tool))}">${ICON_X}</button>` : '',
+        perm ? `<button type="button" class="icon allow" data-act="allow" data-id="${esc(perm.id)}" ${perm.hidden ? `disabled title="${T.allowBlocked}" aria-label="${T.allowBlocked}"` : `title="${esc(T.allowTool(perm.tool))}" aria-label="${esc(T.allowTool(perm.tool))}"`}>${ICON_CHECK}</button>` : '',
         !s.perm ? `<button type="button" class="icon" data-act="prompt" data-sid="${sid}" title="${T.sendPrompt}" aria-label="${T.sendPrompt}">${ICON_PROMPT}</button>` : '',
-        s.stoppable ? `<button type="button" class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}" aria-label="${armed ? T.confirmStop : T.stop}">${ICON_STOP}</button>` : '',
         `<button type="button" class="icon" data-act="focus" data-sid="${sid}" title="${T.openTerminal}" aria-label="${T.openTerminal}">${ICON_TERM}</button>`,
+        s.stoppable ? `<button type="button" class="icon stop${armed ? ' armed' : ''}" data-act="stop" data-sid="${sid}" title="${armed ? T.confirmStop : T.stop}" aria-label="${armed ? T.confirmStop : T.stop}">${armed ? `<span>${T.stopShort}</span>` : ICON_STOP}</button>` : '',
       ].join('');
     }
 
@@ -1548,6 +1695,7 @@
       this.el.voice.classList.remove('on');
       this.el.voice.dataset.s = 'off';
       this.el.voiceBtn.classList.remove('on');
+      this.el.voiceBtn.setAttribute('aria-pressed', 'false');
       this.el.pill.classList.remove('voicing');
       if (!this.hovering && !this.full) { this.el.pill.classList.remove('open'); this.render(); }
     }
@@ -1560,6 +1708,7 @@
       e.voice.dataset.s = s;
       e.voice.classList.add('on');
       e.voiceBtn.classList.add('on');
+      e.voiceBtn.setAttribute('aria-pressed', 'true');
       e.pill.classList.add('voicing', 'open');
       e.vnote.textContent = note || '';
       e.vnote.classList.toggle('warn', warn);
@@ -1624,6 +1773,7 @@
       const pill = this.el.pill;
       this.full = on;
       this.el.fullBtn.title = on ? T.shrinkTip : T.fullTip;
+      this.el.fullBtn.setAttribute('aria-label', on ? T.shrinkTip : T.fullTip);
       this.el.fullBtn.classList.toggle('on', on);
       if (on) {
         // the window grows first, then the pill animates into the new room
@@ -1681,6 +1831,7 @@
         if (bb.dataset.bar === 'full') { this.#setFull(!this.full); }
         if (bb.dataset.bar === 'workspace') { this.api?.openWorkspace(); }
         if (bb.dataset.bar === 'quit') { this.api?.quit(); }
+        if (bb.dataset.bar === 'toggle') { this.#toggleOpen(); }
         if (bb.dataset.bar === 'more') { this.#more = !this.#more; }
         else if (bb.closest('#moremenu')) { this.#more = false; }
         this.#renderMore();
@@ -1761,9 +1912,12 @@
         const r = this.api ? await this.api.focus(b.dataset.sid) : { ok: false };
         if (r?.ok) { this.toast = null; }
         else if (this.toast) { this.toast.hint = T.focusFailed; }
+        else { this.#noteRow(b.dataset.sid, r?.error || T.focusFailed); }
         this.render();
       } else if (act === 'music') {
         this.api?.music(b.dataset.m);
+      } else if (act === 'agent') {
+        this.api?.openAgent(b.dataset.sid);
       } else if (act === 'new') {
         this.api?.openLauncher();
       } else if (act === 'prompt') {
@@ -1846,6 +2000,22 @@
         this.#permScroll.set(e.target.dataset.perm, e.target.scrollTop);
         this.#syncPermScroll();
       }, true);
+      // Tooltips: the title moves to data-tip (so the native one never shows) and is drawn inside the pill
+      pill.addEventListener('pointerover', e => {
+        const el = e.target.closest?.('[title], [data-tip]');
+        if (el && el !== this.#tipFor && pill.contains(el)) { this.#tipShow(el); }
+      });
+      pill.addEventListener('pointerout', e => {
+        if (this.#tipFor && !this.#tipFor.contains(e.relatedTarget)) { this.#tipHide(); }
+      });
+      pill.addEventListener('pointerdown', () => this.#tipHide());
+      pill.addEventListener('focusin', e => {
+        if (!e.target.matches(':focus-visible')) { return; }
+        // the keyboard reaches the list without a hover
+        if (!pill.classList.contains('open')) { this.open(); this.render(); }
+        if (e.target.matches('[title], [data-tip]')) { this.#tipShow(e.target, 0); }
+      });
+      pill.addEventListener('focusout', () => this.#tipHide());
       // Opens a beat after the pointer arrives and closes a beat after it leaves: passing over the pill or
       // slipping off its edge for a moment doesn't make it flicker
       pill.addEventListener('mouseenter', () => {

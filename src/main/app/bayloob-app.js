@@ -676,13 +676,16 @@ class BayloobApp {
     this.#startPanelUpdates();
   }
 
-  /** The workspace in a resizable window of its own; `section` opens it there (e.g. 'tasks'). */
-  async openWorkspaceWindow(section = null) {
+  /**
+   * The workspace in a resizable window of its own; `section` opens it there (e.g. 'tasks'), `select` on one
+   * of its rows (e.g. 'agent:<session id>').
+   */
+  async openWorkspaceWindow(section = null, select = null) {
     this.panel.hide();
     if (!this.workspaceWindow.win) {
       this.#tasksShown = false; // a new window has no Tasks page yet
     }
-    await this.workspaceWindow.show(this.#panelState({ section }));
+    await this.workspaceWindow.show(this.#panelState({ section, select }));
     this.#sendUsage();
     this.#startPanelUpdates();
   }
@@ -711,6 +714,13 @@ class BayloobApp {
       return w.focus();
     }
     return this.openWorkspaceWindow();
+  }
+
+  /** The pill's session rows: the Workspace window on that agent, with its console */
+  openAgent(session) {
+    return session
+      ? this.openWorkspaceWindow("agents", `agent:${session.id}`)
+      : this.showWorkspace();
   }
 
   // The global Workspace shortcut: the window in front goes to the pill, otherwise it comes up
@@ -1649,6 +1659,7 @@ class BayloobApp {
     ipcMain.on("stop-session", (_e, sessionId) => this.stopSession(session(sessionId)));
     ipcMain.on("toggle-panel", () => this.togglePanel());
     ipcMain.on("open-workspace", () => this.showWorkspace());
+    ipcMain.on("open-agent", (_e, sessionId) => this.openAgent(session(sessionId)));
     ipcMain.on("quit-app", () => app.quit());
     // The pill's sound button: flips the setting (saved like Settings does; the change re-sends the config)
     ipcMain.on("toggle-sounds", () => {

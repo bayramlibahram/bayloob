@@ -106,3 +106,24 @@ test("decisions are encoded the way Claude Code expects", () => {
   assert.equal(JSON.parse(decisionBody("deny")).hookSpecificOutput.decision.behavior, "deny");
   assert.equal(decisionBody("terminal"), "");
 });
+
+test("commands read from the session's folder", () => {
+  const cwd = "/mnt/work/shop";
+  const run = command =>
+    describeActivity(
+      { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } },
+      cwd
+    ).detail;
+  assert.equal(run("cd /mnt/work/shop && bun test"), "bun test");
+  assert.equal(run('cd "/mnt/work/shop/"; ls'), "ls");
+  assert.equal(run("ls /mnt/work/shop/dist /mnt/work/shop"), "ls ./dist .");
+  assert.equal(run("ls /mnt/work/shopping"), "ls /mnt/work/shopping");
+  assert.equal(run("cd /tmp && ls"), "cd /tmp && ls");
+  const home = process.env.HOME;
+  process.env.HOME = "/home/me";
+  try {
+    assert.equal(run("cat /home/me/.bashrc"), "cat ~/.bashrc");
+  } finally {
+    process.env.HOME = home;
+  }
+});

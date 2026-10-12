@@ -905,13 +905,15 @@
       this.status = state.status || null;
       // Opens on the Inbox when something waits for you, otherwise on the agents
       this.section = state.section && NAV.flat().includes(state.section) ? state.section : this.#items('inbox').length ? 'inbox' : 'agents';
-      this.selected = null;
+      // Opened on one row (the pill's session rows: 'agent:<id>'), when it is still there
+      this.selected = state.select && this.sessions.some(s => `agent:${s.id}` === state.select) ? state.select : null;
       this.#closePal();
       this.launchMode = false;
       this.query = '';
       this.el.search.value = '';
       this.render();
       this.#fit();
+      if (this.selected) { this.el.rows.querySelector('.row.sel')?.scrollIntoView({ block: 'nearest' }); }
     }
     setSessions(list) {
       // Agents that just finished their turn, newest first, until replied to or dismissed

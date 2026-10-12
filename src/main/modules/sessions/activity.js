@@ -20,6 +20,26 @@ function relDir(dir, cwd) {
 }
 const where = (file, cwd) => relDir(path.dirname(String(file)), cwd);
 
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// A command as it reads from the session's folder: a leading `cd <folder> &&` dropped, the folder itself
+// as "." and the home folder as "~" ("cd /home/me/shop && ls /home/me/shop/dist" → "ls ./dist")
+function relCommand(command, cwd) {
+  let s = String(command ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cwd) {
+    const dir = escapeRe(cwd);
+    s = s.replace(new RegExp(`^cd (["']?)${dir}/?\\1 *(&&|;) *`), "");
+    s = s.replace(new RegExp(`${dir}(?=/|\\s|["']|$)`, "g"), ".");
+  }
+  const home = process.env.HOME;
+  if (home && home !== "/") {
+    s = s.replace(new RegExp(`${escapeRe(home)}(?=/|\\s|["']|$)`, "g"), "~");
+  }
+  return short(s);
+}
+
 function fileActivity(verb, input, cwd) {
   const file = input?.file_path || input?.notebook_path || input?.path;
   return file
@@ -46,7 +66,7 @@ function toolActivity(tool, input = {}, cwd) {
     case "Read":
       return fileActivity("Reading", input, cwd);
     case "Bash":
-      return { title: "Running a command", detail: short(input.command) };
+      return { title: "Running a command", detail: relCommand(input.command, cwd) };
     case "Grep":
       return {
         title: `Searching for “${short(input.pattern, 40)}”`,

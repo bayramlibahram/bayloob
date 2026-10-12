@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   // The Workspace window minimized to the pill (or back): { minimized }
   onWorkspace: cb => ipcRenderer.on("workspace", (_e, ws) => cb(ws)),
   openWorkspace: () => ipcRenderer.send("open-workspace"),
+  // The Workspace window on one agent (its detail and console)
+  openAgent: sessionId => ipcRenderer.send("open-agent", sessionId),
   quit: () => ipcRenderer.send("quit-app"),
   fixError: sessionId => ipcRenderer.send("fix-error", sessionId),
   askTests: sessionId => ipcRenderer.send("ask-tests", sessionId),
