@@ -23,6 +23,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { displayName } from "@/lib/agents";
 import { cn } from "@/lib/utils";
+import { Discussion } from "./Discussion";
 import { clockTime, findingsIn, LIVE, logText, OPEN_TASK, tilde, waitingText } from "./model";
 import {
   ArtifactState,
@@ -36,6 +37,7 @@ import {
   Output,
   useArtifact,
 } from "./parts";
+import { Runbook } from "./Runbook";
 import { useTasks } from "./store";
 
 const ISTATUS = {
@@ -1020,17 +1022,6 @@ function Turn({ t, n, open }) {
   );
 }
 
-// ---------- not yet in the React window (step 6b) ----------
-
-function Later({ name }) {
-  return (
-    <Nothing
-      title={`${name} comes to this window in the next step`}
-      hint="Until then it's in the Tasks window as before (without BAYLOOB_REACT=tasks)."
-    />
-  );
-}
-
 export const PANES = {
   overview: Overview,
   plan: Plan,
@@ -1041,6 +1032,6 @@ export const PANES = {
   report: Report,
   log: Log,
   delegation: Delegation,
-  discussion: () => <Later name="The discussion" />,
-  runbook: () => <Later name="The runbook" />,
+  discussion: Discussion,
+  runbook: Runbook,
 };

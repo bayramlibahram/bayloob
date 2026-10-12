@@ -5,7 +5,8 @@ import fixture from "./fixtures/demo-tasks.json";
 import { columnOf, logText, preferredTab, stageNote, tabsOf } from "./model";
 import { connect, useTasks } from "./store";
 
-// Three tasks the engine ran end to end (scripts/task-demo.js): a pipeline, a best-of-N, a review board
+// Tasks the engine ran end to end (scripts/task-demo.js): a pipeline, a best-of-N, a review board, a
+// discussion, and an incident analysis given a runbook (its steps from main's parseRunbook)
 const demo = () => structuredClone(fixture.tasks);
 const byPattern = (tasks, id) => tasks.find(t => t.template.id === id);
 /** A done task made to wait on you at `gate`. */
@@ -101,7 +102,7 @@ test("the filter and the layouts", async () => {
   fireEvent.click(screen.getByRole("radio", { name: "List" }));
   expect(screen.getByRole("button", { name: /Task/ })).toBeTruthy(); // the sortable head
   fireEvent.click(screen.getByRole("radio", { name: "Timeline" }));
-  expect(screen.getAllByTitle(/Started \d/).length).toBe(3); // one lane per task
+  expect(screen.getAllByTitle(/Started \d/).length).toBe(fixture.tasks.length); // one lane per task
 });
 
 test("a decision: Alt+A takes the main one; Request changes asks for a note first; Abort asks to confirm", async () => {
@@ -188,4 +189,93 @@ test("a task's change re-renders it and reads its artifacts again; Esc goes back
   expect(api.log.mock.calls.length).toBeGreaterThan(calls);
   await act(async () => fireEvent.keyDown(document.body, { key: "Escape" }));
   expect(useTasks.getState().view).toBe("board");
+});
+
+// ---------- 6b: the discussion and the runbook ----------
+
+const live = t => ({ ...t, status: "running", endedAt: null });
+
+test("the discussion: the thread, a filter by participant, other views, and a message into the next turn", async () => {
+  api.discussion = vi.fn(async () => ({ ok: true }));
+  const tasks = demo().map(live);
+  const talk = byPattern(tasks, "talk-critique");
+  await open(tasks);
+  await act(async () => useTasks.getState().openTask(talk.id));
+  await act(async () => useTasks.getState().setTab("discussion"));
+  const feed = screen.getByRole("feed", { name: "Discussion thread" });
+  const all = within(feed).getAllByRole("article").length;
+  expect(all).toBe(talk.discussion.messages.length);
+  // only one participant's messages
+  const first = talk.discussion.participants[0];
+  fireEvent.click(
+    screen.getAllByRole("button", { name: new RegExp(first.name.split(" · ")[0]) })[0]
+  );
+  expect(within(feed).getAllByRole("article").length).toBeLessThan(all);
+  fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Stance timeline" }));
+  expect(screen.getAllByRole("columnheader", { name: /Round \d of \d/ }).length).toBe(
+    talk.discussion.round
+  );
+  fireEvent.click(screen.getByRole("radio", { name: "Thread" }));
+  const box = screen.getByLabelText("Message to the participants");
+  fireEvent.change(box, { target: { value: "keep it short" } });
+  await act(async () => fireEvent.keyDown(box, { key: "Enter", ctrlKey: true }));
+  expect(api.discussion).toHaveBeenCalledWith(talk.id, "message", {
+    text: "keep it short",
+    to: null,
+  });
+  expect(box.value).toBe("");
+});
+
+test("the runbook: a click-level step runs at once, a typed one wants the host's name, a refused one can't run", async () => {
+  api.runbook = vi.fn(async () => ({ ok: true }));
+  const tasks = demo().map(live);
+  const inc = byPattern(tasks, "analysis-incident");
+  const [s1, s2] = inc.runbook.steps;
+  await open(tasks);
+  await act(async () => useTasks.getState().openTask(inc.id));
+  await act(async () => useTasks.getState().setTab("runbook"));
+  expect(screen.getByText("git log -5 --oneline")).toBeTruthy();
+  // a bare Enter on Run does nothing
+  const run = () => screen.getByRole("button", { name: /^Run/ });
+  expect(fireEvent.keyDown(run(), { key: "Enter" })).toBe(false);
+  expect(api.runbook).not.toHaveBeenCalled();
+  await act(async () => fireEvent.click(run()));
+  expect(api.runbook).toHaveBeenCalledWith(inc.id, s1.id, "run", {});
+
+  // step 2 (staging, typed): Run asks for the host's name first
+  const done = {
+    ...inc,
+    runbook: { ...inc.runbook, steps: [{ ...s1, status: "done" }, ...inc.runbook.steps.slice(1)] },
+    updatedAt: inc.updatedAt + 1,
+  };
+  await act(async () => api.task(done));
+  await act(async () => fireEvent.click(run()));
+  const go = screen.getByRole("button", { name: /^Run$/ });
+  expect(go.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText(`Type ${s2.hostName} to run this step`), {
+    target: { value: s2.hostName },
+  });
+  expect(go.disabled).toBe(false);
+  await act(async () => fireEvent.click(go));
+  expect(api.runbook).toHaveBeenLastCalledWith(inc.id, s2.id, "run", { typed: s2.hostName });
+
+  // step 3 (prod, not in its allowed patterns): only edit or skip
+  const third = {
+    ...done,
+    runbook: {
+      ...done.runbook,
+      steps: [done.runbook.steps[0], { ...s2, status: "done" }, done.runbook.steps[2]],
+    },
+    updatedAt: done.updatedAt + 1,
+  };
+  await act(async () => api.task(third));
+  expect(screen.getByText(/isn’t in its allowed patterns/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Run/ })).toBeNull();
+});
+
+test("an edited command goes back as argv", async () => {
+  const { parseArgv, commandLine } = await import("./Runbook");
+  expect(parseArgv(`grep -r "a b" 'c d' e`)).toEqual(["grep", "-r", "a b", "c d", "e"]);
+  expect(commandLine(["echo", "it's", "a b"])).toBe(`echo 'it'\\''s' 'a b'`);
 });

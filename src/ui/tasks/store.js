@@ -284,6 +284,104 @@ export const useTasks = create((set, get) => ({
     }
   },
 
+  // ---------- the discussion ----------
+
+  disc: { view: "thread", filter: null, q: "", to: "", text: "" }, // the Discussion tab's own state
+  setDisc: patch => set(s => ({ disc: { ...s.disc, ...patch } })),
+
+  /** pin · pause · end · message · ask, for the open task's discussion; false (and a toast) if refused. */
+  async discuss(action, opts = {}) {
+    const r = await get().api.discussion?.(get().open, action, opts);
+    if (!r?.ok) {
+      toast.error(r?.error || "Something went wrong");
+      return false;
+    }
+    return true;
+  },
+
+  /** Writes to everyone (or asks the one picked): it goes into the next turn. */
+  async say(ask = false) {
+    const { disc, discuss } = get();
+    const text = disc.text.trim();
+    if (!text) {
+      return toast.error("Write the message first");
+    }
+    if (await discuss(ask ? "ask" : "message", { text, to: disc.to || null })) {
+      get().setDisc({ text: "" });
+      toast(ask ? "Asked — they answer next" : "Sent — it goes into the next turn");
+    }
+  },
+
+  /** The thread as Markdown (thread.md, as the participants read it). */
+  async saveThread() {
+    const id = get().open;
+    const text = await get()
+      .api.artifact(id, "thread.md")
+      .catch(() => null);
+    if (!text) {
+      return toast.error("There is no thread yet");
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+    a.download = `discussion-${id}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  },
+
+  openDiscussion: () => get().api.openDiscussion?.(get().open),
+
+  // ---------- the runbook ----------
+
+  ops: null, // the step being confirmed / typed / edited: { task, step, mode, action, typed, argv }
+  setOps: ops => set({ ops }),
+
+  /** run · dry · rollback · skip · edit for one step; false (and a toast) when main refused it. */
+  async runbook(stepId, action, opts = {}) {
+    const r = await get().api.runbook?.(get().open, stepId, action, opts);
+    if (r && !r.ok) {
+      toast.error(r.error);
+      return false;
+    }
+    set({ ops: null });
+    return true;
+  },
+
+  /**
+   * A step's Run / Dry run / Rollback: straight away when its level is "click", otherwise its confirmation
+   * first (a prod host's name typed for "typed").
+   */
+  runStep(step, action) {
+    const level =
+      action === "dry"
+        ? step.env === "prod"
+          ? "confirm"
+          : "click"
+        : step.level === "click" && action === "rollback"
+          ? "confirm"
+          : step.level;
+    if (level === "click") {
+      return get().runbook(step.id, action);
+    }
+    set({
+      ops: {
+        task: get().open,
+        step: step.id,
+        mode: level === "typed" ? "typed" : "confirm",
+        action,
+        typed: "",
+      },
+    });
+  },
+
+  async allowPattern(offer) {
+    const r = await get().api.allowPattern?.(offer.host, offer.pattern);
+    if (r?.ok) {
+      toast("Added to the host’s allowed commands");
+    } else {
+      toast.error(r?.error || "Something went wrong");
+    }
+  },
+
   newTask: () => get().api?.newTask(),
   control: action => get().api?.control(action),
 }));

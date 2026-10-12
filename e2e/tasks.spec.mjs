@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { launch } from "./app.mjs";
 
-// Three tasks the engine ran end to end (scripts/task-demo.js), one made to wait on a plan
+// Tasks the engine ran end to end (scripts/task-demo.js); the incident analysis carries a runbook
 const fixture = JSON.parse(readFileSync("src/ui/tasks/fixtures/demo-tasks.json", "utf8"));
 
 // The Tasks page sits in the Workspace window; here the built page gets a window of its own with its real
@@ -10,15 +10,23 @@ const fixture = JSON.parse(readFileSync("src/ui/tasks/fixtures/demo-tasks.json",
 async function openTasks(app) {
   await app.evaluate(async ({ app: a, BrowserWindow, ipcMain }, fx) => {
     globalThis.sent = [];
-    for (const ch of ["tasks:log", "tasks:artifact", "tasks:decide"]) {
+    for (const ch of [
+      "tasks:log",
+      "tasks:artifact",
+      "tasks:decide",
+      "tasks:discussion",
+      "tasks:runbook",
+    ]) {
       ipcMain.removeHandler(ch);
     }
     ipcMain.handle("tasks:log", (_e, id) => fx.logs[id] || []);
     ipcMain.handle("tasks:artifact", (_e, id, name) => fx.arts[`${id}:${name}`] ?? null);
-    ipcMain.handle("tasks:decide", (_e, ...args) => {
-      globalThis.sent.push(args);
-      return { ok: true };
-    });
+    for (const ch of ["tasks:decide", "tasks:discussion", "tasks:runbook"]) {
+      ipcMain.handle(ch, (_e, ...args) => {
+        globalThis.sent.push(ch === "tasks:decide" ? args : [ch, ...args]);
+        return { ok: true };
+      });
+    }
     const root = a.getAppPath();
     const w = new BrowserWindow({
       width: 1280,
@@ -72,6 +80,44 @@ test("the board and a task's detail; Alt+A approves the plan through main", asyn
       .toEqual([[pipe.id, "g1", "approve", {}]]);
     await win.keyboard.press("Escape");
     await expect(win.getByRole("heading", { name: "Tasks" })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("a message into the discussion, and a runbook step run from its card", async () => {
+  const app = await launch();
+  try {
+    const win = await openTasks(app);
+    const tasks = structuredClone(fixture.tasks).map(t => ({
+      ...t,
+      status: "running",
+      endedAt: null,
+    }));
+    const talk = tasks.find(t => t.template.id === "talk-critique");
+    const inc = tasks.find(t => t.template.id === "analysis-incident");
+    await app.evaluate((_, st) => globalThis.tasksPage.webContents.send("tasks:show", st), {
+      tasks,
+      usage: null,
+      home: "/home/u",
+      templates: [],
+    });
+    await win.locator(`[data-card="${talk.id}"]`).click();
+    await win.getByRole("tab", { name: /Discussion/ }).click();
+    await expect(win.getByRole("feed", { name: "Discussion thread" })).toBeVisible();
+    await win.getByLabel("Message to the participants").fill("keep it short");
+    await win.keyboard.press("Control+Enter");
+    await win.keyboard.press("Escape");
+    await win.locator(`[data-card="${inc.id}"]`).click();
+    await win.getByRole("tab", { name: /Runbook/ }).click();
+    await win.locator('[data-step="s1"]').focus();
+    await win.keyboard.press("Alt+Enter");
+    await expect
+      .poll(() => app.evaluate(() => globalThis.sent))
+      .toEqual([
+        ["tasks:discussion", talk.id, "message", { text: "keep it short", to: null }],
+        ["tasks:runbook", inc.id, "s1", "run", {}],
+      ]);
   } finally {
     await app.close();
   }

@@ -67,7 +67,7 @@ function Header() {
         <>
           <Novi agent="manager" className="size-7" />
           <b className="text-[15px] font-bold">bayloob</b>
-          <span className="h-4.5 w-px bg-input" />
+          {!s.discussionMode && <span className="h-4.5 w-px bg-input" />}
         </>
       )}
       {!s.discussionMode && (
