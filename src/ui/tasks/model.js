@@ -1,7 +1,7 @@
 import { displayName } from "@/lib/agents";
 
 // What the Tasks window reads off a task (main's engine.list() shape) — no React, no store, so the board,
-// the detail and the tests all read a task the same way. The words are the old page's (src/renderer/tasks).
+// the detail and the tests all read a task the same way. The words are the old page's (removed; see git history).
 
 export const COLS = ["queued", "running", "needs", "review", "done", "failed"];
 export const COL_NAME = {
