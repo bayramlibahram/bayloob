@@ -579,7 +579,7 @@
     border-bottom: 1px solid var(--line); }
   .cols .c { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
   .cols .c i { display: block; width: min(28px, 100%); border-radius: 4px 4px 0 0; background: var(--brand); min-height: 0; }
-  .cols .c .val { position: absolute; top: -2px; font-size: 11.5px; color: var(--soft); opacity: 0; transition: opacity .12s; font-variant-numeric: tabular-nums; }
+  .cols .c .val { position: absolute; top: -17px; /* above the bar, even the tallest (the padding keeps room) */ font-size: 11.5px; color: var(--soft); opacity: 0; transition: opacity .12s; font-variant-numeric: tabular-nums; }
   .cols .c:hover .val, .cols .c.today .val { opacity: 1; }
   .cols .c:hover i { filter: brightness(1.15); }
   .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }
