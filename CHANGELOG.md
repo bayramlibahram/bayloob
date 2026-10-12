@@ -20,11 +20,12 @@
   row gives way on a narrow box and Send always fits.
 - **Menus**: every dropdown is a styled menu (keyboard, type-ahead), and it stays open while an agent's output
   scrolls by.
+- **Ask Bayloob** starts in two Enters: write, Enter → pick the agent and folder (all on view), Enter starts it.
 
 ### Fixed
 - Text you typed after the first Enter, or while a prompt went out, could be lost.
 - A background task's notification or another agent's report showed as your prompt; Codex prompts showed their
-  response format. The console shows what you typed.
+  response format, and a role agent's showed its instructions. The console shows what you typed.
 - A mouse click followed by a live redraw left a keyboard focus ring on the button.
 
 ## 0.10.1 — 2026-10-12

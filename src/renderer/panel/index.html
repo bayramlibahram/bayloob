@@ -223,7 +223,6 @@
   .ask .box .count:empty { display: none; }
   kbd { padding: 0 4px; border-radius: 4px; border: 1px solid var(--line-strong); font: 600 10.5px/1.5 ui-monospace, monospace; color: var(--soft); }
   .hint kbd { font-size: 10px; }
-  .confirm .btn kbd { margin-left: 5px; border-color: currentColor; color: inherit; opacity: .8; }
   .box textarea::placeholder, .box input::placeholder { color: var(--muted); }
   .send { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--brand); color: #fff; }
   .send:disabled { opacity: .35; cursor: default; }
@@ -246,23 +245,7 @@
   .finished .btn.on { background: var(--done); color: var(--on-done); border-color: transparent; }
   .finished .x { width: 28px; height: 28px; border-radius: 8px; color: var(--muted); }
   .finished .x:hover { background: rgb(var(--ink) / .08); color: var(--text); }
-  .confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 8px 8px 12px; border-radius: 12px;
-    background: color-mix(in srgb, var(--brand) 9%, transparent); border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); animation: cin .15s ease-out; }
-  .confirm[hidden] { display: none; }
   @keyframes cin { from { opacity: 0; transform: translateY(-3px); } }
-  .confirm .q { flex: 1; min-width: 0; color: var(--soft, var(--soft)); font-size: 12.5px; overflow-wrap: anywhere; }
-  .confirm .q b { color: var(--text); }
-  .confirm code { font: 12px ui-monospace, monospace; color: var(--text); }
-  .confirm .badge { padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-  .confirm .badge.now { color: var(--done); background: color-mix(in srgb, var(--done) 12%, transparent); }
-  .confirm .badge.paste { color: var(--brand-soft); background: color-mix(in srgb, var(--brand) 12%, transparent); }
-  .confirm .badge.queue { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
-  .confirm .btn { padding: 6px 12px; }
-  .confirm .btn.on[type=submit] { background: var(--brand); border-color: transparent; color: #fff; }
-  .confirm .btn.on[type=submit]:hover { filter: brightness(1.1); background: var(--brand); }
-  /* the agent column is narrow: the sentence gets its own line, the badge and buttons go under it */
-  .say .confirm .q { flex: 1 0 100%; }
-  .say .confirm .badge { margin-right: auto; }
   .ask { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
   /* Ask Bayloob: one line until there's more, then it grows (four lines, then it scrolls) */
   /* The composer (both boxes): a round bar — + (attach) on the left, the response format as plain text, a round
@@ -658,7 +641,6 @@
       <ul class="atts" id="askAtts" hidden></ul>
       <ul class="pastes" id="askPastes" hidden></ul>
       <div class="askpick" id="askPick" hidden></div>
-      <div class="confirm" id="askConfirm" hidden></div>
       <div class="hint" id="askHint" hidden aria-live="polite"></div>
     </form>
 
@@ -705,8 +687,6 @@
     withPastes: n => ` · ${n} pasted text${n === 1 ? '' : 's'}`,
     slashFoot: '↑ ↓ choose · Enter or Tab puts it in the box · Esc closes',
     withFiles: n => ` · ${n} file${n === 1 ? '' : 's'}`, attaching: 'Wait — the files are still being attached', now: 'now',
-    confirmLaunch: (agent, cwd) => `Launch <b>${agent}</b> in <code>${cwd}</code>`, inWorktree: '⑂ new worktree',
-    edit: 'Edit', launchBtn: '✓ Launch', confirmHint: 'Enter confirms · Esc goes back',
     taskDone: 'Task completed.',
     finishedIn: (agent, project) => `<span class="fhead"><b>${agent}</b> finished · ${project}</span>`, finishedMore: n => `+${n} more`,
     reply: 'Reply', dismissTip: 'Dismiss',
@@ -1002,7 +982,7 @@
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
         saySend: $('saySend'), sayHint: $('sayHint'), saySugg: $('saySugg'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
-        sayMode: $('sayMode'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
+        sayMode: $('sayMode'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
         pal: $('pal'), palText: $('palText'), palList: $('palList'),
         sayAttach: $('sayAttach'), sayFormat: $('sayFormat'), askFormat: $('askFormat'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts'),
         sayCount: $('sayCount'), askCount: $('askCount'), askSend: $('askSend') };
@@ -2089,8 +2069,11 @@
       if (this.askBox.empty) { return; }
       if (this.askBox.files.busy) { return this.#askHint(T.attaching, 'err'); }
       if (this.askBox.files.unconfirmed.length) { return this.#askHint(T.secretWait(this.askBox.files.unconfirmed), 'err'); }
-      if (!this.el.askConfirm.hidden) { return this.#askStart(); }
-      if (!this.el.askPick.hidden) { return this.#confirmAsk(true); }
+      // Picking: the agent, folder and worktree are all on view, so Enter (or Start) starts it
+      if (!this.el.askPick.hidden) {
+        this.askCwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
+        return this.#askStart();
+      }
       const opts = await this.api?.launchOptions();
       if (!opts) { return; }
       this.askOpts = opts;
@@ -2103,8 +2086,13 @@
       this.askWorktree = false;
       this.#renderAskPick();
       this.el.askPick.hidden = false;
-      this.#askHint(T.askHint);
+      this.#askHint(T.askHint + this.#askExtras());
       this.#fit();
+    }
+
+    // What goes along with the prompt (files, pasted text, the format), for the line under the picker
+    #askExtras() {
+      return `${this.askBox.files.count ? T.withFiles(this.askBox.files.count) : ''}${this.askBox.pastes.count ? T.withPastes(this.askBox.pastes.count) : ''}${this.#formatNote(this.el.askFormat)}`;
     }
 
     #renderAskPick() {
@@ -2121,27 +2109,6 @@
       this.el.askHint.hidden = !text;
       this.el.askHint.textContent = text;
       this.el.askHint.className = `hint ${kind}`;
-    }
-
-    // Between picking and launching: one line with everything that's about to start
-    #confirmAsk(on) {
-      if (on) {
-        this.askCwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
-        if (!this.askAgent || !this.askCwd) { return this.#askHint(T.pickFolder, 'err'); }
-        const a = this.askOpts.agents[this.askAgent];
-        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}${this.askBox.files.count ? T.withFiles(this.askBox.files.count) : ''}${this.askBox.pastes.count ? T.withPastes(this.askBox.pastes.count) : ''}${esc(this.#formatNote(this.el.askFormat))}</span>
-          <button type="button" class="btn" data-edit>${T.edit}<kbd aria-hidden="true">Esc</kbd></button>
-          <button type="submit" class="btn on">${T.launchBtn}<kbd aria-hidden="true">↵</kbd></button>`;
-        this.#askHint(T.confirmHint);
-      } else {
-        this.#renderAskPick();
-        this.#askHint(T.askHint);
-      }
-      this.el.askPick.hidden = on;
-      this.el.askConfirm.hidden = !on;
-      this.askBox.lock(on); // what is confirmed is what starts
-      if (on) { this.el.askConfirm.querySelector('[type=submit]')?.focus(); } else { this.el.askText.focus(); }
-      this.#fit();
     }
 
     async #askStart() {
@@ -2164,11 +2131,8 @@
 
     // Esc while picking the agent: the picker closes, what you wrote stays (Esc again clears it)
     #askClosePick() {
-      this.askBox.lock(false);
       this.el.askPick.hidden = true;
       this.el.askPick.innerHTML = '';
-      this.el.askConfirm.hidden = true;
-      this.el.askConfirm.innerHTML = '';
       this.#askHint('');
       this.askBox.changed();
       this.el.askText.focus();
@@ -2177,11 +2141,8 @@
 
     #askReset() {
       this.el.askText.value = '';
-      this.askBox.lock(false);
       this.el.askPick.hidden = true;
       this.el.askPick.innerHTML = '';
-      this.el.askConfirm.hidden = true;
-      this.el.askConfirm.innerHTML = '';
       this.#askHint('');
       this.askBox.changed();
       this.#fit();
@@ -2536,19 +2497,6 @@
           this.#sayHint(r?.ok ? T.handoffStarted : r?.error || 'Could not continue it in Bayloob', r?.ok ? 'ok' : 'err');
         }
       });
-      this.el.askConfirm.addEventListener('click', e => {
-        if (e.target.closest('[data-edit]')) { this.#confirmAsk(false); }
-      });
-      // While a prompt waits for its second Enter the text is read-only and focus sits on the confirm button,
-      // so a click in the text or more typing went nowhere: either one goes back to editing (the key lands in the text; Space still presses the button)
-      const editKey = e => !e.ctrlKey && !e.metaKey && !e.altKey && ((e.key.length === 1 && e.key !== ' ') || e.key === 'Backspace' || e.key === 'Delete');
-      const backToEdit = (form, ta, confirming, cancel) => {
-        ta.addEventListener('pointerdown', () => { if (confirming()) { cancel(); } });
-        form.addEventListener('keydown', e => {
-          if (confirming() && editKey(e) && !e.target.closest('textarea:not([readonly])')) { cancel(); ta.focus(); }
-        }, true);
-      };
-      backToEdit(this.el.ask, this.el.askText, () => !this.el.askConfirm.hidden, () => this.#confirmAsk(false));
       this.el.sayText.addEventListener('input', () => {
         this.#histPos = -1;
         this.#slashAt = 0;
@@ -2589,8 +2537,7 @@
         if (e.target.closest?.('#say, #ask')) {
           if (e.key === 'Escape') {
             e.preventDefault();
-            if (!this.el.askConfirm.hidden) { this.#confirmAsk(false); }
-            else if (!this.el.askPick.hidden) { this.#askClosePick(); }
+            if (!this.el.askPick.hidden) { this.#askClosePick(); }
             else if (e.target === this.el.askText && this.el.askText.value) { this.#askReset(); }
             else { e.target.blur(); }
           }
