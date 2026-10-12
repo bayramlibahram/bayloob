@@ -4,7 +4,8 @@
 @import "tw-animate-css";
 /* shadcn's variants (data-checked:, data-open:, data-vertical:… — what its components style Radix's states by) */
 @import "shadcn/tailwind.css";
-@import "../../renderer/shared/theme.css";
+/* in the base layer: its tokens apply, and its focus outline gives way to a component's own (outline-none) */
+@import "../../renderer/shared/theme.css" layer(base);
 
 /* Light / dark: theme.css switches the tokens on <html data-theme>; Tailwind's dark: follows the same switch */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
@@ -32,6 +33,11 @@
   --ring: var(--focus);
 }
 
+/* The windows are desktop popups 640px and up: md (shadcn's "not a phone") starts below the narrowest one */
+@theme {
+  --breakpoint-md: 36rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -57,6 +63,9 @@
   --color-working: var(--working);
   --color-waiting: var(--waiting);
   --color-thinking: var(--thinking);
+  --color-cat-single: var(--cat-single);
+  --color-cat-workflow: var(--cat-workflow);
+  --color-cat-analysis: var(--cat-analysis);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

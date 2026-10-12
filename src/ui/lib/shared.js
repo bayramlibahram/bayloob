@@ -3,6 +3,8 @@
 // where `module` exists (the test runner) it is the module's default export.
 import * as promptFormat from "../../shared/prompt-format.js";
 import * as roles from "../../shared/roles.js";
+import * as taskShape from "../../shared/task-shape.js";
 
 export const PromptFormat = globalThis.PromptFormat ?? promptFormat.default;
 export const Roles = globalThis.Roles ?? roles.default;
+export const TaskShape = globalThis.TaskShape ?? taskShape.default;

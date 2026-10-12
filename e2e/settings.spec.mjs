@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { launch, windowWith } from "./app.mjs";
+import { keepOpen, launch, windowWith } from "./app.mjs";
 
 // The demo keeps its settings in its own data folder (src/main/app/demo.js), never the owner's
 const saved = () =>
@@ -11,6 +11,7 @@ const saved = () =>
 async function openSettings(app) {
   await app.evaluate(({ ipcMain }) => ipcMain.emit("panel:open-settings"));
   const win = await windowWith(app, "out/renderer/settings/index.html");
+  await keepOpen(app, "out/renderer/settings/index.html");
   await expect(win.getByRole("tab", { name: /General/ })).toBeVisible();
   return win;
 }
@@ -33,14 +34,16 @@ test("Settings is the React one: six sections, themed, its page runs no inline s
     await expect(win.getByText("No hosts yet")).toBeVisible();
     // Big (960×700, or the screen less a margin), and its header moves it — the window has no title bar
     const [size, area] = await app.evaluate(({ BrowserWindow, screen }) => {
-      const w = BrowserWindow.getAllWindows().find(x => x.webContents.getURL().includes("settings"));
+      const w = BrowserWindow.getAllWindows().find(x =>
+        x.webContents.getURL().includes("settings")
+      );
       return [w.getBounds(), screen.getDisplayMatching(w.getBounds()).workArea];
     });
     expect(size.width).toBe(Math.min(960, area.width - 32));
     expect(size.height).toBe(Math.min(700, area.height - 32));
     expect(
-      await win.evaluate(
-        () => getComputedStyle(document.querySelector("header")).getPropertyValue("app-region")
+      await win.evaluate(() =>
+        getComputedStyle(document.querySelector("header")).getPropertyValue("app-region")
       )
     ).toBe("drag");
   } finally {
