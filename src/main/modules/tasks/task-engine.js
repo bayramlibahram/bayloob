@@ -29,6 +29,7 @@ const {
   validateTemplate,
   CODE_RUBRIC,
 } = require("../../../shared/workflow-templates");
+const Roles = require("../../../shared/roles");
 const { parseFindings } = require("../agents/challenge-report");
 const { parseSubtasks, overlaps, describeSubtask } = require("./subtasks");
 const { arbiterInput, parseDecision, parseReport, needsOwner } = require("./arbiter");
@@ -138,6 +139,7 @@ class TaskEngine extends EventEmitter {
     // uploads land), never from any path a page names
     attachments = null,
     stagingDir = null,
+    roles = () => null, // the owner's role agents (Settings → Agents → Roles): a stage's `persona` is one of them
   }) {
     super();
     Object.assign(this, {
@@ -151,6 +153,7 @@ class TaskEngine extends EventEmitter {
       ops,
       attachments,
       stagingDir,
+      roles,
     });
     scheduler.on("released", () => this.pump());
   }
@@ -1983,7 +1986,15 @@ ${prompt}`;
       hosts: st?.runbook ? this.#hostsText(st.hosts) : "",
       ...inst.vars,
     };
-    const text = renderPrompt(inst.prompt, vars, name => this.#artifactFor(task, name, cand?.id));
+    const rendered = renderPrompt(inst.prompt, vars, name =>
+      this.#artifactFor(task, name, cand?.id)
+    );
+    // A role agent's stage: the role's instructions first (its answer file is the stage's, when it names one)
+    const role = st?.persona ? Roles.get(this.roles(), st.persona) : null;
+    if (st?.persona && !role) {
+      this.#log(task, "engine", "role-missing", { stage: st.id, persona: st.persona });
+    }
+    const text = role ? Roles.wrap(rendered, { ...role, artifact: st.artifact || "" }) : rendered;
     // Attached files: their paths in the agent's folder, never their content (a text agent opens nothing)
     const files =
       task.attachments?.length && AGENTS[inst.adapter]?.kind !== "text"

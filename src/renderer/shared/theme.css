@@ -154,6 +154,26 @@
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+/* focus put back by code after a mouse click (refocus() in ui-common.js): no ring */
+.no-ring:focus-visible {
+  outline: none !important;
+}
+
+/* A <select>'s open list, in every window: options inherit the select's (often soft, light) text colour
+   and its transparent background, which Chromium paints white — light-on-white. Give them a solid
+   surface and full-contrast text in both themes. */
+option,
+optgroup {
+  background-color: var(--surface);
+  color: var(--text);
+}
+option:checked {
+  background-color: var(--primary-bg);
+  color: var(--primary-fg);
+}
+option:disabled {
+  color: var(--muted);
+}
 
 /* Numbers keep their width, so counts and clocks don't jiggle as they change */
 html {

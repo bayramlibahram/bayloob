@@ -149,6 +149,22 @@ function stateBlock({
   </div>`;
 }
 
+// Focus put back by code (a redraw, a menu closing) shows the keyboard ring only if the focus it replaces did.
+// Chromium rings any focus set by script once the old element is gone, so a mouse click followed by a live redraw
+// left a ring on the clicked button. Then the ring stays hidden until that element is left (or a key is pressed).
+function hasRing(el) {
+  return el.matches(":focus-visible") && !el.classList.contains("no-ring");
+}
+function refocus(el, ring) {
+  el.focus({ preventScroll: true });
+  if (!ring && el.matches(":focus-visible")) {
+    el.classList.add("no-ring");
+    const done = () => el.classList.remove("no-ring");
+    el.addEventListener("blur", done, { once: true });
+    el.addEventListener("keydown", e => e.key === "Tab" || done(), { once: true });
+  }
+}
+
 // Swaps a container's HTML without the jumps of a plain innerHTML rebuild: the scroll position of every element
 // with a data-k (or id), the open/closed state of each <details> (keyed by its summary text) and the focused
 // control with its caret all carry over to the new markup. A data-k that changes (e.g. per tab) starts at the top.
@@ -184,6 +200,7 @@ function swapHtml(root, html) {
   const active = root.contains(document.activeElement) ? document.activeElement : null;
   const focus = active && {
     key: focusKey(active),
+    ring: hasRing(active),
     sel: "selectionStart" in active ? [active.selectionStart, active.selectionEnd] : null,
   };
 
@@ -209,7 +226,7 @@ function swapHtml(root, html) {
   if (focus?.key) {
     const el = [...root.querySelectorAll("*")].find(x => focusKey(x) === focus.key);
     if (el) {
-      el.focus({ preventScroll: true });
+      refocus(el, focus.ring);
       if (focus.sel && "setSelectionRange" in el) {
         try {
           el.setSelectionRange(...focus.sel);

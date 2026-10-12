@@ -44,6 +44,11 @@
         "Each builder gets one subtask; the agents here take turns. Integrate merges the parts after",
     },
     saveAs: "Saves its answer as",
+    persona: "Runs as",
+    noPersona: "Just the agent",
+    personaTip:
+      "A role agent (Settings → Agents → Roles): its instructions go before this stage's prompt",
+    personaGone: "This role was removed in Settings — the stage runs as the plain agent",
     prompt: "Prompt — type {{ for a value",
     onFail: "On fail →",
     goTo: id => `go to ${id}`,
@@ -359,6 +364,7 @@
         body += `<div class="row">${s.role === "arbiter" ? `<label class="check" title="${B.arbiterTip}">${B.rubric} <input class="mono" style="min-width:420px" data-f="rubric" data-i="${i}" value="${esc(s.rubric || "")}" spellcheck="false"></label>` : `<button class="btn sm ghost" type="button" data-addagent="${i}">${ICO.plus} ${B.addAgent}</button>`}
           ${s.role === "reviewer" ? `<label class="check"><input type="checkbox" data-c="perCandidate" data-i="${i}"${s.perCandidate ? " checked" : ""}> ${B.perCandidate}</label>` : ""}
           ${B.split[s.role] ? `<label class="check" title="${B.splitTip[s.role]}"><input type="checkbox" data-c="split" data-i="${i}"${s.split ? " checked" : ""}> ${B.split[s.role]}</label>` : ""}
+          ${this.#personaHtml(s, i)}
           ${s.role !== "builder" ? `<label class="check">${B.saveAs} <input class="small mono" data-f="artifact" data-i="${i}" value="${esc(s.artifact || "")}" placeholder="answer.md" spellcheck="false"></label>` : ""}</div>`;
         body += this.#promptHtml(s.prompt, `prompt`, i, B.prompt);
       } else if (s.role === "discussion") {
@@ -712,6 +718,42 @@
     }
 
     /** A select changed. → 'render' | false */
+    // "Runs as": a role agent for this stage, or the plain agent
+    #personaHtml(s, i) {
+      const roles = this.view.state?.roles || [];
+      if (!roles.length) {
+        return "";
+      }
+      const gone = s.persona && !roles.some(r => r.id === s.persona);
+      return `<label class="check" title="${B.personaTip}">${B.persona} <select class="sel" data-s="persona" data-i="${i}" aria-label="${B.persona}">${opt("", B.noPersona, !s.persona)}${roles.map(r => opt(r.id, r.name, s.persona === r.id)).join("")}${gone ? opt(s.persona, s.persona, true) : ""}</select></label>${gone ? `<span class="warn" title="${B.personaGone}">⚠</span>` : ""}`;
+    }
+
+    // A role picked for a stage brings its defaults: its engine for the first agent, read-only unless the
+    // stage builds, its answer file, and its name as the title while the title is still a default one
+    #setPersona(s, id) {
+      const roles = this.view.state?.roles || [];
+      const was = roles.find(r => r.id === s.persona);
+      const r = roles.find(x => x.id === id);
+      if (!r) {
+        delete s.persona;
+        return;
+      }
+      s.persona = r.id;
+      if (s.agents?.length) {
+        s.agents[0].adapter = r.engine;
+      }
+      if (s.role !== "builder" && s.mode === "writes") {
+        s.mode = "read-only";
+      }
+      if (s.role !== "builder" && (!s.artifact || s.artifact === was?.artifact)) {
+        s.artifact = r.artifact || s.artifact;
+      }
+      const defaults = [...Object.values(B.roles), was?.name].filter(Boolean);
+      if (!s.title?.trim() || defaults.includes(s.title)) {
+        s.title = r.name;
+      }
+    }
+
     onChange(e) {
       const el = e.target;
       const what = el.dataset?.s;
@@ -719,7 +761,9 @@
         return false;
       }
       const s = this.edit.template.stages[Number(el.dataset.i)];
-      if (what === "role") {
+      if (what === "persona") {
+        this.#setPersona(s, el.value);
+      } else if (what === "role") {
         this.#setRole(Number(el.dataset.i), el.value);
       } else if (what === "gate") {
         s.gate = el.value;

@@ -111,7 +111,7 @@ class FakeWorkspace {
   }
 }
 
-function setup({ caps } = {}) {
+function setup({ caps, roles = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "engine-"));
   const store = new TaskStore(dir);
   const capacity = () =>
@@ -127,7 +127,14 @@ function setup({ caps } = {}) {
   });
   const runner = new FakeRunner();
   const workspace = new FakeWorkspace();
-  const engine = new TaskEngine({ store, scheduler, runner, workspace, capacity });
+  const engine = new TaskEngine({
+    store,
+    scheduler,
+    runner,
+    workspace,
+    capacity,
+    roles: () => roles,
+  });
   return { dir, store, scheduler, runner, workspace, engine, capacity };
 }
 
@@ -2037,4 +2044,64 @@ test("Orchestrator: a worker that can't start is told to the orchestrator with w
     /## api \(codex, writes\) — failed: Not a candidate id[\s\S]*couldn't start/
   );
   assert.equal(task.candidates.find(c => c.id === "worker-1").status, "out");
+});
+
+test("Role chain: each stage runs as its role agent, hands its answer on, you approve the text, Design builds", async () => {
+  const Roles = require("../src/shared/roles");
+  // the owner moved the Research Agent to Gemini (Settings → Agents → Roles)
+  const roles = { engines: { research: "gemini" } };
+  const env = setup({ roles });
+  const config = draft(env.store, { pattern: "roles", agents: { claude: 3 } });
+  const engine = id => Roles.get(roles, id)?.engine || null;
+  await env.engine.start(
+    config,
+    templateFor(config, () => null, engine)
+  );
+  await env.engine.settled(config.id);
+  const task = env.engine.get(config.id);
+
+  const [research] = env.runner.sessions;
+  assert.equal(research.adapter, "gemini"); // the role's engine, not the agents picked in the dialog
+  assert.equal(research.mode, "read-only");
+  assert.ok(research.prompt.startsWith(Roles.get(roles, "research").instructions));
+  assert.match(research.prompt, /Bayloob saves it as research\.md/);
+  assert.match(research.prompt, /---\n\nAdd a discount rule to orders/);
+  await endTurn(env, task, research, "Two libraries; A is smaller.");
+
+  const data = env.runner.sessions[1];
+  assert.equal(data.adapter, "codex"); // the Data Agent's default
+  assert.match(data.prompt, /You are the Data Agent/);
+  assert.match(data.prompt, /Two libraries; A is smaller\./); // the research is handed on
+  await endTurn(env, task, data, "| lib | size |\n| A | 12k |");
+
+  const content = env.runner.sessions[2];
+  assert.match(content.prompt, /You are the Content Agent/);
+  assert.match(content.prompt, /\| A \| 12k \|/);
+  await endTurn(env, task, content, "Title: Pick A");
+  assert.equal(env.store.readArtifact(task.id, "content.md"), "Title: Pick A");
+  assert.equal(task.gate.kind, "approve"); // you approve the text before it is built
+
+  await decide(env, task, "approve");
+  const [design] = env.runner.by({ role: "builder" });
+  assert.equal(design.mode, "writes");
+  assert.match(design.prompt, /You are the Design Agent/);
+  assert.match(design.prompt, /Title: Pick A/);
+  await endTurn(env, task, design, "Built it.");
+  assert.equal(task.gate.kind, "merge"); // one candidate: it is the one to merge
+});
+
+test("a stage whose role was removed runs as the plain agent (and says so in the log)", async () => {
+  const env = setup({ roles: { custom: [] } });
+  const config = draft(env.store, {
+    pattern: "pipeline",
+    planner: "claude",
+    agents: { claude: 1 },
+  });
+  const t = templateFor(config);
+  t.stages[0].persona = "c-gone";
+  await env.engine.start(config, t);
+  await env.engine.settled(config.id);
+  const [planner] = env.runner.sessions;
+  assert.doesNotMatch(planner.prompt, /^You are/);
+  assert.ok(env.store.log(config.id).some(e => e.event === "role-missing"));
 });

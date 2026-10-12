@@ -6,6 +6,7 @@
 <title>Bayloob workspace</title>
 <link rel="stylesheet" href="../shared/theme.css">
 <link rel="stylesheet" href="../shared/attachments.css">
+<link rel="stylesheet" href="../shared/select-menu.css">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: transparent; height: 100%; overflow: hidden;
@@ -211,6 +212,14 @@
   .box .tools .fmtpick { min-width: 0; }
   .box .count { flex: 1; min-width: 0; text-align: right; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ask .box .count { flex: none; }
+  /* how Enter delivers it, when not straight in: queued while the agent is busy, or copied to paste */
+  .box .mode { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; } /* gives way first: Send always shows */
+  .box .mode[hidden] { display: none; }
+  .box .mode > span { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .box .mode.queue > span { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
+  .box .mode.paste > span { color: var(--brand-soft); background: color-mix(in srgb, var(--brand) 12%, transparent); }
+  .box .mode button { min-width: 0; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .box .mode button:hover { background: rgb(var(--ink) / .08); color: var(--text); }
   .ask .box .count:empty { display: none; }
   kbd { padding: 0 4px; border-radius: 4px; border: 1px solid var(--line-strong); font: 600 10.5px/1.5 ui-monospace, monospace; color: var(--soft); }
   .hint kbd { font-size: 10px; }
@@ -266,12 +275,51 @@
   .box .attach:hover { background: rgb(var(--ink) / .08); color: var(--text); }
   .box .attach svg { width: 20px; height: 20px; stroke-width: 1.9; }
   .say .box .tools { margin-left: -8px; }
-  .box .send { width: 36px; height: 36px; border-radius: 50%; }
+  .box .send { flex: none; width: 36px; height: 36px; border-radius: 50%; }
+  .say .box .send { margin-left: auto; }
+  /* The box's state (Composer.setState): sending — Send spins; error — a red border until the next edit; ok — a short green flash */
+  .box[data-state="error"] { border-color: color-mix(in srgb, var(--error) 70%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--error) 35%, transparent); }
+  .box[data-state="ok"] { border-color: color-mix(in srgb, var(--ok) 60%, transparent); }
+  .box { transition: border-color .25s, box-shadow .25s; }
+  .box .send { position: relative; }
+  .box[data-state="sending"] .send { opacity: 1; cursor: progress; }
+  .box[data-state="sending"] .send .i { opacity: 0; }
+  .box[data-state="sending"] .send::after { content: ''; position: absolute; inset: 10px; border-radius: 50%;
+    border: 2px solid currentColor; border-right-color: transparent; animation: state-spin .8s linear infinite; }
   .box .send .i { width: 18px; height: 18px; stroke-width: 2.2; }
-  .box .fmtpick { height: 32px; padding: 0 24px 0 10px; border: 0; border-radius: 999px; background-color: transparent; color: var(--soft); font-size: 13px;
+  .box .fmtpick { max-width: min(280px, 45%); height: 32px; padding: 0 24px 0 10px; border: 0; border-radius: 999px; background-color: transparent; color: var(--soft); font-size: 13px;
     appearance: none; cursor: pointer; background-repeat: no-repeat; background-position: right 7px center; background-size: 12px;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238f8e9b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
   .box .fmtpick:hover, .box .fmtpick:focus-visible { background-color: rgb(var(--ink) / .08); color: var(--text); }
+  /* Polish (both boxes): a soft ring on focus; the format picker reads as a control (a chip with its icon);
+     Send is neutral while there's nothing to send and the brand colour when there is */
+  .box:focus-within { border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 12%, transparent); }
+  .box textarea { font-size: 13.5px; line-height: 1.5; }
+  .box .fmtpick.smenu-trigger { gap: 6px; height: 30px; padding: 0 24px 0 10px; border: 1px solid rgb(var(--ink) / .10);
+    background-color: rgb(var(--ink) / .03); font-size: 12.5px; }
+  .box .fmtpick.smenu-trigger:hover, .box .fmtpick.smenu-trigger[aria-expanded="true"] { border-color: rgb(var(--ink) / .18); }
+  .box .attach { width: 32px; height: 32px; }
+  .box .send { background: var(--brand); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent);
+    transition: background-color .15s, box-shadow .15s, transform .1s; }
+  .box .send:not(:disabled):hover { filter: brightness(1.1); }
+  .box .send:not(:disabled):active { transform: scale(.94); }
+  .box .send:disabled { opacity: 1; background: rgb(var(--ink) / .08); color: var(--muted); box-shadow: none; }
+  .box[data-state="sending"] .send:disabled { background: var(--brand); color: #fff; } /* still the brand while it spins */
+  .box .mode button .lbl { margin-left: 4px; }
+  /* The tools row gives way as the box narrows, so the text and Send always fit: first the format picker
+     is just its icon and "Continue in Bayloob" just ⇄, then the length label goes. Its full name stays in the tooltip. */
+  .box { container: box / inline-size; }
+  .box .fmtpick.smenu-trigger::before { content: ''; display: block; flex: none; width: 14px; height: 14px; opacity: .8; background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 6h16M4 12h10M4 18h13'/%3E%3C/svg%3E") center / contain no-repeat; }
+  @container box (max-width: 460px) {
+    .box .fmtpick.smenu-trigger { padding: 0 22px 0 9px; }
+    .box .fmtpick.smenu-trigger .smenu-value { display: none; }
+    .box .mode button .lbl { display: none; }
+  }
+  @container box (max-width: 340px) {
+    .box .count { display: none; }
+  }
   /* the response format a prompt goes into (as set in Settings, another, or none) */
   .fmtpick { flex: none; max-width: 170px; height: 30px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--field); color: var(--muted); font-size: 12px; }
   .fmtpick:hover { color: var(--text); }
@@ -465,6 +513,78 @@
   .window-mode .main.collapsed .nav em:not(.hot) { display: none; }
   /* Tasks in the Workspace window: Tasks' own page is laid over this area (list + detail columns) */
   .embed { display: none; }
+  /* Home (Workspace window): the dashboard takes the list and detail columns */
+  .dash { display: none; }
+  .window-mode .main.dashing .listcol, .window-mode .main.dashing .detailcol, .window-mode .main.dashing .listcol + .split { display: none; }
+  .window-mode .main.dashing .dash { display: block; grid-column: 3 / 6; grid-row: 1; min-height: 0; overflow: auto; container: dash / inline-size; }
+  .dwrap { max-width: 1240px; margin: 0 auto; padding: 22px 26px 30px; display: flex; flex-direction: column; gap: 16px; }
+  .dhead { display: flex; align-items: center; gap: 16px; }
+  .dhead h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+  .dhead p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .dhead .grow { flex: 1; min-width: 0; }
+  .dhead .new { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 10px; background: var(--primary-bg);
+    color: var(--primary-fg); font-weight: 600; font-size: 13px; box-shadow: 0 4px 14px color-mix(in srgb, var(--brand) 30%, transparent); }
+  .dhead .new:hover { filter: brightness(1.1); }
+  .dcard { border-radius: 16px; border: 1px solid var(--line); background: rgb(var(--ink) / .03); padding: 14px 16px; min-width: 0; }
+  .dcard > h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--text); }
+  .dcard > h3 small { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .dcard > h3 .lnk { margin-left: auto; color: var(--brand-soft); font-size: 12px; font-weight: 600; }
+  .dempty { color: var(--muted); font-size: 12.5px; padding: 6px 0; }
+  /* the headline numbers */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .kpi { border-radius: 14px; border: 1px solid var(--line); background: rgb(var(--ink) / .03); padding: 12px 14px; }
+  .kpi .v { font-size: 26px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--soft); font-size: 12.5px; font-weight: 600; }
+  .kpi .s { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .kpi.hot { border-color: color-mix(in srgb, var(--working) 45%, transparent); }
+  .kpi.hot .l::before { content: '●'; color: var(--working); margin-right: 6px; } /* never colour alone: the label says it */
+  /* agents and role agents at work: one card each, in the role's (or the agent's) colour */
+  .agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .acard { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 2px 10px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--c) 28%, var(--line)); background: color-mix(in srgb, var(--c) 6%, transparent); }
+  .acard:hover { border-color: color-mix(in srgb, var(--c) 55%, transparent); box-shadow: 0 6px 20px color-mix(in srgb, var(--c) 16%, transparent); }
+  .acard .m { grid-row: 1 / span 3; width: 40px; height: 40px; }
+  .acard .m svg, .acard .m img { width: 100%; height: 100%; }
+  .acard b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acard .p { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acard .st { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--soft); }
+  .acard .st i { width: 7px; height: 7px; border-radius: 50%; background: var(--sc); }
+  .acard .st .ago { margin-left: auto; color: var(--muted); }
+  .drow2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @container dash (max-width: 760px) { .drow2 { grid-template-columns: minmax(0, 1fr); } }
+  /* tasks by status: the total, then one bar of parts (each part labelled in the legend) */
+  .tsum { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .tsum .v { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tsum span { color: var(--muted); font-size: 12.5px; }
+  .tbar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; background: rgb(var(--ink) / .05); }
+  .tbar i { display: block; background: var(--c); min-width: 4px; }
+  .tlegend { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px 14px; margin: 12px 0 0; padding: 0; list-style: none; }
+  .tlegend li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--soft); }
+  .tlegend li i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); flex: none; }
+  .tlegend li b { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; }
+  /* what waits for you, and what happened lately */
+  .dlist { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .dlist li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 4px; border-radius: 10px; }
+  .dlist li:hover { background: rgb(var(--ink) / .04); }
+  .dlist .m { width: 28px; height: 28px; display: grid; place-items: center; }
+  .dlist .m svg, .dlist .m img { width: 100%; height: 100%; }
+  .dlist .t { min-width: 0; }
+  .dlist .t b { display: block; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dlist .t small { display: block; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dlist .r { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .dlist .r .btn { height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12px; }
+  .dlist .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  /* finished tasks per day: one series, the brand colour; the value on hover (and on today's bar) */
+  .cols { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: end; height: 132px; padding-top: 18px;
+    border-bottom: 1px solid var(--line); }
+  .cols .c { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+  .cols .c i { display: block; width: min(28px, 100%); border-radius: 4px 4px 0 0; background: var(--brand); min-height: 0; }
+  .cols .c .val { position: absolute; top: -2px; font-size: 11.5px; color: var(--soft); opacity: 0; transition: opacity .12s; font-variant-numeric: tabular-nums; }
+  .cols .c:hover .val, .cols .c.today .val { opacity: 1; }
+  .cols .c:hover i { filter: brightness(1.15); }
+  .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }
+  .days span { text-align: center; color: var(--muted); font-size: 11px; }
+  .days span.today { color: var(--text); font-weight: 600; }
   .window-mode .main.embedding .listcol, .window-mode .main.embedding .detailcol, .window-mode .main.embedding .listcol + .split { display: none; }
   .window-mode .main.embedding .embed { display: block; grid-column: 3 / 6; grid-row: 1; min-height: 0; }
   .wbtn { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: var(--muted); }
@@ -509,6 +629,7 @@
         </div>
         <div class="rows" id="rows" role="listbox" tabindex="0" aria-label="Items"></div>
       </section>
+      <section class="dash" id="dash" aria-label="Home"></section>
       <div class="detailcol">
         <section class="detail" id="detail"></section>
         <form class="say" id="say" hidden autocomplete="off">
@@ -518,11 +639,11 @@
             <div class="tools">
             <button type="button" class="attach" id="sayAttach" title="Attach files — or drop them on the box, or paste a screenshot (Ctrl+V)" aria-label="Attach files" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
 <select class="fmtpick" id="sayFormat" aria-label="Response format for this prompt" title="The format this prompt goes into (Settings → General → Prompts)" hidden></select>
+            <span class="mode" id="sayMode" hidden></span>
             <span class="count" id="sayCount"></span>
             <button type="submit" class="send" id="saySend" title="Send (Enter)" aria-label="Send (Enter)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></div></div>
           <ul class="atts" id="sayAtts" hidden></ul>
           <ul class="pastes" id="sayPastes" hidden></ul>
-          <div class="confirm" id="sayConfirm" hidden></div>
           <div class="hint" id="sayHint" aria-live="polite"></div>
           <ul class="pqueue" id="sayQueue" hidden></ul>
         </form>
@@ -561,6 +682,7 @@
 <script src="../shared/ui-common.js"></script>
 <script src="../shared/attachments.js"></script>
 <script src="../shared/composer.js"></script>
+<script src="../shared/select-menu.js"></script>
 <script src="../shared/markdown-lite.js"></script>
 <script>
   // The same page runs as the popup and as the Workspace window (?mode=window: resizable, splitters)
@@ -572,19 +694,19 @@
 
   // Every string of the panel — a language switcher later only needs to swap this object
   const T = {
-    sayTo: (agent, project) => `Prompt to ${agent} · ${project}…`,
+    sayTo: (agent, project) => `Message ${agent} · ${project}`,
     suggested: 'Suggested', useSuggestion: 'Put it in the box — you confirm before it goes',
     sayHint: 'Enter sends · Shift+Enter new line', sayBusy: 'Busy — Enter adds it to the queue',
     sayMore: hist => ` · / shortcuts${hist ? ' · ↑ earlier prompts' : ''}`,
-    sendTip: 'Send (Enter)', askTip: 'Next (Enter)',
+    sendTip: 'Send (Enter)', queueTip: 'Add to the queue (Enter) — goes out when the agent finishes its turn',
+    pasteTip: 'Copy it and bring the terminal forward to paste (Enter)', modeQueue: 'Queue', modePaste: 'Copy & paste', askTip: 'Next (Enter)',
     sendWhy: { empty: 'Type a prompt or attach a file to send', secret: 'A file may hold a secret — answer its warning first' },
     askWhy: 'Type what should be done first',
     withPastes: n => ` · ${n} pasted text${n === 1 ? '' : 's'}`,
     slashFoot: '↑ ↓ choose · Enter or Tab puts it in the box · Esc closes',
-    confirmSend: (agent, project) => `Send to <b>${agent}</b> · ${project}`,
-    withFiles: n => ` · ${n} file${n === 1 ? '' : 's'}`, attaching: 'Wait — the files are still being attached', now: 'now', toQueue: 'to the queue',
+    withFiles: n => ` · ${n} file${n === 1 ? '' : 's'}`, attaching: 'Wait — the files are still being attached', now: 'now',
     confirmLaunch: (agent, cwd) => `Launch <b>${agent}</b> in <code>${cwd}</code>`, inWorktree: '⑂ new worktree',
-    edit: 'Edit', sendBtn: '✓ Send', queueBtn: '✓ Add to queue', launchBtn: '✓ Launch', confirmHint: 'Enter confirms · Esc goes back',
+    edit: 'Edit', launchBtn: '✓ Launch', confirmHint: 'Enter confirms · Esc goes back',
     taskDone: 'Task completed.',
     finishedIn: (agent, project) => `<span class="fhead"><b>${agent}</b> finished · ${project}</span>`, finishedMore: n => `+${n} more`,
     reply: 'Reply', dismissTip: 'Dismiss',
@@ -593,9 +715,9 @@
     working: 'Working…',
     queuedN: n => `Waiting for this agent · ${n}`, unqueueTip: 'Remove from the queue',
     sent: 'Sent ✓',
-    handoff: '⇄ Continue in Bayloob', handoffTip: 'Move this conversation into tmux, so replies go straight in (you close it in its terminal once)',
+    handoff: 'Continue in Bayloob', handoffTip: 'Move this conversation into tmux, so replies go straight in (you close it in its terminal once)',
     handoffStarted: 'Close it in its terminal (/exit) — Bayloob continues it in tmux',
-    toPaste: '📋 copy & paste', pasteBtn: '✓ Copy & open terminal', copiedPaste: 'Copied ✓ — paste it in the terminal with Ctrl+Shift+V',
+    copiedPaste: 'Copied ✓ — paste it in the terminal with Ctrl+Shift+V',
     sayPaste: 'Not in tmux: Enter copies it and brings the terminal forward to paste', queued: 'Queued ⏳ — goes out when the agent finishes its turn',
     askHint: 'Pick an agent and folder · Enter starts', startAgent: 'Start', worktree: '⑂ New worktree',
     notInstalled: 'not installed', folder: 'Folder', starting: 'Starting…', started: 'Started ✓', pickFolder: 'Choose a project folder',
@@ -605,9 +727,22 @@
     connected: 'Connected', noEvents: 'Waiting for agents', noHooks: 'Hooks not installed',
     connectedTip: at => at ? `Hooks installed · last event ${timeAgo(at)}` : 'Hooks installed · no events yet',
     noHooksTip: 'Open Settings to install the Claude Code hooks',
-    sections: { inbox: 'Inbox', agents: 'Agents', tasks: 'Tasks', overview: 'Overview', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
-    listTitle: { inbox: 'Needs you', agents: 'Agents', tasks: 'Tasks', overview: 'Running apps', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
+    sections: { home: 'Home', inbox: 'Inbox', agents: 'Agents', tasks: 'Tasks', overview: 'Overview', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
+    listTitle: { home: 'Home', inbox: 'Needs you', agents: 'Agents', tasks: 'Tasks', overview: 'Running apps', browsers: 'Browsers', ides: 'IDEs', applications: 'Applications', system: 'System tools' },
     settingsNav: 'Settings',
+    // Home (the Workspace window's dashboard)
+    dash: {
+      welcome: 'Welcome back', newTask: 'New task',
+      sub: (busy, waiting) => busy ? `${busy} agent${busy === 1 ? ' is' : 's are'} working for you${waiting ? ` · ${waiting} waiting for you` : ''}` : waiting ? `${waiting} waiting for you` : 'Nothing is running — start a task when you’re ready',
+      kWorking: 'Agents working', kWorkingSub: n => `of ${n} running`, kWaiting: 'Waiting for you', kWaitingSub: 'approvals, questions, gates',
+      kTasks: 'Tasks running', kTasksSub: n => `${n} in all`, kDone: 'Finished today', kDoneSub: 'workflow tasks',
+      agents: 'Agents at work', noAgents: 'No agent is running — start one with New task, as a role agent or the plain agent.',
+      tasks: 'Tasks', noTasks: 'No workflow tasks yet', total: 'tasks', allTasks: 'Open Tasks',
+      tstatus: { running: 'Running', 'needs-you': 'Needs you', done: 'Done', failed: 'Failed', stopped: 'Stopped' },
+      approvals: 'Waiting for you', noApprovals: 'Nothing waits for you', review: 'Review', deny: 'Deny', allInbox: 'Open Inbox',
+      activity: 'Recent activity', noActivity: 'Nothing happened yet',
+      productivity: 'Finished tasks', last7: 'last 7 days', barTip: (day, n) => `${day}: ${n} finished`,
+    },
     // Why an agent is in the Inbox (shown under its name)
     why: { perm: 'Approve a command', question: 'Has a question', menu: 'Asks in terminal', conflict: 'File clash', finished: 'Finished', gate: 'Task needs you' },
     openTasks: 'Open in Tasks', allTasks: 'Open the task board', taskStage: (stage, n, total) => `Stage ${n} of ${total} · ${stage}`, palTasks: 'Open the task board',
@@ -637,7 +772,7 @@
     noContainers: 'No containers', noContainersHint: 'docker run or docker compose up starts one — it shows up here',
     emptyAction: { newTask: 'New task…', ask: 'Ask Bayloob', launch: 'Launch an app' },
     countTip: {
-      inbox: n => `${n} waiting for you`, tasks: n => `${n} tasks`,
+      home: () => '', inbox: n => `${n} waiting for you`, tasks: n => `${n} tasks`,
       overview: n => `${n} running apps and agents`, agents: n => `${n} agent sessions`, browsers: n => `${n} browsers running`,
       ides: n => `${n} IDEs running`, applications: n => `${n} other apps running`, system: n => `${n} system tools`,
     },
@@ -732,7 +867,8 @@
   const SECTION_OF = { browser: 'browsers', ide: 'ides', terminal: 'applications', files: 'applications', app: 'applications', system: 'system' };
   const I = (d, extra = '') => `<svg class="i" viewBox="0 0 24 24"${extra}>${d}</svg>`;
   // The side navigation: what needs you and your agents first, then the machine
-  const NAV = [['inbox', 'agents', 'tasks'], ['overview', 'browsers', 'ides', 'applications', 'system']];
+  // Home (the dashboard) is the Workspace window's; the popup panel is too small for it
+  const NAV = [[...(WINDOW_MODE ? ['home'] : []), 'inbox', 'agents', 'tasks'], ['overview', 'browsers', 'ides', 'applications', 'system']];
   const INBOX_RANK = { perm: 5, question: 5, gate: 5, menu: 4, conflict: 3, finished: 2 }; // most urgent first
   const WHY_COLOR = { perm: 'var(--waiting)', question: 'var(--thinking)', menu: 'var(--thinking)', conflict: 'var(--waiting)', finished: 'var(--done)', gate: 'var(--waiting)' };
   const ICONS = {
@@ -741,6 +877,7 @@
     gear: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>'),
     spark: I('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
     overview: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/>'),
+    home: I('<rect x="3.5" y="3.5" width="7" height="8" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="14.5" width="7" height="6" rx="1.5"/>'),
     agents: I('<circle cx="12" cy="10" r="6"/><path d="M9 10h.01M15 10h.01M8 20c1.2-1.5 2.5-2 4-2s2.8.5 4 2"/>'),
     browsers: I('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/>'),
     ides: I('<path d="m8 8-4 4 4 4M16 8l4 4-4 4"/>'),
@@ -861,31 +998,28 @@
     constructor(api) {
       this.api = api;
       const $ = id => document.getElementById(id);
-      this.el = { panel: $('panel'), mascot: $('managerMascot'), status: $('status'), side: $('side'), listTitle: $('listTitle'),
+      this.el = { dash: $('dash'), panel: $('panel'), mascot: $('managerMascot'), status: $('status'), side: $('side'), listTitle: $('listTitle'),
         search: $('search'), rows: $('rows'), detail: $('detail'), meters: $('meters'), launch: $('launch'),
         openWorkspace: $('openWorkspace'), settings: $('settings'), say: $('say'), sayText: $('sayText'),
         saySend: $('saySend'), sayHint: $('sayHint'), saySugg: $('saySugg'), ask: $('ask'), askText: $('askText'), askPick: $('askPick'), askHint: $('askHint'),
-        sayConfirm: $('sayConfirm'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
+        sayMode: $('sayMode'), askConfirm: $('askConfirm'), finished: $('finished'), slash: $('slash'), sayQueue: $('sayQueue'),
         pal: $('pal'), palText: $('palText'), palList: $('palList'),
         sayAttach: $('sayAttach'), sayFormat: $('sayFormat'), askFormat: $('askFormat'), sayAtts: $('sayAtts'), askAttach: $('askAttach'), askAtts: $('askAtts'),
         sayCount: $('sayCount'), askCount: $('askCount'), askSend: $('askSend') };
       this.el.mascot.innerHTML = Agent.thumb(MANAGER);
-      // Files attached to the agent's prompt and to Ask Bayloob; the agent gets their paths
-      this.sayAtt = new Attachments({ api: api?.uploads, list: this.el.sayAtts,
-        onChange: () => { this.#sayChanged(); this.#fit(); }, onError: t => this.#sayHint(t, 'err') });
-      this.askAtt = new Attachments({ api: api?.uploads, list: this.el.askAtts, onChange: () => { this.#askChanged(); this.#fit(); }, onError: t => this.#askHint(t, 'err') });
-      this.el.sayAttach.hidden = this.el.askAttach.hidden = !this.sayAtt.available;
-      // A large paste becomes a chip (opened, put back in the box or removed); unsent drafts are kept per session
-      this.sayPaste = new Pastes({ list: $('sayPastes'), onChange: () => { this.#sayChanged(); this.#fit(); },
-        insert: t => this.#insertText(this.el.sayText, t) });
-      this.askPaste = new Pastes({ list: $('askPastes'), onChange: () => { this.#askChanged(); this.#fit(); },
-        insert: t => this.#insertText(this.el.askText, t) });
+      // The agent's prompt box and Ask Bayloob: one Composer each (text, files, pasted text, format, Send);
+      // what Enter does is theirs — send to the agent, or pick an agent and start one
+      this.sayBox = new Composer({ form: this.el.say, text: this.el.sayText, attach: this.el.sayAttach, files: this.el.sayAtts,
+        pastes: $('sayPastes'), format: this.el.sayFormat, count: this.el.sayCount, send: this.el.saySend, uploads: api?.uploads,
+        onChange: () => { this.#sayChanged(); this.#fit(); }, onSubmit: () => this.#send(), onKey: e => this.#sayKey(e),
+        onError: t => this.#sayHint(t, 'err') });
+      this.askBox = new Composer({ form: this.el.ask, text: this.el.askText, attach: this.el.askAttach, files: this.el.askAtts,
+        pastes: $('askPastes'), format: this.el.askFormat, count: this.el.askCount, send: this.el.askSend, uploads: api?.uploads,
+        onChange: () => { this.#askChanged(); this.#fit(); }, onSubmit: () => this.#askNext(), onError: t => this.#askHint(t, 'err') });
+      // unsent drafts are kept per session; Ask Bayloob's comes back too (its files checked again — one that's gone is dropped)
       this.drafts = new Drafts(DRAFTS_KEY);
-      // Ask Bayloob's unsent draft: its text, and its files (checked again — one that's gone is dropped)
-      const askDraft = this.drafts.get(ASK_DRAFT);
-      this.el.askText.value = askDraft?.text || '';
-      if (askDraft?.files?.length) { this.askAtt.restore(askDraft.files); }
-      this.#askChanged();
+      this.askBox.restore(this.drafts.get(ASK_DRAFT));
+      this.askBox.changed();
       this.#bind();
       setInterval(() => this.#renderDetail(), 30_000); // keep "2m ago" fresh
     }
@@ -904,7 +1038,8 @@
       this.collisions = state.collisions || {};
       this.status = state.status || null;
       // Opens on the Inbox when something waits for you, otherwise on the agents
-      this.section = state.section && NAV.flat().includes(state.section) ? state.section : this.#items('inbox').length ? 'inbox' : 'agents';
+      this.roles = state.roles || [];
+      this.section = state.section && NAV.flat().includes(state.section) ? state.section : this.#items('inbox').length ? 'inbox' : WINDOW_MODE ? 'home' : 'agents';
       // Opened on one row (the pill's session rows: 'agent:<id>'), when it is still there
       this.selected = state.select && this.sessions.some(s => `agent:${s.id}` === state.select) ? state.select : null;
       this.#closePal();
@@ -990,6 +1125,7 @@
     // ---------- model ----------
 
     #items(section = this.section) {
+      if (section === 'home') { return []; }
       const agents = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt).map(agentItem);
       const apps = (this.apps || []).map(appItem);
       if (section === 'inbox') { return this.#inbox(); }
@@ -1061,6 +1197,7 @@
       this.#renderMeters();
       this.#renderSay();
       this.#renderFinished();
+      this.#renderDash();
       // A disabled button always says why
       const cur = this.current;
       this.el.openWorkspace.disabled = !(cur?.kind === 'agent' && cur.data.cwd);
@@ -1598,6 +1735,88 @@
       }
     }
 
+    // ---------- Home: the dashboard (Workspace window) ----------
+
+    roles = [];
+
+    // Agents at work, the headline numbers, tasks by status, what waits for you, what happened, and finished tasks
+    // per day — all from what the panel already has (sessions, tasks, the inbox). Nothing here allows a permission:
+    // Review opens its card in the Inbox (where Allow waits a moment on purpose); Deny is safe from here.
+    #renderDash() {
+      if (!WINDOW_MODE || this.section !== 'home' || this.launchMode) { return; }
+      const D = T.dash;
+      const sessions = [...this.sessions].sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt);
+      const busy = sessions.filter(s => BUSY.has(s.state)).length;
+      const inbox = this.#inbox();
+      const tasks = [...this.tasks.values()];
+      const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+      const doneToday = tasks.filter(t => t.status === 'done' && (t.endedAt || t.updatedAt) >= day0.getTime()).length;
+      const live = tasks.filter(t => t.status === 'running' || t.status === 'needs-you').length;
+      const roleOf = s => this.roles.find(r => r.id === s.persona) || null;
+
+      const kpi = (l, v, sub, hot = false) => `<div class="kpi${hot ? ' hot' : ''}"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+      const kpis = `<div class="kpis">${kpi(D.kWorking, busy, D.kWorkingSub(sessions.length))}${kpi(D.kWaiting, inbox.length, D.kWaitingSub, inbox.length > 0)}${kpi(D.kTasks, live, D.kTasksSub(tasks.length))}${kpi(D.kDone, doneToday, D.kDoneSub)}</div>`;
+
+      const cards = sessions.map(s => {
+        const r = roleOf(s);
+        const c = r?.color || Agent.color(s.agent);
+        return `<button type="button" class="acard" data-dash-agent="${esc(s.id)}" style="--c:${esc(c)}" title="${esc(projectPath(s))}">
+          <span class="m">${Agent.thumb(s.agent, s.state)}</span><b>${esc(r?.name || s.label?.split(' · ').pop() || Agent.displayName(s.agent))}</b>
+          <span class="p">${esc(r ? `${Agent.displayName(s.agent)} · ${s.project || ''}` : s.project || '')}</span>
+          <span class="st" style="--sc:var(--${s.state === 'waiting' ? 'waiting' : s.state === 'done' ? 'done' : s.state === 'idle' ? 'idle' : s.state === 'thinking' ? 'thinking' : 'working'})"><i></i>${esc(T.status[s.state] || s.state)}<span class="ago">${timeAgo(s.updatedAt)}</span></span></button>`;
+      }).join('');
+      const agents = `<section class="dcard"><h3>${D.agents} <small>${sessions.length || ''}</small></h3>${cards ? `<div class="agrid">${cards}</div>` : `<p class="dempty">${D.noAgents}</p>`}</section>`;
+
+      // Tasks by status: parts of one bar (the total first; each part named with its count in the legend)
+      const ORDER = [['running', 'var(--thinking)'], ['needs-you', 'var(--working)'], ['done', 'var(--done)'], ['failed', 'var(--error)'], ['stopped', 'var(--idle)']];
+      const count = k => tasks.filter(t => t.status === k).length;
+      const parts = ORDER.map(([k, c]) => [k, c, count(k)]).filter(([, , n]) => n);
+      const taskCard = `<section class="dcard"><h3>${D.tasks}<button type="button" class="lnk" data-dash-go="tasks">${D.allTasks}</button></h3>${tasks.length ? `
+        <div class="tsum"><span class="v">${tasks.length}</span><span>${D.total}</span></div>
+        <div class="tbar" role="img" aria-label="${esc(parts.map(([k, , n]) => `${D.tstatus[k]} ${n}`).join(', '))}">${parts.map(([k, c, n]) => `<i style="--c:${c};flex:${n}" title="${esc(`${D.tstatus[k]} · ${n} (${Math.round((n / tasks.length) * 100)}%)`)}"></i>`).join('')}</div>
+        <ul class="tlegend">${ORDER.map(([k, c]) => `<li style="--c:${c}"><i></i>${D.tstatus[k]}<b>${count(k)}</b></li>`).join('')}</ul>` : `<p class="dempty">${D.noTasks}</p>`}</section>`;
+
+      const thumb = i => i.kind === 'task' ? ICONS.tasks : Agent.thumb(i.data.agent, i.data.state);
+      const approvals = `<section class="dcard"><h3>${D.approvals} <small>${inbox.length || ''}</small><button type="button" class="lnk" data-dash-go="inbox">${D.allInbox}</button></h3>${inbox.length ? `<ul class="dlist">${inbox.slice(0, 5).map(i => {
+        const perm = i.kind === 'agent' && i.why === 'perm' && i.data.perm?.id && !i.data.perm.questions?.length;
+        return `<li><span class="m">${thumb(i)}</span><span class="t"><b>${esc(i.name)}</b><small>${esc(i.subtitle)}</small></span>
+          <span class="r">${timeAgo(i.at)}${perm ? `<button type="button" class="btn deny" data-dash-deny="${esc(i.data.perm.id)}">${D.deny}</button>` : ''}<button type="button" class="btn on" data-dash-review="${esc(i.key)}">${D.review}</button></span></li>`;
+      }).join('')}</ul>` : `<p class="dempty">${D.noApprovals}</p>`}</section>`;
+
+      // What happened lately: each agent's last step and each task's last change, newest first
+      const events = [
+        ...sessions.map(s => ({ at: s.activity?.at || s.updatedAt, name: roleOf(s)?.name || Agent.displayName(s.agent), text: s.activity?.title || s.summary || T.status[s.state] || '', c: `var(--${s.state === 'waiting' ? 'waiting' : s.state === 'done' ? 'done' : s.state === 'idle' ? 'idle' : 'thinking'})`, key: `agent:${s.id}` })),
+        ...tasks.map(t => ({ at: t.updatedAt, name: t.title, text: D.tstatus[t.status] || t.status, c: (ORDER.find(([k]) => k === t.status) || [, 'var(--idle)'])[1], task: t.id })),
+      ].filter(e => e.at).sort((a, b) => b.at - a.at).slice(0, 7);
+      const activity = `<section class="dcard"><h3>${D.activity}</h3>${events.length ? `<ul class="dlist">${events.map(e => `<li><span class="m"><span class="dot" style="--c:${e.c}"></span></span><span class="t"><b>${esc(e.name)}</b><small>${esc(e.text)}</small></span><span class="r">${timeAgo(e.at)}</span></li>`).join('')}</ul>` : `<p class="dempty">${D.noActivity}</p>`}</section>`;
+
+      // Finished tasks per day, the last 7 (today last)
+      const days = Array.from({ length: 7 }, (_, k) => { const d = new Date(day0); d.setDate(d.getDate() - (6 - k)); return d; });
+      const per = days.map(d => tasks.filter(t => t.status === 'done' && (t.endedAt || t.updatedAt) >= d.getTime() && (t.endedAt || t.updatedAt) < d.getTime() + 86_400_000).length);
+      const max = Math.max(1, ...per);
+      const name = d => d.toLocaleDateString(undefined, { weekday: 'short' });
+      const chart = `<section class="dcard"><h3>${D.productivity} <small>${D.last7}</small></h3>
+        <div class="cols" role="img" aria-label="${esc(days.map((d, k) => D.barTip(name(d), per[k])).join(', '))}">${per.map((n, k) => `<div class="c${k === 6 ? ' today' : ''}" title="${esc(D.barTip(name(days[k]), n))}"><span class="val">${n}</span><i style="height:${n ? Math.max(4, (n / max) * 100) : 0}%"></i></div>`).join('')}</div>
+        <div class="days">${days.map((d, k) => `<span class="${k === 6 ? 'today' : ''}">${esc(name(d))}</span>`).join('')}</div></section>`;
+
+      swapHtml(this.el.dash, `<div class="dwrap">
+        <header class="dhead"><div class="grow"><h1>${D.welcome}</h1><p>${esc(D.sub(busy, inbox.length))}</p></div>
+          <button type="button" class="new" data-dash-new>${ICONS.spark}${D.newTask}</button></header>
+        ${kpis}${agents}<div class="drow2">${taskCard}${approvals}</div><div class="drow2">${activity}${chart}</div></div>`);
+    }
+
+    #bindDash() {
+      this.el.dash.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b) { return; }
+        if (b.dataset.dashNew !== undefined) { return this.api?.newSession(); }
+        if (b.dataset.dashAgent) { return this.#goSection('agents', `agent:${b.dataset.dashAgent}`); }
+        if (b.dataset.dashReview) { return this.#goSection('inbox', b.dataset.dashReview); }
+        if (b.dataset.dashGo) { return this.#goSection(b.dataset.dashGo); }
+        if (b.dataset.dashDeny) { b.disabled = true; return this.api?.decide(b.dataset.dashDeny, 'deny'); }
+      });
+    }
+
     // ---------- prompts ----------
 
     // The selected agent's prompt box: only for sessions running in tmux and not waiting on a permission
@@ -1620,8 +1839,10 @@
       const set = (agent && f.agents[agent]) || f.default;
       const name = id => f.formats.find(x => x.id === id)?.name;
       const asSet = set && set !== 'none' ? name(set) : 'none';
-      sel.innerHTML = [['', `Format: ${asSet}`], ['none', 'No format'], ...f.formats.map(x => [x.id, x.name])]
-        .map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join('');
+      // In the menu "as set" reads "Default" with the format under it; the formats sit under a divider
+      sel.innerHTML = [['', `Format: ${asSet}`, ' data-label="Default" data-hint="' + esc(set && set !== 'none' ? `${asSet} · as set in Settings` : 'No format · as set in Settings') + '"'],
+        ['none', 'No format', ''], ...f.formats.map((x, i) => [x.id, x.name, i ? '' : ' data-sep'])]
+        .map(([id, n, extra]) => `<option value="${esc(id)}"${extra}>${esc(n)}</option>`).join('');
       sel.value = keep;
     }
 
@@ -1631,20 +1852,11 @@
       this.el.say.hidden = !can;
       if (!can) { return; }
       if (this.sayFor !== s.id) {   // another session: its own draft, or an empty box
-        if (this.#sayConfirming) { this.#confirmSay(false); }
         this.sayFor = s.id;
         this.sayFormatAgent = s.agent;
         this.#fillFormats(this.el.sayFormat, s.agent, true);
         // Its unsent draft comes back (text, format, files, pasted text); none: an empty box
-        const d = this.drafts.get(`say:${s.id}`);
-        this.el.sayText.value = d?.text || '';
-        if (d?.format && [...this.el.sayFormat.options].some(o => o.value === d.format)) { this.el.sayFormat.value = d.format; }
-        this.sayAtt.clear();
-        // files kept in memory were checked when attached; ones from before a reload are checked again
-        if (d?.files?.length && d.files[0].secrets) { this.sayAtt.items = [...d.files]; this.sayAtt.render(); }
-        else if (d?.files?.length) { this.sayAtt.restore(d.files); }
-        this.sayPaste.restore(d?.pastes);
-        this.#grow(this.el.sayText);
+        this.sayBox.restore(this.drafts.get(`say:${s.id}`));
         this.#sayHint('');
         this.#histPos = -1;
         this.#renderQueue([]);
@@ -1652,22 +1864,19 @@
       }
       this.#loadQueue();
       this.el.sayText.placeholder = T.sayTo(Agent.displayName(s.agent), projectName(s));
-      if (this.#sayConfirming) {
-        if (!this.el.sayHint.dataset.kind) { this.el.sayHint.textContent = T.confirmHint; } // a re-render keeps the confirm step's keys
-      } else if (!this.el.sayHint.dataset.kind) {
+      if (!this.el.sayHint.dataset.kind) {
         const base = !s.term?.tmux ? T.sayPaste : BUSY.has(s.state) ? T.sayBusy : T.sayHint;
         this.el.sayHint.textContent = base + T.sayMore(!!this.#histories.get(s.id)?.length);
       }
       this.#sayState();
       this.#renderSugg(s);
-      if (this.#sayConfirming) { this.#renderSayConfirm(); } // busy may have changed: now vs queue
     }
 
     // The next steps its last answer offered (cleared when a new turn starts)
     #renderSugg(s) {
       const list = s.suggestions || [];
       const key = JSON.stringify(list);
-      this.el.saySugg.hidden = !list.length || this.#sayConfirming;
+      this.el.saySugg.hidden = !list.length;
       if (this.el.saySugg.dataset.key === key) { return; }
       this.el.saySugg.dataset.key = key;
       this.el.saySugg.innerHTML = list.length ? `<span class="cap">${T.suggested}</span>${list.map((x, i) =>
@@ -1677,11 +1886,9 @@
     #useSuggestion(i) {
       const x = this.sessions.find(v => v.id === this.sayFor)?.suggestions?.[i];
       if (!x) { return; }
-      this.el.sayText.value = x.prompt;
-      this.#grow(this.el.sayText);
-      this.#sayChanged();
-      this.#confirmSay(true); // shows "send now" or "queue" — the second Enter / click sends
-      this.el.saySugg.hidden = true;
+      this.sayBox.value = x.prompt;
+      this.sayBox.changed();
+      this.el.sayText.focus(); // to edit, or Enter to send
     }
 
     #sayHint(text, kind = '') {
@@ -1692,75 +1899,39 @@
       if (kind) { this.#sayTimer = setTimeout(() => { this.el.sayHint.dataset.kind = ''; this.el.sayHint.className = 'hint'; this.#renderSay(); }, 3500); }
     }
 
-    get #sayConfirming() { return !this.el.sayConfirm.hidden; }
-    get #sayEmpty() { return !this.el.sayText.value.trim() && !this.sayAtt.count && !this.sayPaste?.count; }
 
     // Why Send can't go yet ('' when it can): its tooltip and label say so
     get #sayWhy() {
-      if (this.#sayEmpty) { return T.sendWhy.empty; }
-      if (this.sayAtt.busy) { return T.attaching; }
-      return this.sayAtt.unconfirmed.length ? T.sendWhy.secret : '';
+      const b = this.sayBox;
+      return b.empty ? T.sendWhy.empty : b.blocked === 'attaching' ? T.attaching : b.blocked === 'secret' ? T.sendWhy.secret : '';
     }
 
-    // Send button and length label, from what is in the box
+    // How Enter delivers it: typed in now, queued while the agent is busy, or (not in tmux) copied to paste
+    get #sayVia() {
+      const s = this.sessions.find(x => x.id === this.sayFor);
+      return !s ? 'now' : !s.term?.tmux ? 'paste' : BUSY.has(s.state) ? 'queue' : 'now';
+    }
+
+    // Send button, the "queue" / "copy & paste" chip and length label, from what is in the box
     #sayState() {
       const why = this.#sayWhy;
-      const b = this.el.saySend;
-      b.disabled = !!why;
-      b.title = why || T.sendTip;
-      b.setAttribute('aria-label', why || T.sendTip);
-      this.el.sayCount.textContent = lengthLabel([this.el.sayText.value.trim(), this.sayPaste?.text].filter(Boolean).join('\n\n'));
+      const via = this.#sayVia;
+      const tip = via === 'queue' ? T.queueTip : via === 'paste' ? T.pasteTip : T.sendTip;
+      this.sayBox.setSend(why, tip);
+      if (this.#sending) { this.el.saySend.disabled = true; }
+      this.el.saySend.dataset.via = via;
+      const s = this.sessions.find(x => x.id === this.sayFor);
+      const m = this.el.sayMode;
+      m.hidden = via === 'now';
+      m.className = `mode ${via}`;
+      m.innerHTML = via === 'now' ? '' : `<span title="${esc(tip)}">${via === 'queue' ? T.modeQueue : T.modePaste}</span>${via === 'paste' && s && RESUMABLE.has(s.agent) ? `<button type="button" data-handoff title="${T.handoffTip}" aria-label="${T.handoff}"><span aria-hidden="true">⇄</span><span class="lbl">${T.handoff}</span></button>` : ''}`;
     }
 
     // Something in the box changed: buttons, length, and the session's draft
     #sayChanged() {
-      if (!this.sayPaste) { return; } // still being built
+      if (!this.sayBox) { return; } // still being built
       this.#sayState();
-      if (this.sayFor) {
-        this.drafts.set(`say:${this.sayFor}`, { text: this.el.sayText.value, format: this.el.sayFormat.value,
-          files: [...this.sayAtt.items], pastes: this.sayPaste.snapshot() });
-      }
-    }
-
-    // Text put at the caret (a pasted chip back in the box)
-    #insertText(ta, text) {
-      const { selectionStart: a, selectionEnd: b, value } = ta;
-      ta.value = value.slice(0, a) + text + value.slice(b);
-      ta.focus();
-      ta.setSelectionRange(a + text.length, a + text.length);
-      this.#grow(ta);
-    }
-
-    // First Enter shows what will happen (sent now or queued); the second one sends
-    #confirmSay(on) {
-      this.el.sayConfirm.hidden = !on;
-      this.el.saySend.hidden = on;
-      this.el.sayText.readOnly = on;
-      this.el.sayFormat.disabled = this.el.sayAttach.disabled = on; // what is confirmed is what goes
-      this.el.saySugg.hidden = on || !this.el.saySugg.innerHTML;
-      if (on) {
-        this.#renderSayConfirm();
-        this.#sayHint(T.confirmHint);
-        this.el.sayConfirm.querySelector('[type=submit]')?.focus();
-      } else {
-        this.el.sayHint.dataset.kind = '';
-        this.#sayHint('');
-      }
-      this.#fit();
-    }
-
-    #renderSayConfirm() {
-      const s = this.sessions.find(x => x.id === this.sayFor);
-      if (!s) { return this.#confirmSay(false); }
-      // tmux: typed in now, or queued while busy. Any other terminal: copied for the user to paste
-      const paste = !s.term?.tmux;
-      const busy = !paste && BUSY.has(s.state);
-      const [cls, badge, btn] = paste ? ['paste', T.toPaste, T.pasteBtn] : busy ? ['queue', T.toQueue, T.queueBtn] : ['now', T.now, T.sendBtn];
-      this.el.sayConfirm.innerHTML = `<span class="q">${T.confirmSend(esc(Agent.displayName(s.agent)), esc(projectName(s)))}${this.sayAtt.count ? T.withFiles(this.sayAtt.count) : ''}${this.sayPaste.count ? T.withPastes(this.sayPaste.count) : ''}${esc(this.#formatNote(this.el.sayFormat))}</span>
-        <span class="badge ${cls}">${badge}</span>
-        <button type="button" class="btn" data-edit>${T.edit}<kbd aria-hidden="true">Esc</kbd></button>
-        <button type="submit" class="btn on">${btn}<kbd aria-hidden="true">↵</kbd></button>
-        ${paste && RESUMABLE.has(s.agent) ? `<button type="button" class="btn" data-handoff title="${T.handoffTip}">${T.handoff}</button>` : ''}`;
+      if (this.sayFor) { this.drafts.set(`say:${this.sayFor}`, this.sayBox.snapshot()); }
     }
 
     // " · Format: Brief" / " · No format" for the confirm line ('' without the picker)
@@ -1770,24 +1941,61 @@
       return ` · ${sel.value && sel.value !== 'none' ? `Format: ${name}` : name}`;
     }
 
+    // A key in the agent's prompt box, before the Composer: the / shortcuts and the prompt history (true: taken)
+    #sayKey(e) {
+      // The / shortcuts menu takes the arrows, Enter / Tab and Esc while it's open
+      if (!this.el.slash.hidden) {
+        const n = this.#slashOptions.length;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          this.#slashAt = (this.#slashAt + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+          this.#renderSlash();
+          this.#slashOptions[this.#slashAt]?.scrollIntoView({ block: 'nearest' });
+          return true;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          this.#applySlash(this.#slashOptions[this.#slashAt]?.dataset.slash);
+          return true;
+        }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.#closeSlash(); return true; }
+      }
+      // ↑ with the caret at the very start (or while walking the history) brings back earlier prompts; ↓ walks
+      // back to the newest and then to what was typed. Elsewhere the arrows move the caret as usual.
+      const ta = this.el.sayText;
+      const atStart = ta.selectionStart === 0 && ta.selectionEnd === 0;
+      const walking = this.#histPos !== -1;
+      if (!e.shiftKey && ((e.key === 'ArrowUp' && (atStart || walking)) || (e.key === 'ArrowDown' && walking))) {
+        if (this.#walkHistory(e.key === 'ArrowUp' ? 1 : -1)) { e.preventDefault(); return true; }
+      }
+      return false; // the rest is the Composer's: Enter sends
+    }
+
+    #sending = false;
+
     async #send() {
-      const text = this.el.sayText.value.trim();
-      if (this.#sayEmpty || !this.sayFor) { return; }
-      if (this.sayAtt.busy) { return this.#sayHint(T.attaching, 'err'); }
-      if (this.sayAtt.unconfirmed.length) { return this.#sayHint(T.secretWait(this.sayAtt.unconfirmed), 'err'); }
-      if (!this.#sayConfirming) { return this.#confirmSay(true); }
-      this.#confirmSay(false);
+      const raw = this.el.sayText.value;
+      const text = raw.trim();
+      if (this.#sending || this.sayBox.empty || !this.sayFor) { return; }
+      if (this.sayBox.files.busy) { return this.#sayHint(T.attaching, 'err'); }
+      if (this.sayBox.files.unconfirmed.length) { return this.#sayHint(T.secretWait(this.sayBox.files.unconfirmed), 'err'); }
+      this.#sending = true;
       this.el.saySend.disabled = true;
+      this.sayBox.setState('sending');
       const id = this.sayFor;
-      const res = await this.api?.sendPrompt(id, this.sayAtt.compose(this.sayPaste.compose(text)), this.el.sayFormat.value || undefined);
+      const res = await this.api?.sendPrompt(id, this.sayBox.compose(), this.el.sayFormat.value || undefined)
+        .catch(err => ({ ok: false, error: errorText(err) }));
+      this.#sending = false;
+      this.sayBox.setState(res?.ok ? 'ok' : 'error');
       if (res?.ok) {
         if (text) { this.#remember(id, text); }
-        this.drafts.delete(`say:${id}`);
-        if (id !== this.sayFor) { return this.#renderSay(); } // another agent was picked meanwhile: its box stays as it is
-        this.el.sayText.value = '';
-        this.sayAtt.clear();
-        this.sayPaste.clear();
-        this.#grow(this.el.sayText);
+        if (id !== this.sayFor) { this.drafts.delete(`say:${id}`); return this.#renderSay(); } // another agent was picked meanwhile: its box stays as it is
+        // What was typed while it went out stays in the box (and in the draft); what went is taken out
+        const ta = this.el.sayText;
+        ta.value = ta.value.startsWith(raw) ? ta.value.slice(raw.length).trimStart() : ta.value === raw ? '' : ta.value;
+        this.sayBox.files.clear();
+        this.sayBox.pastes.clear();
+        this.sayBox.changed(); // the draft keeps what is left (an empty one is dropped)
         this.#loadQueue(true);
         this.#sayHint(res.via === 'clipboard' ? T.copiedPaste : res.queued ? T.queued : T.sent, 'ok');
       } else {
@@ -1801,7 +2009,7 @@
     // "/" at the start of an empty box opens the shortcuts; picking one fills in its text, to edit or send
     #renderSlash() {
       const v = this.el.sayText.value;
-      const open = /^\/\w*$/.test(v) && !this.#sayConfirming;
+      const open = /^\/\w*$/.test(v);
       // "/rev" finds /review; "/fail" finds it by what it does
       const q = v.slice(1).toLowerCase();
       const list = open ? SLASH.filter(c => c.cmd.startsWith(v.toLowerCase()) || (q && c.label.toLowerCase().includes(q))) : [];
@@ -1826,8 +2034,7 @@
       if (!c) { return; }
       this.el.sayText.value = c.text;
       this.#closeSlash();
-      this.#grow(this.el.sayText);
-      this.#sayChanged();
+      this.sayBox.changed();
       this.el.sayText.focus();
       this.el.sayText.setSelectionRange(c.text.length, c.text.length);
     }
@@ -1847,7 +2054,7 @@
       if (this.#histPos === -1) { this.#histStash = this.el.sayText.value; } // the draft, kept while walking
       this.#histPos = pos;
       this.el.sayText.value = pos === -1 ? this.#histStash : h[pos];
-      this.#grow(this.el.sayText);
+      this.sayBox.refresh(); // not a draft: the one typed is kept aside
       this.#sayState();
       return true;
     }
@@ -1869,32 +2076,19 @@
         : '';
     }
 
-    // Up to the box's max-height (CSS: a third of the window, at most 240px), then it scrolls
-    #grow(ta) {
-      ta.style.height = 'auto';
-      const max = Number.parseFloat(getComputedStyle(ta).maxHeight) || 120;
-      ta.style.height = `${Math.min(ta.scrollHeight, max)}px`;
-    }
-
     // "Ask Bayloob": type what should be done, Enter, then pick the agent and folder right here
-    get #askEmpty() { return !this.el.askText.value.trim() && !this.askAtt.count && !this.askPaste?.count; }
 
     // Next / Start button and length label; the text is kept as a draft until it starts
     #askChanged() {
-      if (!this.askPaste) { return; }
-      const why = this.#askEmpty ? T.askWhy : '';
-      this.el.askSend.disabled = !!why;
-      this.el.askSend.title = why || T.askTip;
-      this.el.askSend.setAttribute('aria-label', why || T.askTip);
-      this.el.askCount.textContent = lengthLabel([this.el.askText.value.trim(), this.askPaste.text].filter(Boolean).join('\n\n'));
-      this.drafts.set(ASK_DRAFT, { text: this.el.askText.value, files: [...this.askAtt.items] });
-      this.#grow(this.el.askText);
+      if (!this.askBox) { return; } // still being built
+      this.askBox.setSend(this.askBox.empty ? T.askWhy : '', T.askTip);
+      this.drafts.set(ASK_DRAFT, this.askBox.snapshot());
     }
 
     async #askNext() {
-      if (this.#askEmpty) { return; }
-      if (this.askAtt.busy) { return this.#askHint(T.attaching, 'err'); }
-      if (this.askAtt.unconfirmed.length) { return this.#askHint(T.secretWait(this.askAtt.unconfirmed), 'err'); }
+      if (this.askBox.empty) { return; }
+      if (this.askBox.files.busy) { return this.#askHint(T.attaching, 'err'); }
+      if (this.askBox.files.unconfirmed.length) { return this.#askHint(T.secretWait(this.askBox.files.unconfirmed), 'err'); }
       if (!this.el.askConfirm.hidden) { return this.#askStart(); }
       if (!this.el.askPick.hidden) { return this.#confirmAsk(true); }
       const opts = await this.api?.launchOptions();
@@ -1935,7 +2129,7 @@
         this.askCwd = (this.el.askPick.querySelector('#askCwd')?.value || '').trim();
         if (!this.askAgent || !this.askCwd) { return this.#askHint(T.pickFolder, 'err'); }
         const a = this.askOpts.agents[this.askAgent];
-        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}${this.askAtt.count ? T.withFiles(this.askAtt.count) : ''}${this.askPaste.count ? T.withPastes(this.askPaste.count) : ''}${esc(this.#formatNote(this.el.askFormat))}</span>
+        this.el.askConfirm.innerHTML = `<span class="q">${T.confirmLaunch(esc(a?.name || this.askAgent), esc(this.askCwd))}${this.askWorktree ? ` · ${T.inWorktree}` : ''}${this.askBox.files.count ? T.withFiles(this.askBox.files.count) : ''}${this.askBox.pastes.count ? T.withPastes(this.askBox.pastes.count) : ''}${esc(this.#formatNote(this.el.askFormat))}</span>
           <button type="button" class="btn" data-edit>${T.edit}<kbd aria-hidden="true">Esc</kbd></button>
           <button type="submit" class="btn on">${T.launchBtn}<kbd aria-hidden="true">↵</kbd></button>`;
         this.#askHint(T.confirmHint);
@@ -1945,8 +2139,7 @@
       }
       this.el.askPick.hidden = on;
       this.el.askConfirm.hidden = !on;
-      this.el.askText.readOnly = on;
-      this.el.askFormat.disabled = this.el.askAttach.disabled = on; // what is confirmed is what starts
+      this.askBox.lock(on); // what is confirmed is what starts
       if (on) { this.el.askConfirm.querySelector('[type=submit]')?.focus(); } else { this.el.askText.focus(); }
       this.#fit();
     }
@@ -1955,12 +2148,13 @@
       const cwd = this.askCwd;
       if (!this.askAgent || !cwd) { return this.#askHint(T.pickFolder, 'err'); }
       this.#askHint(T.starting);
-      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.askAtt.compose(this.askPaste.compose(this.el.askText.value)), worktree: this.askWorktree, format: this.el.askFormat.value || undefined });
+      this.askBox.setState('sending');
+      const res = await this.api?.launch({ agent: this.askAgent, cwd, prompt: this.askBox.compose(), worktree: this.askWorktree, format: this.el.askFormat.value || undefined })
+        .catch(err => ({ ok: false, error: errorText(err) }));
+      this.askBox.setState(res?.ok ? 'ok' : 'error');
       if (res?.ok) {
         this.#askReset();
-        this.askAtt.clear();
-        this.askPaste.clear();
-        this.#askChanged();
+        this.askBox.clear();
         this.#askHint(T.started, 'ok');
         setTimeout(() => { this.#askHint(''); this.#fit(); }, 2500);
       } else {
@@ -1970,28 +2164,26 @@
 
     // Esc while picking the agent: the picker closes, what you wrote stays (Esc again clears it)
     #askClosePick() {
-      this.el.askText.readOnly = false;
-      this.el.askFormat.disabled = this.el.askAttach.disabled = false;
+      this.askBox.lock(false);
       this.el.askPick.hidden = true;
       this.el.askPick.innerHTML = '';
       this.el.askConfirm.hidden = true;
       this.el.askConfirm.innerHTML = '';
       this.#askHint('');
-      this.#askChanged();
+      this.askBox.changed();
       this.el.askText.focus();
       this.#fit();
     }
 
     #askReset() {
       this.el.askText.value = '';
-      this.el.askText.readOnly = false;
-      this.el.askFormat.disabled = this.el.askAttach.disabled = false;
+      this.askBox.lock(false);
       this.el.askPick.hidden = true;
       this.el.askPick.innerHTML = '';
       this.el.askConfirm.hidden = true;
       this.el.askConfirm.innerHTML = '';
       this.#askHint('');
-      this.#askChanged();
+      this.askBox.changed();
       this.#fit();
     }
 
@@ -2054,6 +2246,7 @@
     #syncEmbed() {
       if (!WINDOW_MODE) { return; }
       const main = this.el.panel.querySelector('.main');
+      main.classList.toggle('dashing', this.section === 'home' && !this.launchMode);
       const on = this.section === 'tasks' && !this.launchMode && this.el.pal.hidden;
       main.classList.toggle('embedding', on);
       let box = main.querySelector('.embed');
@@ -2210,6 +2403,7 @@
     }
 
     #bind() {
+      this.#bindDash();
       this.el.side.addEventListener('click', e => {
         if (e.target.closest('[data-settings]')) { return this.api?.openSettings(); }
         const b = e.target.closest('[data-section]');
@@ -2326,7 +2520,6 @@
       document.getElementById('openWindow').addEventListener('click', () => this.api?.openWindow(this.section));
       if (WINDOW_MODE) { this.#bindWindow(); }
       // Prompt to the selected agent: Enter sends, Shift+Enter is a new line
-      this.el.say.addEventListener('submit', e => { e.preventDefault(); this.#send(); });
       this.el.finished.addEventListener('click', e => {
         const reply = e.target.closest('[data-reply]');
         if (reply) { return this.#replyTo(reply.dataset.reply); }
@@ -2337,49 +2530,29 @@
         const b = e.target.closest('[data-sugg]');
         if (b) { this.#useSuggestion(Number(b.dataset.sugg)); }
       });
-      this.el.sayConfirm.addEventListener('click', async e => {
+      this.el.sayMode.addEventListener('click', async e => {
         if (e.target.closest('[data-handoff]')) {
           const r = await this.api?.continueInBayloob(this.sayFor);
-          this.#confirmSay(false);
           this.#sayHint(r?.ok ? T.handoffStarted : r?.error || 'Could not continue it in Bayloob', r?.ok ? 'ok' : 'err');
-          return;
         }
-        if (e.target.closest('[data-edit]')) { this.#confirmSay(false); this.el.sayText.focus(); }
       });
       this.el.askConfirm.addEventListener('click', e => {
         if (e.target.closest('[data-edit]')) { this.#confirmAsk(false); }
       });
+      // While a prompt waits for its second Enter the text is read-only and focus sits on the confirm button,
+      // so a click in the text or more typing went nowhere: either one goes back to editing (the key lands in the text; Space still presses the button)
+      const editKey = e => !e.ctrlKey && !e.metaKey && !e.altKey && ((e.key.length === 1 && e.key !== ' ') || e.key === 'Backspace' || e.key === 'Delete');
+      const backToEdit = (form, ta, confirming, cancel) => {
+        ta.addEventListener('pointerdown', () => { if (confirming()) { cancel(); } });
+        form.addEventListener('keydown', e => {
+          if (confirming() && editKey(e) && !e.target.closest('textarea:not([readonly])')) { cancel(); ta.focus(); }
+        }, true);
+      };
+      backToEdit(this.el.ask, this.el.askText, () => !this.el.askConfirm.hidden, () => this.#confirmAsk(false));
       this.el.sayText.addEventListener('input', () => {
         this.#histPos = -1;
         this.#slashAt = 0;
-        this.#renderSlash(); this.#grow(this.el.sayText); this.#sayChanged(); });
-      this.el.sayFormat.addEventListener('change', () => this.#sayChanged());
-      this.el.sayText.addEventListener('keydown', e => {
-        // The / shortcuts menu takes the arrows, Enter / Tab and Esc while it's open
-        if (!this.el.slash.hidden) {
-          const n = this.#slashOptions.length;
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            this.#slashAt = (this.#slashAt + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
-            this.#renderSlash();
-            return this.#slashOptions[this.#slashAt]?.scrollIntoView({ block: 'nearest' });
-          }
-          if (e.key === 'Enter' || e.key === 'Tab') {
-            e.preventDefault();
-            return this.#applySlash(this.#slashOptions[this.#slashAt]?.dataset.slash);
-          }
-          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.#closeSlash(); return; }
-        }
-        // ↑ with the caret at the very start (or while walking the history) brings back earlier prompts; ↓ walks
-        // back to the newest and then to what was typed. Elsewhere the arrows move the caret as usual.
-        const ta = this.el.sayText;
-        const atStart = ta.selectionStart === 0 && ta.selectionEnd === 0;
-        const walking = this.#histPos !== -1;
-        if (!this.#sayConfirming && !e.shiftKey && ((e.key === 'ArrowUp' && (atStart || walking)) || (e.key === 'ArrowDown' && walking))) {
-          if (this.#walkHistory(e.key === 'ArrowUp' ? 1 : -1)) { e.preventDefault(); return; }
-        }
-        // Enter or Ctrl+Enter sends; Shift+Enter is a new line
-        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.#send(); }
+        this.#renderSlash();
       });
       this.el.slash.addEventListener('mousedown', e => {
         const b = e.target.closest('[data-slash]');
@@ -2391,21 +2564,10 @@
         b.disabled = true;
         this.#renderQueue((await this.api?.unqueue(this.sayFor, Number(b.dataset.unqueue))) || []);
       });
-      // Ask Bayloob: Enter → pick agent + folder → Enter starts
-      this.el.ask.addEventListener('submit', e => { e.preventDefault(); this.#askNext(); });
-      this.el.sayAttach.addEventListener('click', () => this.sayAtt.pick());
-      this.el.askAttach.addEventListener('click', () => this.askAtt.pick());
-      this.sayAtt.bindDrop(this.el.say);
-      this.sayAtt.bindPaste(this.el.sayText);
-      this.askAtt.bindDrop(this.el.ask);
-      this.askAtt.bindPaste(this.el.askText);
-      // after the files: a pasted file is theirs, a large text becomes a chip
-      this.sayPaste.bindPaste(this.el.sayText);
-      this.askPaste.bindPaste(this.el.askText);
       Attachments.guardWindow();
+      // Ask Bayloob: Enter → pick agent + folder → Enter starts (the Composer); emptied while picking: back to the start
       this.el.askText.addEventListener('input', () => {
-        if (this.#askEmpty && !this.el.askPick.hidden) { this.#askReset(); }
-        this.#askChanged();
+        if (this.askBox.empty && !this.el.askPick.hidden) { this.#askReset(); }
       });
       this.el.askPick.addEventListener('click', e => {
         const a = e.target.closest('[data-agent]');
@@ -2423,17 +2585,11 @@
           return this.el.pal.hidden ? this.#openPal() : this.#closePal();
         }
         if (e.target.closest?.('#pal')) { return; }
-        // Ask Bayloob: Enter goes on (Shift+Enter is a new line)
-        if (e.target === this.el.askText && e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-          e.preventDefault();
-          return this.el.ask.requestSubmit();
-        }
         // Typing in a prompt box: only Escape is ours (leave the box / cancel the agent pick)
         if (e.target.closest?.('#say, #ask')) {
           if (e.key === 'Escape') {
             e.preventDefault();
-            if (this.#sayConfirming && e.target.closest('#say')) { this.#confirmSay(false); this.el.sayText.focus(); }
-            else if (!this.el.askConfirm.hidden) { this.#confirmAsk(false); }
+            if (!this.el.askConfirm.hidden) { this.#confirmAsk(false); }
             else if (!this.el.askPick.hidden) { this.#askClosePick(); }
             else if (e.target === this.el.askText && this.el.askText.value) { this.#askReset(); }
             else { e.target.blur(); }

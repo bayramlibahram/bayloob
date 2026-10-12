@@ -22,6 +22,7 @@
     debate: { name: "Design debate", hint: "agents discuss, then one builds" },
     lead: { name: "Lead + team", hint: "one agent leads, the team builds" },
     orchestrator: { name: "Orchestrator", hint: "it starts workers as it goes" },
+    roles: { name: "Role chain", hint: "Research → Data → Content → Design" },
   };
   const PRESETS = {
     audit: "Code audit",
@@ -78,6 +79,8 @@
         .slice(0, ATTACH_MAX),
       single: {
         agent: agentOr(s.agent),
+        // a role agent to run it as (roles.js: a built-in id or the owner's c-…), or null for the plain agent
+        role: /^[a-z][a-z0-9-]{0,31}$/.test(String(s.role || "")) ? String(s.role) : null,
         worktree: !!s.worktree,
         terminal: s.terminal ? String(s.terminal) : null,
       },

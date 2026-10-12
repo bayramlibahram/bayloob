@@ -92,6 +92,7 @@ class SessionStore extends EventEmitter {
       role: launch?.role || old?.role || null,
       task: launch?.task || old?.task || null, // the workflow task this session works for
       label: launch?.label || old?.label || null,
+      persona: launch?.persona || old?.persona || null, // the role agent it runs as (roles.js), e.g. "research"
       transcript: ev.transcript_path || old?.transcript || null,
       activity: old?.activity || null,
       history: old?.history || [],
@@ -243,6 +244,7 @@ class SessionStore extends EventEmitter {
       role: launch.role || null,
       task: launch.task || null,
       label: launch.label || null,
+      persona: launch.persona || null,
       activity: { title: "Starting…", detail: launch.cwd, at: Date.now() },
       history: [],
       files: [],

@@ -253,12 +253,12 @@
         paste: $('paste'), queued: $('queued'), projectBox: $('projectBox'), cwd: $('cwd'), browse: $('browse'), recent: $('recent'),
         attach: $('attach'), atts: $('atts'),
         quote: $('quote'), agents: $('agents'), worktree: $('worktree'), terms: $('terms'), review: $('review'), msg: $('msg'), back: $('back'), submit: $('submit') };
-      this.att = new Attachments({ api: api.uploads, list: this.el.atts, onChange: () => { this.#saveDraft(); this.#fit(); }, onError: t => this.#message(t, true) });
-      // A large paste becomes a chip; what you were writing is kept per session (and for a new one) until it's sent
-      this.pastes = new Pastes({ list: $('pastes'), onChange: () => { this.#updateCount(); this.#saveDraft(); this.#fit(); },
-        insert: text => this.#insert(text) });
+      // The prompt box (the shared Composer: files, large pastes as chips, the length label); Enter goes to the next step.
+      // What you were writing is kept per session (and for a new one) until it's sent
+      this.box = new Composer({ form: this.el.prompt.closest('.composer'), text: this.el.prompt, attach: this.el.attach, files: this.el.atts,
+        pastes: $('pastes'), count: this.el.count, uploads: api.uploads,
+        onChange: () => { this.#saveDraft(); this.#fit(); }, onSubmit: () => this.#next(), onError: t => this.#message(t, true) });
       this.drafts = new Drafts('bayloob.launcher.drafts');
-      this.el.attach.hidden = !this.att.available;
       this.#bind();
     }
 
@@ -267,12 +267,12 @@
     get flow() { return this.isNew ? ['prompt', 'agent', 'confirm'] : ['prompt', 'confirm']; }
     get text() { return this.el.prompt.value.trim(); }
     // what the agent gets: the text, the pasted blocks, and the attached files
-    get prompt() { return this.att.compose(this.pastes.compose(this.text)); }
+    get prompt() { return this.box.compose(); }
     get #draftKey() { return this.isNew ? 'new' : `session:${this.state?.session?.id}`; }
 
     #saveDraft() {
       if (!this.state || this.busy) { return; }
-      this.drafts.set(this.#draftKey, { text: this.el.prompt.value, files: [...this.att.items], pastes: this.pastes.snapshot() });
+      this.drafts.set(this.#draftKey, this.box.snapshot());
     }
 
     show(state) {
@@ -282,16 +282,8 @@
       this.el.who.innerHTML = Agent.thumb(this.isNew ? MANAGER : s.agent || MANAGER);
       this.el.title.textContent = this.isNew ? T.ask : T.send(s.agentName);
       this.el.subtitle.textContent = this.isNew ? T.askSub : s.project;
-      this.el.prompt.value = state.prefill || '';
-      this.att.clear();
-      this.pastes.clear();
       // No prompt handed in: what you were writing here last time comes back (files checked again)
-      const draft = state.prefill ? null : this.drafts.get(this.#draftKey);
-      if (draft) {
-        this.el.prompt.value = draft.text || '';
-        if (draft.files?.length) { this.att.restore(draft.files); }
-        this.pastes.restore(draft.pastes);
-      }
+      this.box.restore(state.prefill ? { text: state.prefill } : this.drafts.get(this.#draftKey));
       this.el.prompt.classList.toggle('code', !!state.prefill && !state.draft);
       this.el.prompt.placeholder = this.isNew ? T.promptPlaceholder : T.followUp;
       this.el.projectBox.hidden = !this.isNew;
@@ -309,7 +301,8 @@
         this.#renderRecent();
       }
       this.#go('prompt');
-      this.#grow();
+      this.box.refresh();
+      this.#fit();
       if (state.prefill) {
         // Show the prompt from its first line ("Fix this error:"), not scrolled to the end
         this.el.prompt.setSelectionRange(0, 0);
@@ -337,7 +330,7 @@
       if (first) {
         this.#message(this.state.prefill && !this.state.draft && this.el.prompt.value === this.state.prefill ? `${T.prefilled} · ${T.hintWrite}` : T.hintWrite, false, true);
         this.#renderQueue();
-        this.#updateCount();
+        this.box.refresh();
         this.el.prompt.focus();
       } else if (step === 'agent') {
         this.el.quote.textContent = this.prompt || T.noPrompt;
@@ -358,8 +351,8 @@
     #next() {
       if (this.busy) { return; }
       if (this.step === 'prompt') {
-        if (this.att.busy) { return this.#message(T.attaching, true); }
-        if (this.att.unconfirmed.length) { return this.#message(`${this.att.unconfirmed.map(f => f.name).join(', ')} looks like it holds a secret — remove it, or press Send anyway`, true); }
+        if (this.box.files.busy) { return this.#message(T.attaching, true); }
+        if (this.box.files.unconfirmed.length) { return this.#message(`${this.box.files.unconfirmed.map(f => f.name).join(', ')} looks like it holds a secret — remove it, or press Send anyway`, true); }
         if (!this.isNew && !this.prompt) { this.#message(T.writeFirst, true); return this.el.prompt.focus(); }
         if (this.isNew && !this.el.cwd.value.trim()) { this.#message(T.pickProject, true); return this.el.cwd.focus(); }
       }
@@ -430,7 +423,7 @@
         rows.push([T.rWhen, this.#willPaste ? `<span class="badge paste">${T.paste}</span>`
           : this.#willQueue ? `<span class="badge queue">${T.queued}</span>` : `<span class="badge now">${T.now}</span>`]);
       }
-      if (this.att.count) { rows.push([T.rFiles, this.att.items.map(a => `<code title="${esc(a.path)}">${esc(a.name)}</code>`).join(' ')]); }
+      if (this.box.files.count) { rows.push([T.rFiles, this.box.files.items.map(a => `<code title="${esc(a.path)}">${esc(a.name)}</code>`).join(' ')]); }
       const text = this.prompt;
       this.el.review.innerHTML = rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('') +
         `<div class="prompt"><span class="label">${T.rPrompt}</span><button type="button" class="ghost edit" data-edit>${T.edit}</button>
@@ -447,29 +440,6 @@
         : '';
     }
 
-    #updateCount() {
-      this.el.count.textContent = lengthLabel([this.el.prompt.value.trim(), this.pastes?.text].filter(Boolean).join('\n\n'));
-    }
-
-    // A pasted chip's text put back at the caret
-    #insert(text) {
-      const el = this.el.prompt;
-      const at = el.selectionStart ?? el.value.length;
-      el.value = el.value.slice(0, at) + text + el.value.slice(el.selectionEnd ?? at);
-      el.focus();
-      this.#updateCount();
-      this.#grow();
-      this.#saveDraft();
-    }
-
-    // The prompt box grows with its text, up to a limit (then it scrolls)
-    #grow() {
-      const ta = this.el.prompt;
-      ta.style.height = 'auto';
-      ta.style.height = `${Math.min(ta.scrollHeight + 2, 240)}px`;
-      this.#fit();
-    }
-
     #pick(agent) {
       if (!this.state.agents[agent]?.installed) { return; }
       this.agent = agent;
@@ -484,8 +454,7 @@
       const at = el.selectionStart ?? el.value.length;
       el.value = el.value.slice(0, at) + text + el.value.slice(el.selectionEnd ?? at);
       el.focus();
-      this.#updateCount();
-      this.#grow();
+      this.box.changed();
     }
 
     #message(text, isError = false, html = false) {
@@ -532,12 +501,7 @@
       this.el.back.addEventListener('click', () => this.#back());
       this.el.close.addEventListener('click', () => this.api.close());
       this.el.paste.addEventListener('click', () => this.#pasteClipboard());
-      this.el.attach.addEventListener('click', () => this.att.pick());
-      this.att.bindDrop(this.el.prompt.closest('.composer'));
-      this.att.bindPaste(this.el.prompt);
-      this.pastes.bindPaste(this.el.prompt); // after the files: a pasted file is theirs, a large text a chip
       Attachments.guardWindow();
-      this.el.prompt.addEventListener('input', () => { this.#updateCount(); this.#grow(); this.#saveDraft(); });
       this.el.queued.addEventListener('click', async e => {
         const b = e.target.closest('[data-unqueue]');
         if (!b) { return; }
@@ -590,7 +554,7 @@
           }
         }
         // Enter goes on (Shift+Enter is a new line in the prompt); a focused button handles its own Enter
-        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.defaultPrevented) { // in the prompt: the Composer's
           const onButton = e.target.closest?.('button') && e.target !== this.el.submit;
           if (!onButton) { e.preventDefault(); this.#next(); }
         }

@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>Bayloob settings</title>
 <link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="../shared/select-menu.css">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: transparent; height: 100%; overflow: hidden;
@@ -51,9 +52,23 @@
   .fmtlist button { padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--field); color: var(--soft); font-size: 12.5px; }
   .fmtlist button[aria-pressed="true"] { border-color: var(--brand); color: var(--text); background: color-mix(in srgb, var(--brand) 14%, transparent); }
   .fmtlist button.add { border-style: dashed; }
+  .fmtlist button .dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--c); vertical-align: 1px; }
+  /* Roles: the one on view — its name, engine, permission, answer file and instructions */
+  .roleform { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+  .roleform > label { color: var(--muted); font-size: 12px; }
+  .roleform input[type=text] { padding: 6px 9px; }
+  #roleName { font: 13px -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; } /* a name, not code (the answer file stays monospace) */
+  .roleform input[type=color] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+  .roleform .inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .roleform textarea { grid-column: 1 / -1; min-height: 140px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--field); color: var(--text); font: 12.5px/1.5 ui-monospace, monospace; resize: vertical; }
+  .roleform :is(input, textarea, select):disabled, .roleform textarea[readonly] { opacity: .7; }
+  .roleform .link { color: var(--brand-soft); font-size: 12px; font-weight: 600; }
+  .roleform .acts { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+  .roleform .acts small { flex: 1; color: var(--muted); font-size: 12px; }
   .field > .row.wide small { flex: 1; }
   .arow .fmt { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-  .arow .fmt select { padding: 4px 8px; font-size: 12px; }
+  .arow .fmt select, .arow .fmt .smenu-trigger { padding: 4px 8px; font-size: 12px; }
   .field > .row.wide { display: flex; align-items: center; gap: 10px; }
   .field:has(> input[type=text]) { grid-template-columns: 1fr; }
   .field:has(> input[type=text]) > * { grid-column: 1; grid-row: auto; justify-self: stretch; }
@@ -109,7 +124,7 @@
   .host { display: grid; grid-template-columns: 1fr 1fr 120px; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--line); }
   .host.prod { border-color: color-mix(in srgb, var(--waiting) 60%, transparent); }
   .host label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); }
-  .host input, .host select, .host textarea { padding: 5px 8px; font: 12.5px -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
+  .host input, .host select, .host .smenu-trigger, .host textarea { padding: 5px 8px; font: 12.5px -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
   .host textarea { grid-column: 1 / -1; min-height: 44px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--text); font-family: ui-monospace, monospace; resize: vertical; }
   .host .wide { grid-column: 1 / -1; }
   .host .acts { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
@@ -128,7 +143,7 @@
   .arow .nm small { color: var(--muted); font-size: 11.5px; }
   .arow .cmds { grid-column: 2 / -1; display: flex; flex-direction: column; gap: 2px; font: 11px/1.45 ui-monospace, "Ubuntu Mono", monospace; color: var(--muted); overflow-wrap: anywhere; }
   .arow .cmds b { font-family: -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; font-weight: 600; margin-right: 4px; }
-  .arow .cmds select, .arow .cmds input { font: inherit; color: var(--fg); max-width: 100%; }
+  .arow .cmds select, .arow .cmds .smenu-trigger, .arow .cmds input { font: inherit; color: var(--fg); max-width: 100%; }
   .arow .cmds input[data-ollama="url"] { width: 26ch; }
   .arow .cmds .hint { font-family: -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
   .arow input.notes { grid-column: 2 / -1; padding: 5px 8px; font: 12px -apple-system, "Segoe UI", Ubuntu, system-ui, sans-serif; }
@@ -300,6 +315,15 @@
         <div class="agentgrid" id="agentGrid" hidden></div>
       </div>
       </div>
+      <h3>Roles</h3>
+      <div class="group">
+      <div class="field">
+        <span class="label">Role agents</span>
+        <small>A role runs on one of the agents above, with its own instructions: on its own from New task, or as a workflow stage whose answer the next stage reads. Built-in ones can't be changed — make a copy to change it.</small>
+        <fieldset class="fmtlist wide" id="roleList" aria-label="Roles"></fieldset>
+        <div class="roleform wide" id="roleForm"></div>
+      </div>
+      </div>
       <h3>Arbiter</h3>
       <div class="group">
       <div class="field">
@@ -335,8 +359,11 @@
   </form>
 
 <script src="../shared/ui-common.js"></script>
+<script src="../shared/select-menu.js"></script>
 <script src="../../shared/prompt-format.js"></script>
+<script src="../../shared/roles.js"></script>
 <script>
+  SelectMenu.auto(); // every <select> gets the styled menu, including ones rendered later
   const TAB_KEY = 'bayloob.settings.tab';
   const H = {
     name: 'Name', alias: 'SSH alias (~/.ssh/config)', env: 'Environment', allow: 'Allowed commands — one pattern per line; * is one word, a final * the rest',
@@ -394,7 +421,7 @@
       $('logo').innerHTML = Agent.thumb(MANAGER);
       this.el = { form: $('form'), mascot: $('mascot'), pillSize: $('pillSize'), uiScale: $('uiScale'), arbiterConfidence: $('arbiterConfidence'), theme: $('theme'), shortcut: $('shortcut'), workspaceShortcut: $('workspaceShortcut'), onClose: $('onClose'), terminal: $('terminal'), editor: $('editor'),
         agentSum: $('agentSum'), agentsMore: $('agentsMore'), agentGrid: $('agentGrid'),
-        music: $('music'), promptDefault: $('promptDefault'), fmtList: $('fmtList'), fmtName: $('fmtName'), promptText: $('promptText'), fmtRemove: $('fmtRemove'), promptNote: $('promptNote'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
+        music: $('music'), promptDefault: $('promptDefault'), fmtList: $('fmtList'), fmtName: $('fmtName'), promptText: $('promptText'), fmtRemove: $('fmtRemove'), promptNote: $('promptNote'), roleList: $('roleList'), roleForm: $('roleForm'), watchClipboard: $('watchClipboard'), shellField: $('shellField'), shellTmux: $('shellTmux'), shellNote: $('shellNote'), sounds: $('sounds'), volume: $('volume'), testSound: $('testSound'), soundMore: $('soundMore'), soundGrid: $('soundGrid'), hooks: $('hooks'), extension: $('extension'), rules: $('rules'), denials: $('denials'), msg: $('msg'), cancel: $('cancel'), save: $('save') };
       this.#bind();
     }
 
@@ -410,6 +437,8 @@
       this.music = values.music;
       this.promptFormat = PromptFormat.normalize(values.promptFormat);
       this.fmtShown = this.promptFormat.default || 'adhd'; // the format whose text is on view
+      this.roles = Roles.normalize(values.roles);
+      this.roleShown = this.roleShown && Roles.get(this.roles, this.roleShown) ? this.roleShown : Roles.BUILTIN[0].id;
       this.watchClipboard = values.watchClipboard;
       this.sounds = values.sounds;
       this.soundToggles = { ...(values.soundToggles || {}) };
@@ -437,6 +466,7 @@
       this.#renderTheme();
       this.#renderMusic();
       this.#renderPrompt();
+      this.#renderRoles();
       this.#renderWatch();
       this.#renderShell();
       this.#renderSounds();
@@ -630,6 +660,52 @@
 
     #customShown() { return this.promptFormat.custom.find(c => c.id === this.fmtShown); }
 
+    // ---------- roles (Agents → Roles) ----------
+
+    // The list (a chip per role, in its colour), then the form of the one on view. The form is drawn again only
+    // when another role is shown, so typing in it keeps its caret; a name or colour change redraws the list.
+    #renderRoles({ form = true } = {}) {
+      const all = Roles.list(this.roles);
+      const shown = all.find(r => r.id === this.roleShown) || all[0];
+      this.roleShown = shown.id;
+      this.el.roleList.innerHTML = all.map(r => `<button type="button" data-role="${esc(r.id)}" aria-pressed="${r.id === shown.id}"><span class="dot" style="--c:${esc(r.color)}"></span>${esc(r.name)}</button>`).join('') +
+        '<button type="button" class="add" data-role-add>+ New role</button>';
+      if (form) { this.#renderRoleForm(shown); }
+    }
+
+    #renderRoleForm(r) {
+      const info = this.state.agentInfo || {};
+      // engines: the coding agents (a text-only one can't read the project)
+      const engines = Object.keys(this.agents).filter(k => !info[k]?.text && k !== 'ollama');
+      if (!engines.includes(r.engine)) { engines.unshift(r.engine); }
+      const off = r.builtin ? 'disabled' : '';
+      const def = Roles.BUILTIN.find(b => b.id === r.id)?.engine; // a built-in role's own engine (the owner may pick another)
+      const modes = { 'read-only': 'Read-only', writes: 'Can change files' };
+      this.el.roleForm.innerHTML = `
+        <label for="roleName">Name</label><input type="text" id="roleName" maxlength="40" value="${esc(r.name)}" ${off}>
+        <label for="roleEngine">Runs on</label><span class="inline"><select id="roleEngine">${engines.map(k => `<option value="${esc(k)}"${k === r.engine ? ' selected' : ''}>${esc(info[k]?.name || Agent.displayName(k))}${k === def ? ' · default' : ''}${info[k] && !info[k].installed ? ' (not installed)' : ''}</option>`).join('')}</select>
+          <input type="color" id="roleColor" value="${esc(r.color)}" aria-label="Colour" ${off}>${r.builtin && r.engine !== def ? '<button type="button" class="link" data-role-reset>Reset to default</button>' : ''}</span>
+        <span class="label">Permission</span><fieldset class="seg" id="roleMode" aria-label="Permission">${Roles.MODES.map(m => `<button type="button" data-v="${m}" aria-pressed="${m === r.mode}" ${off}>${modes[m]}</button>`).join('')}</fieldset>
+        <label for="roleArtifact">Answer file</label><input type="text" id="roleArtifact" maxlength="60" placeholder="e.g. research.md — the next workflow stage reads it" value="${esc(r.artifact)}" ${off}>
+        <textarea id="roleText" spellcheck="false" aria-label="Instructions" ${r.builtin ? 'readonly' : ''}>${esc(r.instructions)}</textarea>
+        <div class="acts"><small id="roleNote">${r.builtin ? 'Built-in: pick the agent it runs on here; make a copy to change the rest.' : r.instructions.trim() ? '' : 'A role needs instructions — without them it is not saved.'}</small>
+          <button type="button" class="btn sm" data-role-copy>Make a copy</button>${r.builtin ? '' : '<button type="button" class="btn sm" data-role-remove>Remove this role</button>'}</div>`;
+      SelectMenu.enhance(this.el.roleForm.querySelector('#roleEngine'));
+    }
+
+    #roleCustom() { return this.roles.custom.find(r => r.id === this.roleShown); }
+
+    #addRole(from) {
+      const id = `c-${Date.now().toString(36)}`;
+      const { builtin, ...r } = { color: '#8b5cff', engine: 'claude', mode: 'read-only', artifact: '', ...from };
+      this.roles.custom.push({ ...r, id });
+      this.roleShown = id;
+      this.#renderRoles();
+      const name = document.getElementById('roleName');
+      name.focus();
+      name.select();
+    }
+
     #renderMusic() {
       this.el.music.setAttribute('aria-checked', this.music);
       this.el.music.disabled = this.state.locked.includes('music');
@@ -693,7 +769,7 @@
       this.el.save.disabled = true;
       const res = await this.api?.save({
         agents: this.agents, ollama: this.ollama, limits: this.limits, attachLimits: this.attachLimits, hosts: this.hosts,
-        mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, promptFormat: this.promptFormat, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
+        mascot: this.mascot, pillSize: this.pillSize, uiScale: this.uiScale, arbiterConfidence: this.arbiterConfidence, theme: this.theme, music: this.music, promptFormat: this.promptFormat, roles: this.roles, watchClipboard: this.watchClipboard, sounds: this.sounds, soundVolume: Number(this.el.volume.value) / 100, soundToggles: this.soundToggles,
         shortcut: this.el.shortcut.value, workspaceShortcut: this.el.workspaceShortcut.value, onClose: this.onClose, terminal: this.el.terminal.value, editor: this.el.editor.value,
       });
       this.el.save.disabled = false;
@@ -764,6 +840,51 @@
         this.fmtShown = 'adhd';
         this.#renderPrompt();
         this.#renderAgents();
+      });
+      this.el.roleList.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b) { return; }
+        if (b.dataset.roleAdd !== undefined) { return this.#addRole({ name: 'My role', instructions: 'You are …\n- ' }); }
+        this.roleShown = b.dataset.role;
+        this.#renderRoles();
+      });
+      this.el.roleForm.addEventListener('click', e => {
+        const m = e.target.closest('#roleMode [data-v]');
+        const c = this.#roleCustom();
+        if (m && c) { c.mode = m.dataset.v; return this.#renderRoleForm(c); }
+        if (e.target.closest('[data-role-copy]')) {
+          const r = Roles.get(this.roles, this.roleShown);
+          return this.#addRole({ ...r, name: `${r.name} (copy)`.slice(0, 40) });
+        }
+        if (e.target.closest('[data-role-reset]')) {
+          this.roles.engines = { ...(this.roles.engines || {}) };
+          delete this.roles.engines[this.roleShown];
+          return this.#renderRoles();
+        }
+        if (e.target.closest('[data-role-remove]')) {
+          this.roles.custom = this.roles.custom.filter(r => r.id !== this.roleShown);
+          this.roleShown = Roles.BUILTIN[0].id;
+          this.#renderRoles();
+        }
+      });
+      this.el.roleForm.addEventListener('input', e => {
+        const c = this.#roleCustom();
+        if (!c) { return; }
+        const field = { roleName: 'name', roleColor: 'color', roleArtifact: 'artifact', roleText: 'instructions' }[e.target.id];
+        if (field) { c[field] = e.target.value; }
+        if (field === 'name' || field === 'color') { this.#renderRoles({ form: false }); }
+        if (field === 'instructions') { document.getElementById('roleNote').textContent = c.instructions.trim() ? '' : 'A role needs instructions — without them it is not saved.'; }
+      });
+      this.el.roleForm.addEventListener('change', e => {
+        if (e.target.id !== 'roleEngine') { return; }
+        const c = this.#roleCustom();
+        if (c) { c.engine = e.target.value; return; }
+        // a built-in role: only its engine is the owner's to pick (the default one is not stored)
+        const b = Roles.BUILTIN.find(x => x.id === this.roleShown);
+        if (!b) { return; }
+        this.roles.engines = { ...(this.roles.engines || {}) };
+        if (e.target.value === b.engine) { delete this.roles.engines[b.id]; } else { this.roles.engines[b.id] = e.target.value; }
+        this.#renderRoles(); // "Reset to default" comes or goes
       });
       this.el.shellTmux.addEventListener('click', async () => {
         const on = !this.state.shell.installed;

@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>Bayloob · Tasks</title>
 <link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="../shared/select-menu.css">
 <style>
   /* Tokens follow the approved prototype (docs/orchestration/prototype); theme.css switches light/dark */
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -77,7 +78,7 @@
   .field:focus-within { border-color: var(--focus); }
   .field input { flex: 1; min-width: 0; }
   .field input::placeholder, textarea::placeholder { color: var(--muted); }
-  select.sel { height: 32px; padding: 0 28px 0 10px; border-radius: 9px; background: var(--raised-2); border: 1px solid var(--line); appearance: none;
+  .sel { height: 32px; padding: 0 28px 0 10px; border-radius: 9px; background: var(--raised-2); border: 1px solid var(--line); appearance: none;
     background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
     background-position: calc(100% - 13px) 14px, calc(100% - 9px) 14px; background-size: 4px 4px; background-repeat: no-repeat; }
   select.sel option { background: var(--surface); color: var(--text); }
@@ -501,9 +502,11 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="../shared/ui-common.js"></script>
+<script src="../shared/select-menu.js"></script>
 <script src="../shared/markdown-lite.js"></script>
 <script src="../../shared/workflow-templates.js"></script>
 <script>
+  SelectMenu.auto(); // every <select> gets the styled menu, including ones rendered later
   // Every string of the window
   const T = {
     tasks: 'Tasks', newTask: 'New task', filter: 'Filter tasks…', allProjects: 'All projects',

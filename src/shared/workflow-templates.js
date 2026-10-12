@@ -19,6 +19,9 @@
 // Arbiter: a stage with role arbiter and one read-only agent decides between the candidates (gate "arbiter") or,
 // without builders, merges the reviewers' findings. Bayloob writes its input to the artifact arbiter-input.md.
 // An arbiter stage without agents leaves the pick to the owner.
+// Role agents: an agent stage may run as a role agent (`persona`: a role id, roles.js — Research, Data…): the
+// engine puts the role's instructions before the stage's prompt. In the built-in Role chain the role's engine
+// (Settings → Agents → Roles) is the stage's agent; an owner's template runs the agents it was saved with.
 // Analysis (category "analysis"): an optional `collect` action gathers log sources and, for a security review, the
 // project's dependency audit (artifacts logs.md, audit.md); analysts read in parallel; the Arbiter writes the report.
 (root => {
@@ -38,6 +41,7 @@
   const ACTIONS = ["run-tests", "integrate", "merge", "collect"];
   const GATES = ["always", "human", "tests-pass", "arbiter", "no-findings"];
   const ID = /^[a-z][a-z0-9-]{0,23}$/;
+  const PERSONA = /^[a-z][a-z0-9-]{0,31}$/; // a role id (roles.js): built-in or the owner's c-…
   const MAX_STAGES = 12;
   const MAX_LOOPS = 5;
   const PROMPT_MAX = 20_000;
@@ -781,6 +785,87 @@
         },
       ],
     },
+    roles: {
+      id: "roles",
+      name: "Role chain",
+      description: "Research → Data → Content (you approve) → Design builds it → you merge",
+      builtin: true,
+      stages: [
+        {
+          id: "research",
+          title: "Research Agent",
+          role: "analyst",
+          persona: "research",
+          mode: "read-only",
+          agents: [{ adapter: "claude", count: 1 }],
+          prompt: "{{task}}",
+          artifact: "research.md",
+          gate: "always",
+        },
+        {
+          id: "data",
+          title: "Data Agent",
+          role: "analyst",
+          persona: "data",
+          mode: "read-only",
+          agents: [{ adapter: "codex", count: 1 }],
+          prompt: lines(
+            "{{task}}",
+            "",
+            "What the Research Agent found (check its numbers, add the ones it lacks):",
+            "{{artifact:research.md}}"
+          ),
+          artifact: "data.md",
+          gate: "always",
+        },
+        {
+          id: "content",
+          title: "Content Agent",
+          role: "analyst",
+          persona: "content",
+          mode: "read-only",
+          agents: [{ adapter: "claude", count: 1 }],
+          prompt: lines(
+            "{{task}}",
+            "",
+            "Write the text for it — every heading, label and message, ready to use. Don't change files here:",
+            "the Design Agent puts it in place.",
+            "",
+            "Research:",
+            "{{artifact:research.md}}",
+            "",
+            "Data:",
+            "{{artifact:data.md}}"
+          ),
+          artifact: "content.md",
+          gate: "human",
+        },
+        {
+          id: "design",
+          title: "Design Agent",
+          role: "builder",
+          persona: "design",
+          mode: "writes",
+          agents: [{ adapter: "claude", count: 1 }],
+          prompt: lines(
+            "{{task}}",
+            "",
+            "Design it and build it, using this text as it is:",
+            "{{artifact:content.md}}",
+            "",
+            "Background — research:",
+            "{{artifact:research.md}}",
+            "",
+            "Background — data:",
+            "{{artifact:data.md}}",
+            "",
+            "{{note}}"
+          ),
+          gate: "always",
+        },
+        { id: "merge", title: "Merge", role: "you", action: "merge", gate: "human" },
+      ],
+    },
   };
 
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -845,6 +930,9 @@
       }
       if (!GATES.includes(s.gate)) {
         add(`${name}: pick a gate (${GATES.join(", ")})`);
+      }
+      if (s.persona != null && !PERSONA.test(String(s.persona))) {
+        add(`${name}: the role agent's id must be lowercase letters, digits and dashes`);
       }
       const deciding = s.role === "arbiter" && Array.isArray(s.agents) && s.agents.length > 0;
       const agentStage =
@@ -1066,7 +1154,8 @@
    * dialog picked one (`own(id)` looks it up), else the preset for its pattern with the agents picked in the
    * dialog put into the planner, builder and reviewer slots.
    */
-  function templateFor(config, own = () => null) {
+  // roleEngine(id): the agent a role agent runs on (Settings → Agents → Roles), for the built-in Role chain
+  function templateFor(config, own = () => null, roleEngine = () => null) {
     if (config?.category === "analysis") {
       return analysisTemplate(config.analysis || {});
     }
@@ -1086,6 +1175,16 @@
       );
     }
     const t = clone(preset);
+    if (w.pattern === "roles") {
+      // Each stage is a role agent on its own engine; the agents picked in the dialog don't apply
+      for (const s of t.stages) {
+        const engine = s.persona && roleEngine(s.persona);
+        if (engine) {
+          s.agents = [{ adapter: engine, count: 1 }];
+        }
+      }
+      return t;
+    }
     const builders = Object.entries(w.agents || {})
       .filter(([, n]) => n > 0)
       .map(([adapter, count]) => ({ adapter, count }));

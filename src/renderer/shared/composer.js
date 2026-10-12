@@ -239,3 +239,232 @@ class Drafts {
     }
   }
 }
+
+/**
+ * One prompt box, the same in every place that has one: its text (grows with what is typed, up to its
+ * CSS max-height), attached files, large-paste chips, the response-format picker, the length label and the
+ * send button. What sending means (type it into an agent, pick an agent and start one…) stays with the page:
+ * `onSubmit()` on Enter, `onChange()` after every edit, `onKey(e)` first for each key (true: it took the key).
+ * Needs Attachments (attachments.js) and, for the picker, SelectMenu (select-menu.js) when they are loaded.
+ */
+class Composer {
+  /**
+   * opts: the box's elements (see mount) — left out for a box that is drawn later — plus { uploads, onChange,
+   * onSubmit, onKey, onError }.
+   */
+  constructor({
+    uploads = null,
+    onChange = () => {},
+    onSubmit = () => {},
+    onKey = () => false,
+    onError = () => {},
+    ...elements
+  }) {
+    Object.assign(this, { onChange, onSubmit, onKey });
+    const changed = () => this.changed();
+    this.files = new Attachments({ api: uploads, list: null, onChange: changed, onError });
+    this.pastes = new Pastes({ list: null, onChange: changed, insert: t => this.insert(t) });
+    if (elements.text) {
+      this.mount(elements);
+    }
+  }
+
+  /**
+   * Puts the box on its elements: { form (the drop zone; a <form>'s submit sends), text, attach, files (the
+   * chips' list), pastes, format, count, send }. A page that redraws its box mounts again after each redraw —
+   * the files and pasted text stay. `attachments`: a page's own Attachments to use from now on (e.g. one per
+   * kind of task); otherwise the box keeps its own.
+   */
+  mount({
+    form,
+    text,
+    attach = null,
+    files = null,
+    pastes = null,
+    format = null,
+    count = null,
+    send = null,
+    attachments = null,
+  }) {
+    Object.assign(this, { form, text, attach, format, count, send });
+    if (attachments) {
+      this.files = attachments;
+    }
+    const changed = () => this.changed();
+    for (const [store, list] of [
+      [this.files, files],
+      [this.pastes, pastes],
+    ]) {
+      store.list = list;
+      list?.addEventListener("click", e => store.click(e));
+      store.render();
+    }
+    if (format && typeof SelectMenu !== "undefined") {
+      SelectMenu.enhance(format);
+    }
+
+    if (attach) {
+      attach.hidden = !this.files.available;
+      attach.addEventListener("click", () => this.files.pick());
+    }
+    this.files.bindDrop(form);
+    this.files.bindPaste(text);
+    this.pastes.bindPaste(text); // after the files: a pasted file is theirs, a large text becomes a chip
+    text.addEventListener("input", () => {
+      if (this.state === "error") {
+        this.setState(""); // an edit is the answer to an error
+      }
+      changed();
+    });
+    format?.addEventListener("change", changed);
+    text.addEventListener("keydown", e => {
+      if (this.onKey(e)) {
+        return;
+      }
+      // Enter sends; Shift+Enter is a new line (and Enter while an IME is composing is the IME's)
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        this.onSubmit();
+      }
+    });
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      this.onSubmit();
+    });
+    this.refresh();
+  }
+
+  get value() {
+    return this.text?.value ?? ""; // "" before the box is drawn
+  }
+  set value(v) {
+    this.text.value = v;
+    this.grow();
+  }
+
+  /** Nothing to send: no text, files or pasted text. */
+  get empty() {
+    return !this.text.value.trim() && !this.files.count && !this.pastes.count;
+  }
+
+  /** What still holds sending back: 'attaching' (files on their way), 'secret' (a warning to answer), or ''. */
+  get blocked() {
+    return this.files.busy ? "attaching" : this.files.unconfirmed.length ? "secret" : "";
+  }
+
+  /** The prompt as it goes out: the text, then the pasted blocks, then the attached files' paths. */
+  compose() {
+    return this.files.compose(this.pastes.compose(this.text.value));
+  }
+
+  /** Something in the box changed (typed, or set by the page): the label, the height, then onChange. */
+  changed() {
+    this.refresh();
+    this.onChange();
+  }
+
+  /** The length label and the box's height, from what is in it (no onChange: e.g. walking the history). */
+  refresh() {
+    if (!this.text) {
+      return; // not drawn yet
+    }
+    if (this.count) {
+      this.count.textContent = lengthLabel(
+        [this.text.value.trim(), this.pastes.text].filter(Boolean).join("\n\n")
+      );
+    }
+    this.grow();
+  }
+
+  #stateTimer = 0;
+
+  /** How the box looks (CSS: .box[data-state]): 'sending' (Send spins), 'error' (red until the next edit),
+   *  'ok' (a short green flash), or '' (as usual). */
+  setState(state) {
+    const box = this.text.closest(".box") || this.form;
+    clearTimeout(this.#stateTimer);
+    box.dataset.state = state;
+    this.send?.setAttribute("aria-busy", String(state === "sending"));
+    if (state === "ok") {
+      this.#stateTimer = setTimeout(() => this.state === "ok" && this.setState(""), 1200);
+    }
+  }
+
+  get state() {
+    return (this.text.closest(".box") || this.form).dataset.state || "";
+  }
+
+  /** The send button: disabled with `why` as its tooltip, or enabled with `tip`. */
+  setSend(why, tip) {
+    if (!this.send) {
+      return;
+    }
+    this.send.disabled = !!why;
+    this.send.title = why || tip;
+    this.send.setAttribute("aria-label", why || tip);
+  }
+
+  /** While a step is being confirmed: the text read-only, files and format as they are. */
+  lock(on) {
+    this.text.readOnly = on;
+    if (this.format) {
+      this.format.disabled = on;
+    }
+    if (this.attach) {
+      this.attach.disabled = on;
+    }
+  }
+
+  // Up to the box's max-height (CSS), then it scrolls
+  grow() {
+    const ta = this.text;
+    ta.style.height = "auto";
+    const max = Number.parseFloat(getComputedStyle(ta).maxHeight) || 120;
+    ta.style.height = `${Math.min(ta.scrollHeight, max)}px`;
+  }
+
+  /** Text put at the caret (a pasted chip back in the box). */
+  insert(t) {
+    const ta = this.text;
+    const { selectionStart: a, selectionEnd: b, value } = ta;
+    ta.value = value.slice(0, a) + t + value.slice(b);
+    ta.focus();
+    ta.setSelectionRange(a + t.length, a + t.length);
+    this.grow();
+  }
+
+  /** An empty box (the format picker is left as it is). */
+  clear() {
+    this.text.value = "";
+    this.files.clear();
+    this.pastes.clear();
+    this.changed();
+  }
+
+  /** The box as a draft ({ text, format, files, pastes }), and back. */
+  snapshot() {
+    return {
+      text: this.text.value,
+      format: this.format && !this.format.hidden ? this.format.value : "",
+      files: [...this.files.items],
+      pastes: this.pastes.snapshot(),
+    };
+  }
+  restore(d) {
+    this.text.value = d?.text || "";
+    const f = this.format;
+    if (f && d?.format && [...f.options].some(o => o.value === d.format)) {
+      f.value = d.format;
+    }
+    this.files.clear();
+    // files kept in memory were checked when attached; ones from before a reload are checked again
+    if (d?.files?.length && d.files[0].secrets) {
+      this.files.items = [...d.files];
+      this.files.render();
+    } else if (d?.files?.length) {
+      this.files.restore(d.files);
+    }
+    this.pastes.restore(d?.pastes);
+    this.refresh();
+  }
+}

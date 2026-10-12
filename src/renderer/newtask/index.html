@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>New task</title>
 <link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="../shared/select-menu.css">
 <link rel="stylesheet" href="../shared/attachments.css">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -130,7 +131,7 @@
   .stepper button:hover:not(:disabled) { color: var(--text); background: rgb(var(--ink) / .09); }
   .stepper button:disabled { opacity: .35; }
   .stepper output { min-width: 22px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
-  select.sel { height: 30px; padding: 0 26px 0 10px; border-radius: 8px; background-color: var(--raised-2); border: 1px solid var(--line); appearance: none;
+  .sel { height: 30px; padding: 0 26px 0 10px; border-radius: 8px; background-color: var(--raised-2); border: 1px solid var(--line); appearance: none;
     background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
     background-position: calc(100% - 13px) 13px, calc(100% - 9px) 13px; background-size: 4px 4px; background-repeat: no-repeat; }
   select.sel option { background: var(--surface-solid); color: var(--text); }
@@ -157,6 +158,14 @@
   .budget .mb { display: inline-flex; align-items: center; gap: 6px; }
   .budget .mb small { color: var(--muted); font-size: 12px; }
   .tchip { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); font-size: 12px; color: var(--soft); }
+  /* role agents (a single agent runs as one): a chip each, in the role's colour */
+  .rchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--raised); font-size: 12.5px; color: var(--soft); }
+  .rchip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--muted)); }
+  .rchip:hover { color: var(--text); border-color: var(--line-strong); }
+  .rchip[aria-checked="true"] { color: var(--text); border-color: color-mix(in srgb, var(--c, var(--brand)) 60%, transparent);
+    background: color-mix(in srgb, var(--c, var(--brand)) 14%, transparent); }
   .tchip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--text); }
   .sources { display: flex; flex-direction: column; gap: 4px; }
   .sources li { list-style: none; display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; border-radius: 9px; background: var(--raised); border: 1px solid var(--line); font: 12px ui-monospace, monospace; }
@@ -216,10 +225,12 @@
   </section>
 
 <script src="../shared/ui-common.js"></script>
+<script src="../shared/select-menu.js"></script>
 <script src="../shared/attachments.js"></script>
 <script src="../shared/composer.js"></script>
 <script src="../../shared/task-shape.js"></script>
 <script>
+  SelectMenu.auto(); // every <select> gets the styled menu, including ones rendered later
   const T = {
     title: 'New task', steps: ['Project', 'Category', 'Configure', 'Confirm'],
     subProject: 'Where should the agents work?',
@@ -268,12 +279,16 @@
     fromCommitHint: (n, b) => `Builders start from the last commit — your ${n} uncommitted change${n === 1 ? ' is' : 's are'} not in it. The winner is merged into ${b}.`,
     customize: 'Customize stages…', customizeTipAnalysis: 'Opens the workflow builder on a copy: edit the analysts’ prompt, their agents and the Arbiter', customizeTip: 'Opens the workflow builder in the Tasks window on a copy of these stages',
     customizeLater: 'This pattern arrives with a later step', yourTemplates: 'Your templates', nStages: n => `${n} stages`,
-    tplRuns: name => `Runs your template <b>${name}</b>:`, tplProblems: 'Your template has problems — fix them in Customize stages…',
+    tplRuns: name => `Runs your template <b>${name}</b>:`, chainRuns: 'Each stage is a role agent, on the agent its role runs on:',
+    chainEngines: 'Which agent each role runs on: Settings → Agents → Roles.', tplProblems: 'Your template has problems — fix them in Customize stages…',
     sources: 'Log sources · collected read-only into the task', sourcePh: 'e.g. journalctl -u php8.3-fpm --since "-6h"', add: 'Add', chooseFile: 'Choose file…',
     opsPlan: 'Also prepare an operations plan', opsSub: 'the Arbiter proposes commands; each runs only when you click',
     opsHosts: 'Runbook hosts', localHost: 'This machine · dev', noHosts: 'No remote hosts yet. The runbook can use only this machine.', manageHosts: 'Add hosts in Settings',
     gatesCap: 'Gates — where you’ll be asked', load: 'Parallel load',
-    rAgent: 'Agent', rFolder: 'Folder', rWhere: 'Runs in', rTerminal: 'Terminal', rPrompt: 'Prompt', rFiles: 'Files', edit: 'Edit',
+    rAgent: 'Agent', rRole: 'Role', role: 'Run as', noRole: 'Just the agent',
+    roleLine: (r, engine) => `${r.mode === 'writes' ? 'Can change files' : 'Read-only'} · on ${engine}${r.artifact ? ` · answers in ${r.artifact}` : ''}`,
+    roleGone: 'That role was removed in Settings — it runs as the plain agent',
+    rFolder: 'Folder', rWhere: 'Runs in', rTerminal: 'Terminal', rPrompt: 'Prompt', rFiles: 'Files', edit: 'Edit',
     inFolder: 'the folder itself', inWorktree: 'a new git worktree', worktreeNote: 'next to the project, on a new bayloob/… branch',
     noPrompt: 'No prompt — the agent starts and waits for you', starting: 'Starting…', wrong: 'Something went wrong',
     singleReady: (agent, project) => `${agent} starts in ${project}. Review the agent, prompt and folder above, then Start.`,
@@ -297,7 +312,7 @@
   const TERMINAL_KEY = 'bayloob.terminal'; // remembered per viewer, like the launcher
   const tilde = (p, home) => home && p.startsWith(home) ? `~${p.slice(home.length)}` : p;
   // Workflow patterns the engine can run; analyses use their own preset-to-template path.
-  const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board', 'debate', 'lead', 'orchestrator'];
+  const RUNNABLE = ['pipeline', 'bestofn', 'split', 'board', 'debate', 'lead', 'orchestrator', 'roles'];
   // The orchestrator's budget steppers: [min, max, step]
   const ORCHESTRATOR_RANGE = { workers: [1, 20, 1], turns: [1, 30, 1], minutes: [5, 480, 15] };
   const runnable = c => c.category === 'analysis' || (c.category === 'workflow' && (!!c.workflow.template || RUNNABLE.includes(c.workflow.pattern)));
@@ -344,13 +359,15 @@
           this.#fit();
           this.#changed({ render: files });
         } });
-      // A large paste becomes a chip (kept with the draft as cfg.pastes); it goes after the text on start
-      this.pastes = new Pastes({ list: null, insert: text => this.#insertText(text), onChange: () => {
-        this.cfg.pastes = this.pastes.items.map(i => i.text);
-        this.#count();
-        this.#fit();
-        this.#changed({ render: false });
-      } });
+      // The prompt / task box (the shared Composer), drawn again on every render: its text is cfg.text, a large
+      // paste becomes a chip (kept with the draft as cfg.pastes, it goes after the text on start); Enter goes on
+      this.box = new Composer({ uploads: api.uploads, onSubmit: () => this.#next(), onError: t => this.#message(t, true),
+        onChange: () => {
+          this.cfg.text = this.box.value;
+          this.cfg.pastes = this.box.pastes.items.map(i => i.text);
+          this.#fit();
+          this.#changed({ render: false });
+        } });
       Attachments.guardWindow();
       this.#bind();
     }
@@ -361,6 +378,8 @@
     // Installed and not turned off in Settings → Agents
     get installed() { return Object.keys(this.agents).filter(a => this.usable(a)); }
     usable(a) { return !!this.agents[a]?.installed && !(this.state.disabled || []).includes(a); }
+    // the role agent a single agent runs as (Settings → Agents → Roles), or null
+    get #role() { return (this.state?.roles || []).find(r => r.id === this.cfg?.single?.role) || null; }
     whyNot(a) { return this.agents[a]?.installed ? T.turnedOff : T.notInstalled; }
     get shaped() { return TaskShape.normalize(this.cfg, Object.keys(this.agents)); }
     get hasGit() { return !!this.info?.git; }
@@ -376,7 +395,7 @@
       this.infoFailed = new Map();
       this.att.clear();
       this.taskAtt.items = [];
-      this.pastes.restore((state.draft?.pastes || []).map(text => ({ text, open: false })));
+      this.box.pastes.restore((state.draft?.pastes || []).map(text => ({ text, open: false })));
       const d = state.draft;
       if (d) {
         this.cfg = d;
@@ -413,7 +432,7 @@
         category,
         project: { cwd, name: cwd.split('/').pop() || '' },
         text: state.prefill || '',
-        single: { agent, worktree: !!state.preset?.worktree, terminal: ids.includes(saved) ? saved : ids[0] || null },
+        single: { agent, role: null, worktree: !!state.preset?.worktree, terminal: ids.includes(saved) ? saved : ids[0] || null },
         workflow: { pattern: 'bestofn', planner: first, agents: workflowAgents, reviewer: other(first), arbiter },
         analysis: { preset: 'audit', agents: Object.fromEntries(inst.slice(0, 2).map(a => [a, 1])), arbiter: inst[2] || other(first), logSources: [], hosts: (state.hosts || []).filter(h => h.env === 'staging').map(h => h.id), opsPlan: false },
       };
@@ -520,7 +539,7 @@
       this.el.next.disabled = this.el.back.disabled = true;
       this.#message(T.starting);
       clearTimeout(this.#saveTimer);
-      const res = await this.api.start?.({ ...this.cfg, text: this.pastes.compose(this.cfg.text), pastes: [], id: this.draftId || undefined, workflow: { ...this.cfg.workflow, base: this.#base() } });
+      const res = await this.api.start?.({ ...this.cfg, text: this.box.pastes.compose(this.cfg.text), pastes: [], id: this.draftId || undefined, workflow: { ...this.cfg.workflow, base: this.#base() } });
       this.busy = false;
       this.el.next.disabled = this.el.back.disabled = false;
       if (res?.ok) {
@@ -537,7 +556,7 @@
       this.el.next.disabled = this.el.back.disabled = true;
       this.#message(T.starting);
       // Same options as the old Ask Bayloob dialog sent to launcher:launch
-      const res = await this.api.launch({ agent: s.agent, cwd: this.cfg.project.cwd, prompt: this.att.compose(this.pastes.compose(this.cfg.text.trim())), worktree: !!s.worktree, terminal: s.terminal }, this.draftId);
+      const res = await this.api.launch({ agent: s.agent, persona: this.#role?.id || undefined, cwd: this.cfg.project.cwd, prompt: this.att.compose(this.box.pastes.compose(this.cfg.text.trim())), worktree: !!s.worktree, terminal: s.terminal }, this.draftId);
       this.busy = false;
       this.el.next.disabled = this.el.back.disabled = false;
       if (res?.ok) {
@@ -558,8 +577,7 @@
       this.el.steps.innerHTML = steps.map((n, i) => `<li class="${i + 1 < this.step ? 'past' : ''}"${i + 1 === this.step ? ' aria-current="step"' : ''}><i>${i + 1 < this.step ? '✓' : i + 1}</i>${n}</li>`).join('');
       this.el.subtitle.textContent = this.step === 1 || !c.project.cwd ? T.subProject : `${c.project.name} · ${T.cats[c.category].title}`;
       this.el.body.innerHTML = [null, () => this.#project(), () => this.#category(), () => this.#configure(), () => this.#confirm()][this.step]();
-      if (this.step === 3 && c.category === 'single') { this.#mountComposer(); }
-      if (this.step === 3 && c.category !== 'single') { this.#mountTaskFiles(); }
+      if (this.step === 3) { this.#mountBox(); }
       this.el.back.textContent = this.step === 1 ? T.cancel : T.back;
       const last = this.step === 4 || (this.step === 3 && c.category === 'single');
       const later = last && c.category !== 'single' && !runnable(c);
@@ -623,7 +641,14 @@
     #configSingle() {
       const s = this.cfg.single;
       const terms = this.state.terminals || [];
-      return `<div class="label">${T.agent}</div>
+      const roles = this.state.roles || [];
+      const role = this.#role;
+      const picker = roles.length ? `<div class="label">${T.role}</div>
+        <div class="rchips" role="radiogroup" aria-label="${T.role}">
+          <button type="button" class="rchip" role="radio" aria-checked="${!role}" data-persona="">${T.noRole}</button>${roles.map(r => `
+          <button type="button" class="rchip" role="radio" aria-checked="${r.id === role?.id}" data-persona="${esc(r.id)}" style="--c:${esc(r.color)}" title="${esc(r.instructions)}"><span class="dot"></span>${esc(r.name)}</button>`).join('')}</div>
+        ${role ? `<p class="hintline">${esc(T.roleLine(role, this.agents[s.agent]?.name || s.agent))}</p>` : s.role ? `<p class="hintline warn">${T.roleGone}</p>` : ''}` : '';
+      return `${picker}<div class="label">${T.agent}</div>
         <div class="arows" role="radiogroup" aria-label="${T.agent}">${Object.entries(this.coders).map(([k, a]) => `
           <button type="button" class="arow pick${this.usable(k) ? '' : ' off'}" role="radio" aria-checked="${k === s.agent}" data-agent="${k}" ${this.usable(k) ? '' : `disabled title="${this.whyNot(k)}"`}>
             <span class="m">${Agent.thumb(k)}</span><span class="nm"><b>${esc(a.name)}</b><small>${this.usable(k) ? T.free(this.free(k), this.state.capacity[k]) : this.whyNot(k)}</small></span><span class="tick">${k === s.agent ? I('check') : ''}</span></button>`).join('')}</div>
@@ -666,8 +691,11 @@
     }
 
     // The owner's template the workflow uses, or null (a pattern's preset)
+    // The owner's template picked, or the built-in Role chain (its stages are the role agents, so it reads like one)
     #template(c = this.cfg) {
-      return c.category === 'workflow' && c.workflow.template ? (this.state.templates || []).find(t => t.id === c.workflow.template) || null : null;
+      if (c.category !== 'workflow') { return null; }
+      if (c.workflow.template) { return (this.state.templates || []).find(t => t.id === c.workflow.template) || null; }
+      return c.workflow.pattern === 'roles' ? this.state.roleChain || null : null;
     }
 
     #stages(c) {
@@ -719,12 +747,25 @@
       const builders = Object.keys(w.agents).filter(a => w.agents[a]);
       const own = this.state.templates || [];
       const tpl = this.#template();
-      const presets = `<div class="presets" role="group" aria-label="Pattern">${Object.entries(TaskShape.PATTERNS).map(([k, p]) => `<button type="button" class="preset" aria-pressed="${!tpl && k === w.pattern}" data-pattern="${k}">${p.name}<small>${p.hint}</small></button>`).join('')}</div>
+      const presets = `<div class="presets" role="group" aria-label="Pattern">${Object.entries(TaskShape.PATTERNS).map(([k, p]) => `<button type="button" class="preset" aria-pressed="${!w.template && k === w.pattern}" data-pattern="${k}">${p.name}<small>${p.hint}</small></button>`).join('')}</div>
         ${own.length ? `<div class="label">${T.yourTemplates}</div><div class="presets" role="group" aria-label="${T.yourTemplates}">${own.map(t => `<button type="button" class="preset" aria-pressed="${tpl?.id === t.id}" data-template="${esc(t.id)}">${esc(t.name)}<small>${T.nStages(t.stages.length)}</small></button>`).join('')}</div>` : ''}`;
       const canCustomize = !!tpl || RUNNABLE.includes(w.pattern);
       const customize = `<span title="${canCustomize ? T.customizeTip : T.customizeLater}"><button type="button" class="expander" data-customize ${canCustomize ? '' : 'disabled'}>${I('edit')}${T.customize}</button></span>`;
       const text = `<div class="label">${T.task}</div>
         <div class="composer" id="composer"><textarea id="text" data-focus rows="3" spellcheck="false" placeholder="${T.taskPh}" aria-label="${T.task}">${esc(this.cfg.text)}</textarea>${this.#fileTools()}</div>`;
+      if (tpl?.builtin) {
+        // the Role chain: each stage with its role's colour and the agent it runs on
+        const roles = this.state.roles || [];
+        const chain = tpl.stages.map(st => {
+          const r = roles.find(x => x.id === st.persona);
+          const a = st.agents?.[0]?.adapter;
+          return r ? `<span class="rchip" aria-checked="true" style="--c:${esc(r.color)}"><span class="dot"></span>${esc(r.name)}${a ? ` <small>· ${esc(this.agents[a]?.name || a)}</small>` : ''}</span>` : `<span class="rchip">${esc(st.title)}</span>`;
+        }).join(' <span aria-hidden="true">→</span> ');
+        return `${presets}
+          <p class="sentence" style="font-size:13px">${T.chainRuns}</p><div class="rchips" style="align-items:center">${chain}</div>
+          <p class="hintline">${T.chainEngines}</p>
+          ${this.#baseRow()}${text}${customize}`;
+      }
       if (tpl) {
         return `${presets}
           <p class="sentence" style="font-size:13px">${T.tplRuns(esc(tpl.name))} ${tpl.stages.map(s => `${esc(s.title)}${(s.agents || []).length ? ` ×${s.agents.reduce((a, x) => a + Number(x.count || 0), 0)}` : ''}`).join(' → ')}</p>
@@ -789,53 +830,19 @@
         <div class="tools"><button type="button" class="ghost" id="attach" title="${T.attachTaskTip}">${I('clip')}${T.attach}</button><span class="count">${T.filesStay}</span></div>`;
     }
 
-    // The pasted-text chips under the text box (rebuilt on every render, like the box)
-    #mountPastes(ta) {
-      const list = document.getElementById('pastes');
-      this.pastes.list = list;
-      this.pastes.render();
-      list.addEventListener('click', e => this.pastes.click(e));
-      this.pastes.bindPaste(ta); // after the files: a pasted file is theirs, a large text a chip
-    }
-
-    // A chip's text put back at the caret
-    #insertText(text) {
-      const ta = document.getElementById('text');
-      if (!ta) { return; }
-      const at = ta.selectionStart ?? ta.value.length;
-      ta.value = ta.value.slice(0, at) + text + ta.value.slice(ta.selectionEnd ?? at);
-      this.cfg.text = ta.value;
-      ta.focus();
-      this.#count();
-      this.#grow(ta);
-    }
-
-    #mountTaskFiles() {
-      const ta = document.getElementById('text');
-      const list = document.getElementById('atts');
-      if (!ta || !list) { return; }
-      this.taskAtt.list = list;
-      this.taskAtt.render();
-      list.addEventListener('click', e => this.taskAtt.click(e));
-      const attach = document.getElementById('attach');
-      attach.hidden = !this.taskAtt.available;
-      attach.addEventListener('click', () => this.taskAtt.pick());
-      this.taskAtt.bindDrop(document.getElementById('composer'));
-      this.taskAtt.bindPaste(ta);
-      this.#mountPastes(ta);
-    }
-
     #confirm() {
       const c = this.shaped;
       const name = a => esc(this.agents[a]?.name || a);
       if (c.category === 'single') {
         const s = c.single;
         const term = (this.state.terminals || []).find(t => t.id === s.terminal);
-        const rows = [[T.rAgent, `<span class="m s">${Agent.thumb(s.agent)}</span><b>${name(s.agent)}</b>`], [T.rFolder, `<code>${esc(tilde(c.project.cwd, this.state.home))}</code>`],
+        const role = this.#role;
+        const rows = [...(role ? [[T.rRole, `<span class="rchip" aria-checked="true" style="--c:${esc(role.color)}"><span class="dot"></span>${esc(role.name)}</span> <small>${esc(T.roleLine(role, name(s.agent)))}</small>`]] : []),
+          [T.rAgent, `<span class="m s">${Agent.thumb(s.agent)}</span><b>${name(s.agent)}</b>`], [T.rFolder, `<code>${esc(tilde(c.project.cwd, this.state.home))}</code>`],
           [T.rWhere, s.worktree ? `${T.inWorktree} <small>${T.worktreeNote}</small>` : T.inFolder], ...(term ? [[T.rTerminal, esc(term.name)]] : []),
           ...(this.att.count ? [[T.rFiles, this.att.items.map(f => `<code title="${esc(f.path)}">${esc(f.name)}</code>`).join(' ')]] : [])];
-        const prompt = this.att.compose(this.pastes.compose(c.text.trim()));
-        return `<p class="sentence"><b>${name(s.agent)}</b> starts in <b>${esc(c.project.name)}</b>${prompt ? ' and gets your prompt' : ''}. Permissions come to the pill.</p>
+        const prompt = this.att.compose(this.box.pastes.compose(c.text.trim()));
+        return `<p class="sentence"><b>${role ? `${esc(role.name)}</b> (${name(s.agent)})` : `${name(s.agent)}</b>`} starts in <b>${esc(c.project.name)}</b>${prompt ? ' and gets your prompt' : ''}. Permissions come to the pill.</p>
           <div class="review">${rows.map(([k, v]) => `<div class="rr"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}
             <div class="prompt"><span class="label">${T.rPrompt}</span> <button type="button" class="btn ghost sm" data-edit>${T.edit}</button><pre class="${prompt ? '' : 'empty'}">${esc(prompt || T.noPrompt)}</pre></div></div>`;
       }
@@ -886,7 +893,7 @@
       if (tpl) {
         const writers = tpl.stages.filter(s => s.role === 'builder').flatMap(s => s.agents || []);
         const n = writers.reduce((a, x) => a + Number(x.count || 0), 0);
-        return `Runs your template <b>${esc(tpl.name)}</b> on <b>${esc(c.project.name)}</b>: ${tpl.stages.map(s => esc(s.title)).join(' → ')}.${n ? ` <b>${n} builder${n > 1 ? 's' : ''}</b>, each in its own worktree.` : ''} Nothing is merged until you click.`;
+        return `Runs ${tpl.builtin ? '' : 'your template '}<b>${esc(tpl.name)}</b> on <b>${esc(c.project.name)}</b>: ${tpl.stages.map(s => esc(s.title)).join(' → ')}.${n ? ` <b>${n} builder${n > 1 ? 's' : ''}</b>, each in its own worktree.` : ''} Nothing is merged until you click.`;
       }
       const w = c.workflow;
       const n = TaskShape.total(w.agents);
@@ -910,46 +917,27 @@
       return `<b>${n} agent${n > 1 ? 's' : ''}</b> will build${n > 1 ? ' in parallel' : ''} (${lst(w.agents)}), each in its own worktree. Arbiter: <b>${name(w.arbiter)}</b>. You’ll be asked: <b>after the plan</b> and <b>before merge</b>.`;
     }
 
-    // The single agent's prompt box is rebuilt on every render: refill it and hook up paste, drop and attach
-    #mountComposer() {
-      const ta = document.getElementById('text');
-      ta.value = this.cfg.text;
-      ta.classList.toggle('code', !!this.state.prefill && this.cfg.text === this.state.prefill);
-      this.att.list = document.getElementById('atts');
-      this.att.render();
-      const attach = document.getElementById('attach');
-      attach.hidden = !this.att.available;
-      attach.addEventListener('click', () => this.att.pick());
-      document.getElementById('paste').addEventListener('click', () => this.#pasteClipboard());
-      this.att.bindDrop(document.getElementById('composer'));
-      this.att.bindPaste(ta);
-      this.#mountPastes(ta);
-      this.#count();
-      this.#grow(ta);
+    // The prompt / task box is rebuilt on every render: the Composer goes onto the new elements (files and pasted
+    // text stay) — the single agent's prompt with its files, a workflow's or an analysis's task with the task's
+    #mountBox() {
+      const $ = id => document.getElementById(id);
+      const ta = $('text');
+      if (!ta) { return; }
+      const single = this.cfg.category === 'single';
+      this.box.mount({ form: $('composer'), text: ta, attach: $('attach'), files: $('atts'), pastes: $('pastes'),
+        count: single ? $('count') : null, attachments: single ? this.att : this.taskAtt });
+      this.box.value = this.cfg.text;
+      this.box.refresh();
+      ta.classList.toggle('code', single && !!this.state.prefill && this.cfg.text === this.state.prefill);
+      $('paste')?.addEventListener('click', () => this.#pasteClipboard());
+      this.#fit();
     }
 
     async #pasteClipboard() {
       const text = await this.api.clipboard?.();
       if (!text) { return this.#message(T.emptyClipboard, true); }
-      const ta = document.getElementById('text');
-      const at = ta.selectionStart ?? ta.value.length;
-      ta.value = ta.value.slice(0, at) + text + ta.value.slice(ta.selectionEnd ?? at);
-      this.cfg.text = ta.value;
-      ta.focus();
-      this.#count();
-      this.#grow(ta);
-      this.#changed({ render: false });
-    }
-
-    #count() {
-      const el = document.getElementById('count');
-      if (el) { el.textContent = lengthLabel([this.cfg.text.trim(), this.pastes.text].filter(Boolean).join('\n\n')); }
-    }
-
-    #grow(ta) {
-      ta.style.height = 'auto';
-      ta.style.height = `${Math.min(ta.scrollHeight + 2, 200)}px`;
-      this.#fit();
+      this.box.insert(text);
+      this.box.changed();
     }
 
     #message(text, isError = false, html = false) {
@@ -993,6 +981,13 @@
           return dir && this.#setProject(dir);
         }
         if (d.cat) { c.category = d.cat; return this.#changed(); }
+        if (d.persona !== undefined) {
+          // a role agent: it runs on its engine when that one can start now (the agent can still be changed)
+          c.single.role = d.persona || null;
+          const r = this.#role;
+          if (r && this.usable(r.engine)) { c.single.agent = r.engine; }
+          return this.#changed();
+        }
         if (d.agent) { c.single.agent = d.agent; return this.#changed(); }
         if (d.worktree !== undefined) { c.single.worktree = !c.single.worktree; return this.#changed(); }
         if (d.term) { c.single.terminal = d.term; return this.#changed(); }
@@ -1041,14 +1036,11 @@
           if (file && input) { input.value = file; return this.#addSource(); }
           return;
         }
-        if ((d.unattach || d.secretok || d.preview) !== undefined && b.closest('#atts')) {
-          return c.category === 'single' ? this.att.click(e) : undefined; // a task's chips handle their own clicks
-        }
+        if ((d.unattach || d.secretok || d.preview) !== undefined && b.closest('#atts')) { return; } // the Composer's
         if (d.unsource) { c.analysis.logSources.splice(Number(d.unsource), 1); return this.#changed(); }
       });
       body.addEventListener('input', e => {
         if (e.target.id === 'q') { this.query = e.target.value; const pos = e.target.selectionStart; this.#render(); const q = document.getElementById('q'); q.focus(); q.setSelectionRange(pos, pos); return; }
-        if (e.target.id === 'text') { this.cfg.text = e.target.value; this.#count(); this.#grow(e.target); this.#changed({ render: false }); }
       });
       body.addEventListener('change', e => {
         const key = e.target.dataset.select;
@@ -1088,7 +1080,7 @@
         }
         if (e.target.id === 'source' && e.key === 'Enter') { e.preventDefault(); return this.#addSource(); }
         // Enter (or Ctrl+Enter) goes on; Shift+Enter is a new line; a focused button handles its own Enter
-        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.defaultPrevented) { // in the box: the Composer's
           if (this.step === 2 && e.target.closest?.('[data-cat]')) {
             e.preventDefault();
             this.cfg.category = e.target.closest('[data-cat]').dataset.cat;

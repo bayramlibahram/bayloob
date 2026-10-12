@@ -1,0 +1,156 @@
+/* SelectMenu (select-menu.js): the styled menu drawn over a native <select> */
+.smenu-native {
+  display: none !important;
+}
+.smenu-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  text-align: left;
+  font: inherit;
+}
+.smenu-default {
+  height: 30px;
+  max-width: 100%;
+  padding: 0 26px 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background:
+    var(--raised-2)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238f8e9b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 8px center / 12px;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.smenu-default:hover {
+  border-color: var(--line-strong);
+}
+.smenu-trigger[hidden] {
+  display: none;
+}
+.smenu-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.smenu-trigger .smenu-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.smenu-trigger[aria-expanded="true"] {
+  background-color: rgb(var(--ink) / 0.08);
+  color: var(--text);
+}
+
+.smenu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--glass);
+  box-shadow:
+    0 12px 32px rgb(var(--shade) / calc(0.45 * var(--shade-k))),
+    0 2px 6px rgb(var(--shade) / calc(0.25 * var(--shade-k)));
+  backdrop-filter: blur(12px);
+  font-size: 12.5px;
+  outline: none;
+  animation: smenu-in 0.12s ease-out;
+  transform-origin: top left;
+}
+.smenu.up {
+  transform-origin: bottom left;
+}
+/* focus is shown by the highlighted option, not a ring around the list (pages' :focus-visible rules included) */
+.smenu.smenu:focus,
+.smenu.smenu:focus-visible {
+  outline: none;
+}
+.smenu[hidden] {
+  display: none;
+}
+@keyframes smenu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+.smenu.up {
+  animation-name: smenu-in-up;
+}
+@keyframes smenu-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+.smenu-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 8px;
+  color: var(--soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.smenu-opt.at {
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+  color: var(--text);
+}
+.smenu-opt.on {
+  color: var(--text);
+  font-weight: 600;
+}
+.smenu-opt.off {
+  color: var(--muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.smenu-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--brand-soft);
+}
+.smenu-check svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.smenu-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.smenu-text > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smenu-text small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smenu-sep {
+  flex: none;
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}

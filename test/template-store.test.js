@@ -27,6 +27,7 @@ test("built-ins are listed first and read-only; a copy saves under a free id", (
       ["lead", true],
       ["debate", true],
       ["board", true],
+      ["roles", true],
     ]
   );
   assert.match(s.save(builtin("bestofn")).issues[0].text, /read-only/);
@@ -36,7 +37,17 @@ test("built-ins are listed first and read-only; a copy saves under a free id", (
   assert.equal(s.idFor("Best-of-N (copy)"), "best-of-n-copy-2");
   assert.deepEqual(
     s.list().map(x => x.id),
-    ["pipeline", "bestofn", "split", "orchestrator", "lead", "debate", "board", "best-of-n-copy"]
+    [
+      "pipeline",
+      "bestofn",
+      "split",
+      "orchestrator",
+      "lead",
+      "debate",
+      "board",
+      "roles",
+      "best-of-n-copy",
+    ]
   );
   assert.equal(s.get("best-of-n-copy").name, "Best-of-N (copy)");
 });
@@ -55,6 +66,7 @@ test("a template with mistakes isn't saved; each problem names its stage", () =>
   assert.match(r.issues[1].text, /count for codex must be 1–8/);
   assert.equal(s.get(t.id), null);
   assert.deepEqual(templateIssues(builtin("pipeline")), []);
+  assert.deepEqual(templateIssues(builtin("roles")), []);
 });
 
 test("delete removes only the owner's templates", () => {

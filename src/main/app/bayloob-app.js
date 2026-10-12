@@ -56,6 +56,7 @@ const { AttachmentStore } = require("../modules/attachments/attachment-store");
 const { Converters } = require("../modules/attachments/converters");
 const { inspect, preview, inside } = require("../modules/attachments/preview");
 const PromptFormat = require("../../shared/prompt-format");
+const Roles = require("../../shared/roles");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo } = require("../modules/tasks/project-info");
@@ -175,7 +176,16 @@ class BayloobApp {
   discovery = new AgentDiscovery();
   speech = new SpeechEngine(); // voice prompts: local speech-to-text only
   system = new SystemStats(); // whole-machine CPU / memory for the panel's footer
-  agentConsole = new AgentConsole(); // turns read from agents' transcripts, for the panel's agent console
+  // turns read from agents' transcripts, for the panel's agent console — each prompt as the owner typed it
+  agentConsole = new AgentConsole({ typed: (text, s) => this.#typed(text, s) });
+
+  #typed(text, session) {
+    const role = session?.persona ? Roles.get(this.settings.get("roles"), session.persona) : null;
+    return PromptFormat.unwrap(
+      role ? Roles.unwrap(text, role) : text,
+      this.settings.get("promptFormat")
+    );
+  }
   #handoffs = new Map(); // session id -> { agent, cwd, sessionId, pid, at }: waiting to continue in tmux
   // Questions agents ask only in their terminal (folder trust, update offers…), read from tmux panes
   menus = new MenuWatcher({
@@ -331,6 +341,7 @@ class BayloobApp {
       // Files attached in New task: taken only from Bayloob's uploads, copied into <task>/attachments
       attachments: id => this.#attachmentsOf(id),
       stagingDir: this.uploads.dir,
+      roles: () => this.settings.get("roles"),
       // Operations: hosts from Settings, steps run only from the owner's clicks (runbookAction)
       ops: {
         hosts: () => this.settings.get("hosts"),
@@ -650,6 +661,7 @@ class BayloobApp {
       status: this.#status(),
       collisions: this.#collisions,
       tasks: this.engine.list(),
+      roles: Roles.list(this.settings.get("roles")), // the Home dashboard's cards wear a role agent's colour
       ...extra,
     };
   }
@@ -1075,6 +1087,7 @@ class BayloobApp {
       usage: this.scheduler.usage(),
       agents: await this.#agentChoices(),
       templates: this.templates.list({ capacity: this.#capacityMax() }),
+      roles: Roles.list(this.settings.get("roles")), // role agents a builder stage can run as
       home: os.homedir(),
       ...extra,
     };
@@ -1110,7 +1123,7 @@ class BayloobApp {
   // Customize stages…: the builder opens on the draft's workflow; a built-in becomes the owner's copy first
   async #customize(config, draftId) {
     const saved = this.tasks.saveDraft(config, Object.keys(AGENTS));
-    const base = templateFor(saved, id => this.templates.get(id));
+    const base = templateFor(saved, id => this.templates.get(id), this.#roleEngine);
     const template =
       builtin(base.id) || base.id.startsWith("analysis-")
         ? {
@@ -1147,6 +1160,13 @@ class BayloobApp {
       recent: recent.map(r => ({ ...r, category: this.tasks.lastCategory(r.cwd) })),
       templates: this.templates.list({ capacity: this.#capacityMax() }).filter(t => !t.builtin),
       terminals: this.launcher.terminal.list(),
+      roles: Roles.list(this.settings.get("roles")), // role agents a single agent can run as
+      // the built-in Role chain, each stage on its role's engine (shown like a template)
+      roleChain: templateFor(
+        { category: "workflow", workflow: { pattern: "roles" } },
+        () => null,
+        this.#roleEngine
+      ),
       preset,
       prefill,
       draft,
@@ -1201,8 +1221,31 @@ class BayloobApp {
     return f ? PromptFormat.instructions(f.text) : null;
   }
 
-  /** A session the owner starts (launcher, Ask Bayloob, New task): its first prompt in its response format. */
+  // The agent a role agent runs on (Settings → Agents → Roles), or null for a role that's gone
+  #roleEngine = id => Roles.get(this.settings.get("roles"), id)?.engine || null;
+
+  /**
+   * A session the owner starts (launcher, Ask Bayloob, New task): its first prompt in its response format — or,
+   * run as a role agent (`persona`: a role id, roles.js), in the role's instructions instead, with the role's
+   * permission, and the role's name on it. A format is left out then: the role says how to answer.
+   */
   async #launchOwn(opts) {
+    const role = opts?.persona ? Roles.get(this.settings.get("roles"), String(opts.persona)) : null;
+    if (opts?.persona && !role) {
+      throw new Error("That role no longer exists — pick another one");
+    }
+    if (role) {
+      const launch = await this.launch({
+        ...opts,
+        prompt: Roles.wrap(opts.prompt, role),
+        readOnly: role.mode !== "writes",
+        persona: role.id,
+        label: role.name,
+        format: undefined,
+      });
+      this.#formatChoice.set(launch.paneId, "none"); // Claude's hook: the role's rules, not a format on top
+      return launch;
+    }
     const launch = await this.launch({
       ...opts,
       prompt: this.#formatted(opts?.prompt, opts?.agent, opts?.format),
@@ -1359,6 +1402,9 @@ class BayloobApp {
     // worktree: run the agent in a new git worktree of the project instead of the project itself
     const cwd = opts.worktree ? await this.#newWorktree(opts.cwd, opts.agent) : opts.cwd;
     const launch = await this.launcher.launch({ ...opts, cwd });
+    if (opts.persona) {
+      Object.assign(launch, { persona: opts.persona, label: opts.label || null }); // a role agent: its name on it
+    }
     this.server.store.trackLaunch(launch);
     this.server.store.changed();
     // A challenger isn't the user's choice of agent for the project, so it doesn't go into recents
@@ -1845,7 +1891,7 @@ class BayloobApp {
         }
         const task = await this.engine.start(
           saved,
-          templateFor(saved, id => this.templates.get(id))
+          templateFor(saved, id => this.templates.get(id), this.#roleEngine)
         );
         this.newTask.hide();
         this.openTasks(task.id);
