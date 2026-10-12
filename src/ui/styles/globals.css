@@ -1,6 +1,9 @@
 /* The React windows' styles: Tailwind, and shadcn/ui themed from Bayloob's own tokens (theme.css) — one source
    of colours for every window, old or React, so light and dark stay what they are. */
 @import "tailwindcss";
+@import "tw-animate-css";
+/* shadcn's variants (data-checked:, data-open:, data-vertical:… — what its components style Radix's states by) */
+@import "shadcn/tailwind.css";
 @import "../../renderer/shared/theme.css";
 
 /* Light / dark: theme.css switches the tokens on <html data-theme>; Tailwind's dark: follows the same switch */
@@ -40,7 +43,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--raised);
+  --color-muted: var(--raised-2); /* a pressed toggle, a hover: a step above a card */
   --color-muted-foreground: var(--muted);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
@@ -76,4 +79,13 @@
     @apply bg-background text-foreground font-sans antialiased;
     font-size: 13px;
   }
+}
+
+/* An option that is on reads at a glance — the brand's tint, as Bayloob's other windows show it. Unlayered, so
+   it wins over the toggle's own bg-muted for that state. */
+[data-slot="toggle"][data-state="on"],
+[data-slot="toggle-group-item"][data-state="on"] {
+  background-color: color-mix(in srgb, var(--brand) 18%, transparent);
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+  color: var(--text);
 }

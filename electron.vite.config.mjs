@@ -70,6 +70,21 @@ export default defineConfig({
     base: "./", // file:// in the app: relative asset paths
     resolve: { alias: { "@": UI } },
     plugins: [react(), tailwindcss(), cspPlugin()],
+    // Prepared before the first page opens: a dependency found later makes Vite reload the page, and the state
+    // main sent when the window opened (settings:show…) would go with it
+    optimizeDeps: {
+      include: [
+        "react",
+        "react-dom/client",
+        "react/jsx-dev-runtime",
+        "zustand",
+        "radix-ui",
+        "lucide-react",
+        "clsx",
+        "tailwind-merge",
+        "class-variance-authority",
+      ],
+    },
     build: {
       outDir: resolve("out/renderer"),
       minify: true, // electron-vite leaves the renderer unminified by default

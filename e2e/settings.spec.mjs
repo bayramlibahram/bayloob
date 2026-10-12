@@ -1,21 +1,58 @@
+import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { launch, windowWith } from "./app.mjs";
 
-test("the React Settings opens from the built app, themed, with Bayloob's state", async () => {
-  const app = await launch({ BAYLOOB_REACT: "settings" });
+// The demo keeps its settings in its own data folder (src/main/app/demo.js), never the owner's
+const saved = () =>
+  JSON.parse(readFileSync(join(tmpdir(), "bayloob-demo", "data", "settings.json"), "utf8"));
+
+async function openSettings(app) {
+  await app.evaluate(({ ipcMain }) => ipcMain.emit("panel:open-settings"));
+  const win = await windowWith(app, "out/renderer/settings/index.html");
+  await expect(win.getByRole("tab", { name: /General/ })).toBeVisible();
+  return win;
+}
+
+test("Settings is the React one: six sections, themed, its page runs no inline script", async () => {
+  const app = await launch();
   try {
-    await app.evaluate(({ ipcMain }) => ipcMain.emit("panel:open-settings"));
-    const win = await windowWith(app, "out/renderer/settings/index.html");
-    await expect(win.getByText(/React preview · \d+ agents/)).toBeVisible();
+    const win = await openSettings(app);
+    await expect(win.getByRole("tab")).toHaveCount(6);
     expect(await win.evaluate(() => document.documentElement.dataset.theme)).toMatch(
       /^(dark|light)$/
     );
-    // the built page runs no inline script (its Content-Security-Policy says so)
     const csp = await win.evaluate(
       () => document.querySelector("meta[http-equiv=Content-Security-Policy]")?.content
     );
-    expect(csp).toContain("script-src 'self'");
     expect(csp.split(";").find(p => p.includes("script-src"))).not.toContain("unsafe-inline");
+    await win.getByRole("tab", { name: /Agents/ }).click();
+    await expect(win.getByText("Claude Code", { exact: true })).toBeVisible();
+    await win.getByRole("tab", { name: /Hosts/ }).click();
+    await expect(win.getByText("No hosts yet")).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("Save writes the draft (through main's checks); Esc leaves the settings as they were", async () => {
+  const app = await launch();
+  try {
+    let win = await openSettings(app);
+    await win.getByLabel("Launcher shortcut").fill("");
+    await win.getByRole("tab", { name: /Integrations/ }).click();
+    await win.getByLabel("Editor").fill("code");
+    await win.getByRole("button", { name: "Save" }).click();
+    await expect.poll(() => saved().editor).toBe("code");
+    expect(saved().shortcut).toBe("");
+
+    win = await openSettings(app);
+    await win.getByRole("tab", { name: /Integrations/ }).click();
+    await win.getByLabel("Editor").fill("vim");
+    await win.keyboard.press("Escape");
+    await new Promise(r => setTimeout(r, 500));
+    expect(saved().editor).toBe("code");
   } finally {
     await app.close();
   }
