@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.1 — 2026-10-12
+
+### Added
+- **Tasks: three views** — Board, List and Timeline, switched in the header (remembered). **List**: a row per task
+  (project, pattern, status, agents, time, changes), grouped like the board's columns; click a column to sort, a
+  group to fold it. **Timeline**: a lane per task on each day's clock, so you see what ran at the same time and
+  what took long; running tasks pulse at "now".
+
+### Changed
+- **Board**: an empty column folds into a narrow rail (its name down the side), and the full columns get the room.
+
 ## 0.10.0 — 2026-10-12
 
 ### Added
