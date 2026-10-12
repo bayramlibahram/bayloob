@@ -103,6 +103,10 @@
   .col h3 em { font-style: normal; color: var(--muted); font-weight: 600; }
   .col h3 em.hot { color: var(--primary-fg); background: var(--waiting); padding: 0 6px; border-radius: 999px; }
   .col .none { padding: 10px 6px; color: var(--muted); font-size: 11.5px; }
+  /* an empty column folds into a narrow rail: its name runs down the side, the room goes to the full ones */
+  .col.rail { align-items: center; padding: 10px 0; overflow: hidden; }
+  .col.rail h3 { writing-mode: vertical-rl; padding: 0; gap: 8px; white-space: nowrap; }
+  .col.rail h3 em { writing-mode: horizontal-tb; }
   .tcard { display: flex; flex-direction: column; gap: 7px; padding: 10px 11px; border-radius: 12px; background: var(--backdrop); border: 1px solid var(--line);
     text-align: left; box-shadow: 0 1px 2px rgb(var(--shade) / calc(0.2 * var(--shade-k))); }
   .tcard.fresh { animation: slidein 0.2s ease-out; }
@@ -121,6 +125,58 @@
   .tcard .agents span { display: inline-flex; align-items: center; gap: 2px; }
   .compact .tcard { gap: 4px; padding: 7px 9px; }
   .compact .tcard .agents { display: none; }
+  .phead .seg button { display: inline-flex; align-items: center; gap: 5px; }
+  .phead .seg .i { width: 14px; height: 14px; }
+
+  /* list: one row per task, grouped by the board's columns */
+  .tlist { flex: 1; min-height: 0; overflow: auto; padding: 0 20px 16px; }
+  .tlist .lrow { display: grid; grid-template-columns: minmax(220px, 1fr) 150px 120px 190px 92px 64px 96px; align-items: center; gap: 12px; padding: 0 12px; }
+  .tlist .lhead { position: sticky; top: 0; z-index: 1; height: 32px; background: var(--backdrop); border-bottom: 1px solid var(--line); }
+  .tlist .lhead button { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .tlist .lhead button:hover, .tlist .lhead button[aria-sort] { color: var(--text); }
+  .tlist .lhead .r, .tlist .trow .r { justify-content: flex-end; text-align: right; }
+  .tlist .grp { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 12px; padding: 6px 4px; font-size: 12px; font-weight: 700; color: var(--soft); }
+  .tlist .grp .i { width: 13px; height: 13px; transition: transform .15s; }
+  .tlist .grp[aria-expanded="false"] .i { transform: rotate(-90deg); }
+  .tlist .grp em { font-style: normal; color: var(--muted); font-weight: 600; }
+  .tlist .grp em.hot { color: var(--primary-fg); background: var(--waiting); padding: 0 6px; border-radius: 999px; }
+  .tlist .trow { width: 100%; min-height: 44px; padding-top: 7px; padding-bottom: 7px; text-align: left; border-radius: 10px; border: 1px solid transparent; font-size: 12.5px; }
+  .tlist .trow:hover { background: var(--raised); border-color: var(--line); }
+  .tlist .trow.needs { border-left: 3px solid var(--waiting); }
+  .tlist .trow .tt { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .tlist .trow .tt .ci { color: var(--cat-workflow); width: 15px; height: 15px; }
+  .tlist .trow .tt span { display: flex; flex-direction: column; min-width: 0; }
+  .tlist .trow .tt b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tlist .trow .tt small { color: var(--waiting); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tlist .trow .m { color: var(--muted); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tlist .trow .who { display: flex; gap: 2px; }
+  .tlist .trow .who .novi { width: 18px; height: 18px; }
+  .tlist .others { margin-top: 14px; padding: 0 4px; color: var(--muted); font-size: 11.5px; }
+  /* timeline: one lane per task on a shared clock, a section per day */
+  .tline { flex: 1; min-height: 0; overflow: auto; padding: 0 20px 16px; }
+  .tline .day { margin-top: 12px; }
+  .tline .dhd { position: sticky; top: 0; z-index: 1; display: grid; grid-template-columns: minmax(220px, 360px) 1fr 60px; gap: 12px; align-items: end; padding: 8px 12px 6px; background: var(--backdrop); border-bottom: 1px solid var(--line); }
+  .tline .dhd b { font-size: 12px; font-weight: 700; color: var(--soft); }
+  .tline .dhd b em { font-style: normal; color: var(--muted); font-weight: 600; margin-left: 4px; }
+  .tline .axis { position: relative; height: 16px; font-size: 10.5px; color: var(--muted); }
+  .tline .axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .tline .axis span:first-child { transform: none; } .tline .axis span:last-child { transform: translateX(-100%); }
+  .tline .lane { display: grid; grid-template-columns: minmax(220px, 360px) 1fr 60px; gap: 12px; align-items: center; width: 100%; min-height: 40px; padding: 5px 12px; border-radius: 10px; border: 1px solid transparent; text-align: left; font-size: 12.5px; }
+  .tline .lane:hover { background: var(--raised); border-color: var(--line); }
+  .tline .lane .tt { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .tline .lane .tt .ci { color: var(--cat-workflow); width: 15px; height: 15px; }
+  .tline .lane .tt span { display: flex; flex-direction: column; min-width: 0; }
+  .tline .lane .tt b { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tline .lane .tt small { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tline .lane .tt small.why { color: var(--waiting); font-weight: 600; }
+  .tline .track { position: relative; height: 22px; border-radius: 6px;
+    background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 25%); }
+  .tline .bar { position: absolute; top: 5px; height: 12px; min-width: 6px; border-radius: 6px; background: var(--c); opacity: .85; }
+  .tline .bar.live { opacity: 1; animation: pulse 1.6s ease-in-out infinite; }
+  .tline .bar.live::after { content: ''; position: absolute; right: -1px; top: -3px; bottom: -3px; width: 2px; border-radius: 1px; background: var(--c); }
+  .tline .lane .r { text-align: right; color: var(--muted); font-size: 12px; }
+  @media (max-width: 900px) { .tline .dhd, .tline .lane { grid-template-columns: minmax(160px, 240px) 1fr 50px; } }
+  @media (max-width: 1100px) { .tlist .lrow { grid-template-columns: minmax(200px, 1fr) 130px 180px 64px 90px; } .tlist .lrow > :is(.c-pat, .c-who) { display: none; } }
 
   /* detail */
   .dhead { display: flex; align-items: flex-start; gap: 12px; padding: 14px 20px 8px; }
@@ -452,6 +508,10 @@
   const T = {
     tasks: 'Tasks', newTask: 'New task', filter: 'Filter tasks…', allProjects: 'All projects',
     comfortable: 'Comfortable', compact: 'Compact', back: 'Tasks',
+    layouts: { board: 'Board', list: 'List', timeline: 'Timeline' },
+    today: 'Today', yesterday: 'Yesterday', startedAt: (at, span) => `Started ${at} · ${span}`,
+    lcol: { title: 'Task', project: 'Project', pattern: 'Pattern', status: 'Status', who: 'Agents', time: 'Time', diff: 'Changes' },
+    emptyGroups: names => `Empty: ${names}`, noMatch: 'No tasks match the filter',
     cols: { queued: 'Queued', running: 'Running', needs: 'Needs you', review: 'Review', done: 'Done', failed: 'Failed · stopped' },
     colEmpty: { queued: 'Nothing waiting for a slot', running: 'No agent is working', needs: 'Nothing waiting on you', review: 'Nothing to merge', done: 'No finished tasks yet', failed: 'Nothing failed' },
     noTasks: 'No tasks yet', noTasksHint: 'Start one with New task → Agentic workflow (Pipeline or Best-of-N).',
@@ -607,6 +667,10 @@
     you: I('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-3.5 4-5 7-5s5.5 1.5 7 5"/>'),
     engine: I('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'),
     agent: I('<rect x="4" y="7" width="16" height="11" rx="4"/><path d="M9 12h.01M15 12h.01"/>'),
+    board: I('<rect x="4" y="4" width="4.5" height="16" rx="1.5"/><rect x="10.5" y="4" width="4.5" height="11" rx="1.5"/><rect x="17" y="4" width="3" height="7" rx="1.5"/>'),
+    list: I('<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>'),
+    chev: I('<path d="m6 9 6 6 6-6"/>'),
+    timeline: I('<path d="M4 6h9M8 12h12M4 18h7"/>'),
   };
   if (new URLSearchParams(location.search).get('embedded') === '1') { document.documentElement.classList.add('embedded'); }
   // The discussion window (?mode=discussion): one task's discussion, full size — no board, no other tabs
@@ -617,6 +681,7 @@
   const LIVE = new Set(['starting', 'running']);
   const OPEN_TASK = new Set(['running', 'needs-you']);
   const DENSITY_KEY = 'bayloob.tasks.density';
+  const LAYOUT_KEY = 'bayloob.tasks.layout';
   const novi = (agent, size = '') => `<span class="novi ${size}">${Agent.thumb(agent)}</span>`;
   const elapsed = t => {
     const s = Math.max(0, Math.round(((t.endedAt || Date.now()) - t.createdAt) / 1000));
@@ -649,6 +714,9 @@
     query = '';
     project = '';
     density = 'comfortable';
+    layout = 'board'; // how the board view shows the tasks: board | list | timeline
+    collapsed = new Set(); // list groups the owner folded
+    sort = { key: 'recent', dir: -1 }; // the list's order inside each group
     picked = new Map(); // task id → candidate the owner selected for "Pick"
     sevFilter = new Map(); // task id → the Report's severity filter (null: all)
     opsUi = null; // the runbook step being confirmed / typed / edited: { task, step, mode, action, typed, argv }
@@ -664,7 +732,11 @@
       this.api = api;
       this.el = { main: document.getElementById('main'), usage: document.getElementById('usage'), toast: document.getElementById('toast') };
       document.getElementById('logo').innerHTML = Agent.thumb(MANAGER);
-      try { this.density = localStorage.getItem(DENSITY_KEY) || 'comfortable'; } catch { /* storage unavailable */ }
+      try {
+        this.density = localStorage.getItem(DENSITY_KEY) || 'comfortable';
+        const layout = localStorage.getItem(LAYOUT_KEY);
+        this.layout = layout in T.layouts ? layout : 'board';
+      } catch { /* storage unavailable */ }
       // Until the first state arrives: the board's shape, not a blank window
       this.el.main.innerHTML = `<div class="phead"><h1>${T.tasks}</h1></div><div class="board">${COLS.map(() => `<section class="col">${skeletonHtml([60, 85, 40])}</section>`).join('')}</div>`;
       this.#bind();
@@ -773,25 +845,124 @@
       const shown = all.filter(t => (!this.project || t.project.name === this.project) && (!q || t.title.toLowerCase().includes(q) || t.project.name.toLowerCase().includes(q)));
       const by = Object.fromEntries(COLS.map(c => [c, []]));
       for (const t of shown) { by[columnOf(t)].push(t); }
-      const cols = COLS.map(c => `<section class="col" data-k="col:${c}" aria-label="${T.cols[c]}">
-          <h3>${T.cols[c]} <em class="${c === 'needs' && by[c].length ? 'hot' : ''}" data-k="n:${c}" data-v="${by[c].length}">${by[c].length}</em></h3>
-          ${by[c].length ? by[c].map(t => this.#card(t, c)).join('') : `<div class="none">${T.colEmpty[c]}</div>`}
-        </section>`).join('');
-      return `<div class="phead"><h1>${T.tasks}</h1>
-          <div class="seg" role="group" aria-label="Density">${['comfortable', 'compact'].map(d => `<button type="button" data-density="${d}" aria-pressed="${this.density === d}">${T[d]}</button>`).join('')}</div></div>
+      const layouts = `<div class="seg" role="group" aria-label="Layout">${Object.entries(T.layouts).map(([k, name]) => `<button type="button" data-layout="${k}" aria-pressed="${this.layout === k}">${ICON[k]}${name}</button>`).join('')}</div>`;
+      const density = this.layout === 'board' ? `<div class="seg" role="group" aria-label="Density">${['comfortable', 'compact'].map(d => `<button type="button" data-density="${d}" aria-pressed="${this.density === d}">${T[d]}</button>`).join('')}</div>` : '';
+      const head = `<div class="phead"><h1>${T.tasks}</h1>${density}${layouts}</div>
         <div class="filters"><label class="field">${ICON.search}<input id="q" placeholder="${T.filter}" aria-label="${T.filter}" value="${esc(this.query)}" spellcheck="false"></label>
-          <select class="sel" id="proj" aria-label="Project"><option value="">${T.allProjects}</option>${projects.map(p => `<option${p === this.project ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
-        <div class="board${this.density === 'compact' ? ' compact' : ''}" data-k="board">${cols}</div>`;
+          <select class="sel" id="proj" aria-label="Project"><option value="">${T.allProjects}</option>${projects.map(p => `<option${p === this.project ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></div>`;
+      if (this.layout === 'list') { return head + this.#list(by); }
+      if (this.layout === 'timeline') { return head + this.#timeline(by); }
+      const cols = COLS.map(c => by[c].length ? `<section class="col" data-k="col:${c}" aria-label="${T.cols[c]}">
+          <h3>${T.cols[c]} <em class="${c === 'needs' && by[c].length ? 'hot' : ''}" data-k="n:${c}" data-v="${by[c].length}">${by[c].length}</em></h3>
+          ${by[c].map(t => this.#card(t, c)).join('')}
+        </section>`
+        : `<section class="col rail" data-k="col:${c}" aria-label="${T.cols[c]}: ${T.colEmpty[c]}" title="${T.colEmpty[c]}">
+          <h3>${T.cols[c]} <em data-k="n:${c}" data-v="0">0</em></h3></section>`).join('');
+      if (!shown.length) { return `${head}<div class="empty" style="flex:1">${T.noMatch}</div>`; }
+      const widths = COLS.map(c => (by[c].length ? 'minmax(180px, 1fr)' : '40px')).join(' ');
+      return `${head}
+        <div class="board${this.density === 'compact' ? ' compact' : ''}" data-k="board" style="grid-template-columns:${widths}">${cols}</div>`;
+    }
+
+    // A task's status chip: its column's colour and where it is ("Merged into main", "Build — 2 queued")
+    #colColor(t, col) {
+      return { needs: 'var(--waiting)', failed: t.status === 'stopped' ? 'var(--idle)' : 'var(--waiting)', done: 'var(--done)', review: 'var(--cat-workflow)', running: 'var(--thinking)', queued: 'var(--idle)' }[col];
+    }
+
+    #statusChip(t, col) {
+      const st = t.template.stages[t.stage];
+      const queued = t.instances.filter(i => i.status === 'queued' && i.stage === st?.id).length;
+      const color = this.#colColor(t, col);
+      const stageText = t.status === 'done' ? (t.merged ? `${t.merged.applied ? 'Applied to' : 'Merged into'} ${t.merged.into}` : 'Done')
+        : t.status === 'stopped' ? 'Stopped' : `${st?.title || ''}${queued ? ` — ${T.queuedN(queued)}` : ''}`;
+      return `<span class="chip c" style="--c:${color}" title="${esc(stageText)}"><span class="d${col === 'running' ? ' live' : ''}"></span>${esc(stageText)}</span>`;
+    }
+
+    // ---------- list ----------
+
+    #list(by) {
+      const key = this.sort.key;
+      const value = {
+        recent: t => t.createdAt,
+        title: t => t.title.toLowerCase(),
+        project: t => t.project.name.toLowerCase(),
+        pattern: t => (PATTERN[t.template.id] || t.template.name).toLowerCase(),
+        time: t => (t.endedAt || Date.now()) - t.createdAt,
+        diff: t => { const d = this.#bestDiff(t); return d ? d.added + d.deleted : -1; },
+      }[key] || (t => t.createdAt);
+      const order = (a, b) => { const x = value(a); const y = value(b); return (x < y ? -1 : x > y ? 1 : 0) * this.sort.dir; };
+      const th = (k, cls = '') => {
+        const on = key === k;
+        return `<span class="${cls}"><button type="button" data-sort="${k}"${on ? ` aria-sort="${this.sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${T.lcol[k]}${on ? (this.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</button></span>`;
+      };
+      const head = `<div class="lrow lhead">${th('title')}${th('project')}${th('pattern', 'c-pat')}<span><button type="button" disabled>${T.lcol.status}</button></span><span class="c-who"><button type="button" disabled>${T.lcol.who}</button></span>${th('time', 'r')}${th('diff', 'r')}</div>`;
+      const filled = COLS.filter(c => by[c].length);
+      const groups = filled.map(c => {
+        const open = !this.collapsed.has(c);
+        return `<section aria-label="${T.cols[c]}"><button type="button" class="grp" data-group="${c}" aria-expanded="${open}">${ICON.chev}${T.cols[c]} <em class="${c === 'needs' ? 'hot' : ''}">${by[c].length}</em></button>
+          ${open ? by[c].slice().sort(order).map(t => this.#row(t, c)).join('') : ''}</section>`;
+      }).join('');
+      const empty = COLS.filter(c => !by[c].length).map(c => T.cols[c]);
+      return `<div class="tlist" data-k="list">${filled.length ? head + groups : `<div class="empty">${T.noMatch}</div>`}
+        ${empty.length && filled.length ? `<div class="others">${esc(T.emptyGroups(empty.join(' · ')))}</div>` : ''}</div>`;
+    }
+
+    #row(t, col) {
+      const best = this.#bestDiff(t);
+      const agents = (t.template.stages.find(s => s.role === 'builder')?.agents || []).flatMap(a => Array.from({ length: Math.min(a.count, 4) }, () => a.adapter));
+      return `<button type="button" class="lrow trow${col === 'needs' ? ' needs' : ''}" data-open="${esc(t.id)}" title="${esc(t.title)}">
+        <span class="tt">${ICON.flow}<span><b>${esc(t.title)}</b>${t.gate ? `<small>${esc(t.gate.title)}</small>` : ''}</span></span>
+        <span class="m"><span class="chip out">${esc(t.project.name)}</span></span>
+        <span class="m c-pat">${esc(PATTERN[t.template.id] || t.template.name)}</span>
+        <span class="m">${this.#statusChip(t, col)}</span>
+        <span class="who c-who">${agents.map(a => novi(a)).join('')}</span>
+        <span class="m r num" title="${esc(clockTime(t.createdAt))}">${elapsed(t)}</span>
+        <span class="r">${best ? `<span class="diff"><span class="a">+${best.added}</span> <span class="r">−${best.deleted}</span></span>` : '<span class="m">—</span>'}</span>
+      </button>`;
+    }
+
+    // ---------- timeline ----------
+
+    #timeline(by) {
+      const items = COLS.flatMap(c => by[c].map(t => ({ t, col: c })));
+      if (!items.length) { return `<div class="tline" data-k="timeline"><div class="empty">${T.noMatch}</div></div>`; }
+      const now = Date.now();
+      const dayOf = at => new Date(at).toDateString();
+      const label = key => {
+        const d = new Date(key);
+        const today = new Date(now);
+        const yesterday = new Date(now - 86_400_000);
+        return key === today.toDateString() ? T.today : key === yesterday.toDateString() ? T.yesterday
+          : d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+      };
+      const days = new Map();
+      for (const it of items.sort((a, b) => b.t.createdAt - a.t.createdAt)) {
+        const k = dayOf(it.t.createdAt);
+        if (!days.has(k)) { days.set(k, []); }
+        days.get(k).push(it);
+      }
+      return `<div class="tline" data-k="timeline">${[...days].map(([k, list]) => {
+        // The day's clock: its first start to its last end (at least half an hour, so short tasks still read)
+        const lo = Math.min(...list.map(x => x.t.createdAt));
+        const hi = Math.max(lo + 30 * 60_000, ...list.map(x => x.t.endedAt || now));
+        const pos = at => ((at - lo) / (hi - lo)) * 100;
+        const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => `<span style="left:${f * 100}%">${clockTime(lo + f * (hi - lo))}</span>`).join('');
+        const lanes = list.map(({ t, col }) => {
+          const left = pos(t.createdAt);
+          const width = Math.max(0.5, pos(t.endedAt || now) - left);
+          const live = !t.endedAt && (col === 'running' || col === 'needs' || col === 'queued');
+          const sub = t.gate ? `<small class="why">${esc(t.gate.title)}</small>` : `<small>${esc(t.project.name)} · ${esc(PATTERN[t.template.id] || t.template.name)}</small>`;
+          return `<button type="button" class="lane" data-open="${esc(t.id)}" title="${esc(`${t.title}\n${T.startedAt(clockTime(t.createdAt), elapsed(t))}`)}">
+            <span class="tt">${ICON.flow}<span><b>${esc(t.title)}</b>${sub}</span></span>
+            <span class="track"><span class="bar${live ? ' live' : ''}" style="--c:${this.#colColor(t, col)};left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></span></span>
+            <span class="r num">${elapsed(t)}</span>
+          </button>`;
+        }).join('');
+        return `<section class="day" aria-label="${esc(label(k))}"><div class="dhd"><b>${esc(label(k))}<em>${list.length}</em></b><div class="axis" aria-hidden="true">${ticks}</div><span></span></div>${lanes}</section>`;
+      }).join('')}</div>`;
     }
 
     #card(t, col) {
-      const st = t.template.stages[t.stage];
-      const state = t.stages[t.stage];
-      const queued = t.instances.filter(i => i.status === 'queued' && i.stage === st?.id).length;
-      const live = t.instances.filter(i => LIVE.has(i.status)).length;
-      const color = { needs: 'var(--waiting)', failed: t.status === 'stopped' ? 'var(--idle)' : 'var(--waiting)', done: 'var(--done)', review: 'var(--cat-workflow)', running: 'var(--thinking)', queued: 'var(--idle)' }[col];
-      const stageText = t.status === 'done' ? (t.merged ? `${t.merged.applied ? 'Applied to' : 'Merged into'} ${t.merged.into}` : 'Done')
-        : t.status === 'stopped' ? 'Stopped' : `${st?.title || ''}${queued ? ` — ${T.queuedN(queued)}` : ''}`;
       const builders = t.template.stages.find(s => s.role === 'builder')?.agents || [];
       const best = this.#bestDiff(t);
       const why = t.gate ? `<div class="why">${ICON.warn}<span>${esc(t.gate.title)}</span></div>` : '';
@@ -802,7 +973,7 @@
       return `<button type="button" class="tcard${col === 'needs' ? ' needs' : ''}${fresh ? ' fresh' : ''}" data-open="${esc(t.id)}" data-seen="${esc(seen)}">
         <div class="tt">${ICON.flow}<b>${esc(t.title)}</b></div>
         <div class="ln"><span class="chip out">${esc(t.project.name)}</span>${esc(PATTERN[t.template.id] || t.template.name)}</div>
-        <div class="ln"><span class="chip c" style="--c:${color}"><span class="d${col === 'running' ? ' live' : ''}"></span>${esc(stageText)}</span></div>
+        <div class="ln">${this.#statusChip(t, col)}</div>
         ${why}${waiting ? `<div class="ln" style="color:var(--working)" title="${esc(waiting.waiting)}">${esc(this.#waitingText(waiting.waiting))}</div>` : ''}
         ${this.#cardUsage(t) || `<div class="agents">${builders.map(a => `<span>${novi(a.adapter)}×${a.count}</span>`).join('')}</div>`}
         <div class="ln">${ICON.clock}<span class="num">${elapsed(t)}</span>${best ? `<span class="diff"><span class="a">+${best.added}</span> <span class="r">−${best.deleted}</span></span>` : ''}</div>
@@ -1513,6 +1684,24 @@
         if (open) { return this.#openTask(open.dataset.open); }
         const retry = e.target.closest('[data-retry]');
         if (retry) { this.#art.delete(retry.dataset.retry); return this.render(); }
+        const lay = e.target.closest('[data-layout]');
+        if (lay) {
+          this.layout = lay.dataset.layout;
+          try { localStorage.setItem(LAYOUT_KEY, this.layout); } catch { /* storage unavailable */ }
+          return this.render();
+        }
+        const grp = e.target.closest('[data-group]');
+        if (grp) {
+          const c = grp.dataset.group;
+          if (this.collapsed.has(c)) { this.collapsed.delete(c); } else { this.collapsed.add(c); }
+          return this.render();
+        }
+        const so = e.target.closest('[data-sort]');
+        if (so) {
+          const k = so.dataset.sort;
+          this.sort = this.sort.key === k ? { key: k, dir: -this.sort.dir } : { key: k, dir: ['title', 'project', 'pattern'].includes(k) ? 1 : -1 };
+          return this.render();
+        }
         const d = e.target.closest('[data-density]');
         if (d) {
           this.density = d.dataset.density;
