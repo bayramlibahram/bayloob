@@ -66,7 +66,8 @@
   const CUSTOM_ID = /^c-[a-z0-9-]{1,30}$/;
 
   // default: a format id or null (none) · agents: { agent: id | 'none' } (missing: the default) · custom: the owner's
-  const DEFAULT = { default: null, agents: {}, custom: [] };
+  // · edited: { builtin id: text } — a built-in format's text as the owner changed it (Reset to default drops it)
+  const DEFAULT = { default: null, agents: {}, custom: [], edited: {} };
 
   /** A clean setting. The first version ({ on, text }) becomes a default format, its text kept. */
   function normalize(v) {
@@ -79,6 +80,7 @@
           : [];
       return {
         ...DEFAULT,
+        edited: {},
         custom,
         default: f.on === true ? (custom.length ? "c-mine" : "adhd") : null,
       };
@@ -112,12 +114,27 @@
         agents[k] = id;
       }
     }
-    return { default: ids.has(f.default) ? f.default : null, agents, custom };
+    const edited = {};
+    for (const b of BUILTIN) {
+      const text = String(f.edited?.[b.id] ?? "").slice(0, TEXT_MAX);
+      if (text.trim() && text !== b.text) {
+        edited[b.id] = text;
+      }
+    }
+    return { default: ids.has(f.default) ? f.default : null, agents, custom, edited };
   }
 
-  /** Every format to choose from: the built-in ones, then the owner's. */
+  /** Every format to choose from: the built-in ones (with the owner's edits), then the owner's. */
   function formats(v) {
-    return [...BUILTIN.map(b => ({ ...b, builtin: true })), ...normalize(v).custom];
+    const f = normalize(v);
+    return [
+      ...BUILTIN.map(b =>
+        f.edited[b.id]
+          ? { ...b, text: f.edited[b.id], builtin: true, edited: true }
+          : { ...b, builtin: true }
+      ),
+      ...f.custom,
+    ];
   }
 
   /**
@@ -171,7 +188,8 @@
    */
   function unwrap(prompt, v) {
     const p = String(prompt ?? "");
-    for (const f of formats(v)) {
+    // the built-ins as they shipped too: a prompt sent before the owner edited one
+    for (const f of [...formats(v), ...BUILTIN]) {
       const template = f.text.includes(PLACEHOLDER) ? f.text : `${PLACEHOLDER}\n\n${f.text}`;
       const [before, after = ""] = template.split(PLACEHOLDER);
       if (

@@ -102,3 +102,22 @@ test("Esc on an open menu closes the menu, not Settings; a section's button does
     await app.close();
   }
 });
+
+test("a built-in response format, changed and saved, opens changed — Reset to default brings it back", async () => {
+  const app = await launch();
+  try {
+    let win = await openSettings(app);
+    const box = () => win.getByRole("textbox", { name: "Format template" });
+    await box().fill("{{prompt}}\n\n---\nAnswer in Azerbaijani.");
+    await win.getByRole("button", { name: "Save" }).click();
+    await expect.poll(() => saved().promptFormat?.edited?.adhd).toMatch(/Azerbaijani/);
+    win = await openSettings(app);
+    await expect(box()).toHaveValue(/Answer in Azerbaijani/);
+    await win.getByRole("button", { name: "Reset to default" }).click();
+    await expect(box()).toHaveValue(/ADHD-friendly/);
+    await win.getByRole("button", { name: "Save" }).click();
+    await expect.poll(() => saved().promptFormat?.edited).toEqual({});
+  } finally {
+    await app.close();
+  }
+});

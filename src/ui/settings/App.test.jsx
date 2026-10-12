@@ -160,3 +160,19 @@ test("opening on General puts the cursor in the launcher shortcut", async () => 
   await act(async () => api.show({ ...shown(), tab: "general" }));
   expect(document.activeElement.id).toBe("shortcut");
 });
+
+test("a built-in format can be changed, and reset to its default", async () => {
+  render(<App />);
+  await act(async () => api.show({ ...shown(), tab: "general" }));
+  const box = () => screen.getByRole("textbox", { name: "Format template" });
+  expect(box().readOnly).toBe(false);
+  fireEvent.change(box(), { target: { value: "{{prompt}}\n\nAnswer in Azerbaijani." } });
+  expect(useSettings.getState().draft.promptFormat.edited).toEqual({
+    adhd: "{{prompt}}\n\nAnswer in Azerbaijani.",
+  });
+  expect(payloadOf(useSettings.getState().draft).promptFormat.edited.adhd).toMatch(/Azerbaijani/);
+  fireEvent.click(screen.getByRole("button", { name: "Reset to default" }));
+  expect(useSettings.getState().draft.promptFormat.edited).toEqual({});
+  expect(box().value).toMatch(/ADHD-friendly/);
+  expect(screen.queryByRole("button", { name: "Reset to default" })).toBeNull();
+});

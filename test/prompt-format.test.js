@@ -42,7 +42,7 @@ test("response format: four built-in, the owner's own after them; picked in the 
   assert.equal(F.apply("Fix it", v, { agent: "claude" }), "Review: Fix it");
   // nothing chosen anywhere: prompts go as typed
   assert.equal(F.apply("Fix it", undefined, { agent: "claude" }), "Fix it");
-  assert.deepEqual(F.normalize(undefined), { default: null, agents: {}, custom: [] });
+  assert.deepEqual(F.normalize(undefined), { default: null, agents: {}, custom: [], edited: {} });
 });
 
 test("response format: the first version's { on, text } becomes a default format", () => {
@@ -50,16 +50,19 @@ test("response format: the first version's { on, text } becomes a default format
     default: "adhd",
     agents: {},
     custom: [],
+    edited: {},
   });
   assert.deepEqual(F.normalize({ on: false, text: F.ADHD }), {
     default: null,
     agents: {},
     custom: [],
+    edited: {},
   });
   assert.deepEqual(F.normalize({ on: true, text: "Short.\n{{prompt}}" }), {
     default: "c-mine",
     agents: {},
     custom: [{ id: "c-mine", name: "My format", text: "Short.\n{{prompt}}" }],
+    edited: {},
   });
 });
 
@@ -87,4 +90,21 @@ test("unwrap: the console shows what was typed — a format put on for an agent 
     F.unwrap("A prompt with --- in it\n\nand more", null),
     "A prompt with --- in it\n\nand more"
   );
+});
+
+test("response format: a built-in edited by the owner — used, unwrapped, and reset when it's the original again", () => {
+  const text = "{{prompt}}\n\n---\nAnswer in Azerbaijani, in bullets.";
+  const v = { default: "adhd", edited: { adhd: text, concise: F.BUILTIN[1].text, nope: "x" } };
+  // only real built-ins, only when they differ from what shipped
+  assert.deepEqual(F.normalize(v).edited, { adhd: text });
+  const adhd = F.formats(v).find(f => f.id === "adhd");
+  assert.equal(adhd.text, text);
+  assert.equal(adhd.edited, true);
+  assert.equal(adhd.name, "ADHD-friendly");
+  assert.equal(F.apply("Fix it", v), "Fix it\n\n---\nAnswer in Azerbaijani, in bullets.");
+  assert.equal(F.unwrap(F.apply("Fix it", v), v), "Fix it");
+  // a prompt sent with the shipped text before the edit still reads as typed
+  assert.equal(F.unwrap(F.wrap("Fix it", F.ADHD), v), "Fix it");
+  // emptied: the shipped text again
+  assert.deepEqual(F.normalize({ edited: { adhd: "  " } }).edited, {});
 });

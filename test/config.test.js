@@ -141,11 +141,12 @@ test("attachment limits: 50 MB a file, 200 MB a task by default; clamped", () =>
 test("response formats: none by default; kept as chosen", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cfg-"));
   const s = new Settings(path.join(dir, "settings.json"));
-  assert.deepEqual(s.get("promptFormat"), { default: null, agents: {}, custom: [] });
+  assert.deepEqual(s.get("promptFormat"), { default: null, agents: {}, custom: [], edited: {} });
   const v = {
     default: "adhd",
     agents: { codex: "plan" },
     custom: [{ id: "c-x", name: "Mine", text: "{{prompt}}!" }],
+    edited: { adhd: "{{prompt}}\n\nIn Azerbaijani." }, // a built-in's text as the owner changed it
   };
   s.save({ promptFormat: v });
   assert.deepEqual(new Settings(path.join(dir, "settings.json")).get("promptFormat"), v);

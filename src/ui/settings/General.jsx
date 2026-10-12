@@ -182,20 +182,42 @@ export function FormatSelect({ value, onChange, label, withDefault = false }) {
 function Formats() {
   const { draft, fmtShown, edit, addFormat, removeFormat } = useSettings();
   // the owner's formats as typed (Save cleans them): an emptied name or text stays what was typed
+  // a built-in shows the owner's edit of its text while there is one
+  const edited = draft.promptFormat.edited || {};
   const all = [
-    ...PromptFormat.BUILTIN.map(b => ({ ...b, builtin: true })),
+    ...PromptFormat.BUILTIN.map(b =>
+      edited[b.id] !== undefined
+        ? { ...b, text: edited[b.id], builtin: true, edited: true }
+        : { ...b, builtin: true }
+    ),
     ...draft.promptFormat.custom,
   ];
   const shown = all.find(x => x.id === fmtShown) || all[0];
+  const original = PromptFormat.BUILTIN.find(b => b.id === shown.id)?.text;
   const setShown = (key, value) =>
     edit(d => {
+      if (shown.builtin) {
+        // a built-in's text is kept as an edit; typed back to what shipped, the edit goes
+        const e = { ...(d.promptFormat.edited || {}) };
+        if (value === original) {
+          delete e[shown.id];
+        } else {
+          e[shown.id] = value;
+        }
+        d.promptFormat.edited = e;
+        return;
+      }
       const c = d.promptFormat.custom.find(x => x.id === shown.id);
       if (c) {
         c[key] = value;
       }
     });
   return (
-    <Row label="Formats" hint="Built-in ones can't be changed — add your own." wide>
+    <Row
+      label="Formats"
+      hint="Change any of them — a built-in one can go back to its default. Or add your own."
+      wide
+    >
       <div className="flex flex-wrap items-center gap-2">
         <ToggleGroup
           type="single"
@@ -207,8 +229,13 @@ function Formats() {
           className="flex-wrap"
         >
           {all.map(x => (
-            <ToggleGroupItem key={x.id} value={x.id}>
+            <ToggleGroupItem
+              key={x.id}
+              value={x.id}
+              title={x.edited ? "Changed by you" : undefined}
+            >
               {x.name}
+              {x.edited && <span className="text-brand">•</span>}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -230,7 +257,6 @@ function Formats() {
         aria-label="Format template"
         className="min-h-36 font-mono text-xs"
         spellCheck={false}
-        readOnly={!!shown.builtin}
         value={shown.text}
         onChange={e => setShown("text", e.target.value)}
       />
@@ -240,7 +266,13 @@ function Formats() {
             ? ""
             : "No {{prompt}}: your text goes first, the format after it"}
         </p>
-        {!shown.builtin && (
+        {shown.builtin ? (
+          shown.edited && (
+            <Button variant="outline" size="sm" onClick={() => setShown("text", original)}>
+              Reset to default
+            </Button>
+          )
+        ) : (
           <Button variant="outline" size="sm" onClick={() => removeFormat(shown.id)}>
             Remove this format
           </Button>
