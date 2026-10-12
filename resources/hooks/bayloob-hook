@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Bayloob hook — no dependencies (no node, no curl), just bash /dev/tcp.
-# Claude Code / Gemini pass the event JSON on stdin.   Codex passes it as the last argument.
+# Claude Code / Gemini / Grok pass the event JSON on stdin.   Codex passes it as the last argument.
 # Usage: bayloob-hook <agent> [json]
 agent="${1:-claude}"
+# Grok runs Claude Code's hooks (~/.claude/settings.json) too: its own env tells its sessions apart
+[ "$agent" = claude ] && [ -n "$GROK_SESSION_ID" ] && agent=grok
 port="${BAYLOOB_PORT:-7777}"
 
 if [ -n "$2" ]; then body="$2"; else body="$(cat)"; fi   # read stdin first, so the agent never gets EPIPE

@@ -8,6 +8,9 @@ test("the challenger is a different, installed agent", () => {
   assert.equal(pickChallenger("claude", new Set(["claude", "gemini"])), "gemini");
   assert.equal(pickChallenger("codex", new Set(["claude", "codex"])), "claude");
   assert.equal(pickChallenger("claude", new Set(["claude"])), null);
+  // Grok challenges when it's the only other agent, and is challenged by Claude first
+  assert.equal(pickChallenger("claude", new Set(["claude", "grok"])), "grok");
+  assert.equal(pickChallenger("grok", new Set(["grok", "codex", "claude"])), "claude");
 });
 
 test("challengers start read-only and are told not to edit", () => {

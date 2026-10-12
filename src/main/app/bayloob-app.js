@@ -967,7 +967,7 @@ class BayloobApp {
                     : null,
                 }
               : {
-                  name: k === "grok" ? "Grok" : k,
+                  name: k,
                   installed: false,
                   color: null,
                   launch: null,

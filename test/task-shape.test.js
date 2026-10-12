@@ -6,7 +6,7 @@ const cfg = over =>
   T.normalize({ project: { cwd: "/p/shop", name: "shop" }, text: "Do it", ...over });
 
 test("normalize keeps known values and falls back for the rest", () => {
-  const c = T.normalize({ category: "nope", single: { agent: "grok" } }, ["claude", "codex"]);
+  const c = T.normalize({ category: "nope", single: { agent: "ghost" } }, ["claude", "codex"]);
   assert.equal(c.category, "single");
   assert.equal(c.single.agent, "claude");
   const a = T.normalize({

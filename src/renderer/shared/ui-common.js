@@ -69,6 +69,15 @@ const AGENTS = {
     top: ["#ffffff", "#dde2ea", "#b6bdca"],
     bot: ["#c3c9d4", "#9099aa", "#5d6577"],
   },
+  // xAI's Grok CLI: the silver Novi, a little brighter than Cursor's
+  grok: {
+    name: "Grok",
+    pack: "silver",
+    color: "#e4e6eb",
+    light: "#3d4250",
+    top: ["#ffffff", "#e9ecf1", "#c4cad5"],
+    bot: ["#cfd4dd", "#9aa2b2", "#626a7c"],
+  },
   cursor: {
     name: "Cursor",
     pack: "silver",

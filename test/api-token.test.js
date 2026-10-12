@@ -75,4 +75,19 @@ test("the bash hook sends the token, and exits quietly without a token file", as
   );
   assert.equal(ok.code, 0);
   assert.equal(server.store.list().length, 1);
+
+  // Grok runs Claude Code's hooks: its GROK_SESSION_ID makes the session Grok's. Its turn's "done" counts; the
+  // Stop it sends again after SessionEnd (reason "shutdown") doesn't bring the session back
+  const grok = (ev, extra = {}) =>
+    run(
+      { BAYLOOB_TOKEN_FILE: file, GROK_SESSION_ID: "g1" },
+      { session_id: "g1", cwd: "/w/shop", ...ev, ...extra }
+    );
+  await grok({ hook_event_name: "SessionStart" });
+  await grok({ hook_event_name: "Stop", reason: "end_turn", lastAssistantMessage: "hello" });
+  const g = () => server.store.list().find(x => x.agent === "grok");
+  assert.equal(g()?.state, "done");
+  await grok({ hook_event_name: "SessionEnd", reason: "shutdown" });
+  await grok({ hook_event_name: "Stop", reason: "shutdown" });
+  assert.notEqual(g()?.state, "done");
 });

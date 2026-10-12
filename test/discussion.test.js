@@ -87,8 +87,8 @@ test("discussion: a reply is read from its sections and json block; what's wrong
   assert.match(D.parseReply("## Position\nx\n```json\n{oops}\n```", ids).error, /isn't valid JSON/);
   assert.match(D.parseReply(reply("maybe"), ids).error, /"stance" must be one of/);
   assert.match(
-    D.parseReply(reply("support", ["grok-1"]), ids).error,
-    /isn't here: grok-1 \(use claude-1, codex-1, gemini-1\)/
+    D.parseReply(reply("support", ["ghost-1"]), ids).error,
+    /isn't here: ghost-1 \(use claude-1, codex-1, gemini-1\)/
   );
   assert.match(D.parseReply(reply("support", [], 3), ids).error, /"confidence" must be/);
   assert.match(

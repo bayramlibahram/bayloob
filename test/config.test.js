@@ -61,6 +61,16 @@ test("agents start with their first prompt", () => {
   assert.deepEqual(agentCommand("claude", "fix it"), ["claude", "fix it"]);
   assert.deepEqual(agentCommand("gemini", "fix it"), ["gemini", "-i", "fix it"]);
   assert.deepEqual(agentCommand("codex"), ["codex"]);
+  // Grok: read-only is its kernel sandbox, with approvals off so an unattended run never waits
+  assert.deepEqual(agentCommand("grok", "fix it"), ["grok", "fix it"]);
+  assert.deepEqual(agentCommand("grok", "review", { readOnly: true }), [
+    "grok",
+    "--sandbox",
+    "read-only",
+    "--always-approve",
+    "review",
+  ]);
+  assert.deepEqual(agentCommand("grok", "", { resume: "01a1" }), ["grok", "--resume", "01a1"]);
   assert.throws(() => agentCommand("rm"), /Unknown agent/);
 });
 

@@ -887,7 +887,7 @@
   };
   function templateIssues(
     t,
-    { capacity = { claude: 4, codex: 2, "codex-local": 1, gemini: 2, ollama: 1 } } = {}
+    { capacity = { claude: 4, codex: 2, "codex-local": 1, gemini: 2, grok: 1, ollama: 1 } } = {}
   ) {
     const issues = []; // { stage: index | null, text }
     if (!t || typeof t !== "object") {

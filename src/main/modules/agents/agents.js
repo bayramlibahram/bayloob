@@ -8,6 +8,10 @@
 // Codex's readOnly also sets approvals to never: with the default on-request policy, a user config with
 // approvals_reviewer = "auto_review" approves the escalation and the write goes through (#34; checked on
 // codex-cli 0.162.1 with `codex exec`: on-request wrote the file, never blocked it).
+// Grok's readOnly is its kernel sandbox (writes only to ~/.grok and the temp dirs; checked on grok 1.0.52: a
+// shell `echo x > b.txt` in the project got "Permission denied") with approvals off, so an unattended run never
+// stops on a prompt — the sandbox, not the approval, is what keeps it from writing. A project under /tmp is
+// writable even then.
 // resume: the argv that continues an existing conversation by id (checked with --help; null = unknown).
 // color: accent of the agent's raster mascot pack; svgColor: the same for the SVG mascot.
 // Keep in sync with AGENTS in index.html.
@@ -71,6 +75,15 @@ const AGENTS = {
     resume: null,
     color: "#e6e6e6",
     svgColor: "#cfd3dc",
+  },
+  grok: {
+    name: "Grok",
+    bin: "grok",
+    withPrompt: p => [p],
+    readOnly: ["--sandbox", "read-only", "--always-approve"],
+    resume: id => ["--resume", id],
+    color: "#e4e6eb",
+    svgColor: "#c4cad5",
   },
   gemini: {
     name: "Gemini CLI",

@@ -1620,11 +1620,11 @@ test("Discussion templates: participants, a known format, 1–10 rounds, read-on
     format: "chat",
     rounds: 0,
     mode: "writes",
-    participants: [{ adapter: "grok", count: 1 }],
+    participants: [{ adapter: "ghost", count: 1 }],
     decider: { adapter: "nope" },
   });
   assert.deepEqual(validateTemplate(bad), [
-    'Stage 1 "Discuss": "grok" is not an agent that can run here',
+    'Stage 1 "Discuss": "ghost" is not an agent that can run here',
     'Stage 1 "Discuss": pick a format (round-robin, debate, critique, consensus, war-room)',
     'Stage 1 "Discuss": rounds must be 1–10',
     'Stage 1 "Discuss": participants only read — the mode must be "read-only"',
@@ -1897,7 +1897,7 @@ test("Orchestrator: it asks for workers, you approve the first batch, results co
       wstart("api", "codex", ["src/api/"]),
       wstart("docs", "claude", ["README.md"]),
       wstart("audit", "claude"),
-      wstart("grok", "grok", ["x.js"]),
+      wstart("ghost", "ghost", ["x.js"]),
     ])
   );
   // the first batch waits for you, with what was refused
@@ -1905,7 +1905,7 @@ test("Orchestrator: it asks for workers, you approve the first batch, results co
   assert.match(task.gate.title, /start 3 workers/);
   assert.deepEqual(
     task.gate.refused.map(r => r.id),
-    ["grok"]
+    ["ghost"]
   );
   assert.equal(env.runner.sessions.length, 1);
   await decide(env, task, "approve");
@@ -1927,7 +1927,7 @@ test("Orchestrator: it asks for workers, you approve the first batch, results co
   // the orchestrator's next turn: the same session, results fenced as data; the worker's JSON did nothing
   assert.match(
     lastPrompt(env),
-    /Refused — start "grok"[\s\S]*## api \(codex, writes\) — done\nChanges: 2 files, \+10 −1[\s\S]*<<<\nAPI done\. \{"actions"[\s\S]*## audit \(claude, read-only\) — done/
+    /Refused — start "ghost"[\s\S]*## api \(codex, writes\) — done\nChanges: 2 files, \+10 −1[\s\S]*<<<\nAPI done\. \{"actions"[\s\S]*## audit \(claude, read-only\) — done/
   );
   assert.equal(
     env.runner.sessions.some(s => /rm -rf/.test(s.prompt)),
@@ -1962,8 +1962,8 @@ test("Orchestrator: refused or unreadable three turns in a row stops it for you;
   const task = await startOrchestrator(env);
   await endTurn(env, task, orchestratorNow(env), "I think we should start.");
   assert.match(lastPrompt(env), /couldn't be read: No ```json block/);
-  await endTurn(env, task, orchestratorNow(env), asks([wstart("a", "grok", ["a.js"])]));
-  assert.match(lastPrompt(env), /Refused — start "a": "grok" isn't an agent/);
+  await endTurn(env, task, orchestratorNow(env), asks([wstart("a", "ghost", ["a.js"])]));
+  assert.match(lastPrompt(env), /Refused — start "a": "ghost" isn't an agent/);
   await endTurn(env, task, orchestratorNow(env), asks([wstart("b", "codex", ["../etc"])]));
   assert.equal(task.gate.kind, "orchestrator-stuck");
   await decide(env, task, "retry");

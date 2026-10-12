@@ -68,6 +68,17 @@ function toState(ev) {
   }
 }
 
+/**
+ * Grok sends Claude Code's fields (hook_event_name, session_id, tool_name…) beside its own camelCase ones, but
+ * a few only in camelCase: those are copied over. → false for an event to drop: the Stop Grok sends again
+ * after SessionEnd (reason "shutdown"), which would bring an ended session back as done.
+ */
+function fromGrok(ev) {
+  ev.last_assistant_message ??= ev.lastAssistantMessage;
+  ev.notification_type ??= ev.notificationType;
+  return !(ev.hook_event_name === "Stop" && ev.reason === "shutdown");
+}
+
 // Short description for the permission card: Bash → the command, Edit/Write → the file, etc.
 function describeTool(input) {
   if (!input || typeof input !== "object") {
@@ -319,6 +330,9 @@ class EventServer {
       this.lastEventAt = Date.now();
       const query = new URL(req.url, "http://x").searchParams;
       const agent = query.get("agent") || ev._agent || "claude";
+      if (agent === "grok" && !fromGrok(ev)) {
+        return res.end("ok");
+      }
       const id = `${agent}:${ev.session_id || ev["thread-id"] || ev.cwd || query.get("cwd") || "default"}`;
 
       if (isPerm) {
@@ -450,6 +464,7 @@ class EventServer {
 }
 
 module.exports = {
+  fromGrok,
   EventServer,
   SessionStore,
   toState,

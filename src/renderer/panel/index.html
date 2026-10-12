@@ -792,7 +792,7 @@
   const HEALTH_COLOR = { healthy: 'var(--done)', running: 'var(--thinking)', starting: 'var(--working)', unhealthy: 'var(--waiting)' };
   const PRIORITY = { waiting: 5, working: 4, thinking: 3, done: 2, idle: 1 };
   const FINISHED_RECENT_MS = 10 * 60 * 1000;
-  const RESUMABLE = new Set(['claude', 'codex']); // agents Bayloob can continue in tmux (--resume / resume)
+  const RESUMABLE = new Set(['claude', 'codex', 'grok']); // agents Bayloob can continue in tmux (--resume / resume)
   // action: { label, act } → a button with data-empty="<act>" (handled in the list's click handler)
   const emptyHtml = (icon, line, hint, size = '', action = null) =>
     `<div class="empty ${size}"><span class="ei">${icon || ''}</span><span><b>${line}</b><small>${hint}</small>${action ? `<button type="button" class="btn" data-empty="${action.act}">${action.label}</button>` : ''}</span></div>`;

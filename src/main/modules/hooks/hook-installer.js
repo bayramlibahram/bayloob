@@ -136,6 +136,9 @@ Other agents (optional, add by hand):
 
   Gemini CLI →  ~/.gemini/settings.json  (hooks section, same format as Claude Code)
     command: ${this.commandFor("gemini")}
+
+  Grok CLI   →  nothing to add: it runs Claude Code's hooks (~/.claude/settings.json), and the hook
+    tells a Grok session by its GROK_SESSION_ID
 `);
   }
 }

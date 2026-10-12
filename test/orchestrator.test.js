@@ -40,7 +40,7 @@ test("orchestrator: a start is checked — agent, mode, writers allowed, files, 
   const r = M.checkBatch(
     [
       start("api"),
-      start("grok", { agent: "grok" }),
+      start("ghost", { agent: "ghost" }),
       start("x", { mode: "admin" }),
       start("nofiles", { files: [] }),
       start("escape", { files: ["../etc/passwd"] }),
@@ -58,7 +58,7 @@ test("orchestrator: a start is checked — agent, mode, writers allowed, files, 
     ["api"]
   );
   assert.deepEqual(whys(r), [
-    `grok: "grok" isn't an agent this task may use (claude, codex)`,
+    `ghost: "ghost" isn't an agent this task may use (claude, codex)`,
     'x: the mode must be "read-only" or "writes"',
     "nofiles: a writer must name the files it owns (1–40)",
     "escape: files must be paths inside the project (no /, .., or .git)",

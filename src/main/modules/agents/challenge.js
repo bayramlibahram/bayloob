@@ -4,14 +4,15 @@
 
 // Who reviews whom, in order of preference
 const CHALLENGERS = {
-  claude: ["codex", "gemini"],
-  codex: ["claude", "gemini"],
-  gemini: ["claude", "codex"],
+  claude: ["codex", "gemini", "grok"],
+  codex: ["claude", "gemini", "grok"],
+  gemini: ["claude", "codex", "grok"],
+  grok: ["claude", "codex", "gemini"],
 };
 
 /** The agent that should challenge `author`'s work, among the installed ones; null if there's none. */
 function pickChallenger(author, installed) {
-  const order = CHALLENGERS[author] || ["claude", "codex", "gemini"];
+  const order = CHALLENGERS[author] || ["claude", "codex", "gemini", "grok"];
   return order.find(a => a !== author && installed.has(a)) || null;
 }
 

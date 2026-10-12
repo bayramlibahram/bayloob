@@ -7,6 +7,7 @@ export const AGENTS = {
   gemini: { name: "Gemini CLI", pack: "blue", color: "#5b7bff" },
   "codex-local": { name: "Codex (local)", pack: "teal", color: "#2f9e8f", light: "#0e7a6e" },
   ollama: { name: "Ollama", pack: "silver", color: "#cfd3dc", light: "#6b7180" },
+  grok: { name: "Grok", pack: "silver", color: "#e4e6eb", light: "#3d4250" },
   cursor: { name: "Cursor", pack: "silver", color: "#b6bac6", light: "#6b7180" },
   other: { name: null, pack: "silver", color: "#b6bac6", light: "#6b7180" },
 };

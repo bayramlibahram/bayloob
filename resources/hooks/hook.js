@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Cross-platform hook (used on Windows, where bash /dev/tcp isn't available).
-// Reads the event from stdin (Claude Code, Gemini CLI) or the last argument (Codex notify)
+// Reads the event from stdin (Claude Code, Gemini CLI, Grok) or the last argument (Codex notify)
 // and forwards it to the local Bayloob server. Same behavior as scripts/bayloob-hook.
-// Usage: node hook.js <agent> [json]   (agent: claude | codex | gemini)
+// Usage: node hook.js <agent> [json]   (agent: claude | codex | gemini | grok)
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
-const agent = process.argv[2] || "claude";
+// Grok runs Claude Code's hooks (~/.claude/settings.json) too: its own env tells its sessions apart
+const named = process.argv[2] || "claude";
+const agent = named === "claude" && process.env.GROK_SESSION_ID ? "grok" : named;
 const argJson = process.argv[3]; // Codex passes the JSON as an argument
 const PORT = Number(process.env.BAYLOOB_PORT || 7777);
 const EVENT_TIMEOUT_MS = 800;

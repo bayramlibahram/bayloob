@@ -36,7 +36,7 @@ test("response format: four built-in, the owner's own after them; picked in the 
   assert.deepEqual(F.normalize(v).agents, { codex: "plan", gemini: "none", claude: "c-review" });
   assert.equal(F.resolve(v, { agent: "codex" }).id, "plan");
   assert.equal(F.resolve(v, { agent: "gemini" }), null);
-  assert.equal(F.resolve(v, { agent: "grok" }).id, "concise");
+  assert.equal(F.resolve(v, { agent: "ghost" }).id, "concise");
   assert.equal(F.resolve(v, { agent: "codex", choice: "teacher" }).id, "teacher");
   assert.equal(F.resolve(v, { agent: "codex", choice: "none" }), null);
   assert.equal(F.apply("Fix it", v, { agent: "claude" }), "Review: Fix it");

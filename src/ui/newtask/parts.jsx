@@ -54,7 +54,7 @@ export function ModeBadge({ mode }) {
 
 /** An agent's Novi (the "other" pack for one without its own). */
 export function AgentFace({ agent, className }) {
-  return <Novi agent={agent === "grok" ? "other" : agent} className={className} />;
+  return <Novi agent={agent} className={className} />;
 }
 
 /** "2 free of 4", or "1 will queue" when more are asked for than can start now. */

@@ -65,10 +65,7 @@ function AgentRow({ k, a, i }) {
   return (
     <Item size="sm" className="flex-wrap">
       <ItemMedia>
-        <Novi
-          agent={k === "grok" ? "other" : k}
-          className={a.enabled && i.installed ? "" : "opacity-55"}
-        />
+        <Novi agent={k} className={a.enabled && i.installed ? "" : "opacity-55"} />
       </ItemMedia>
       <ItemContent>
         <ItemTitle>{name}</ItemTitle>
