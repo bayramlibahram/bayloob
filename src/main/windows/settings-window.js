@@ -1,8 +1,9 @@
+const { screen } = require("electron");
 const { PopupWindow } = require("./popup-window");
 const { uiScale } = require("./ui-scale");
 
-const WIDTH = 760;
-const HEIGHT = 560;
+const WIDTH = 960;
+const HEIGHT = 700;
 
 /** Settings: mascot style, launcher shortcut, terminal, editor and music detection. */
 class SettingsWindow extends PopupWindow {
@@ -20,8 +21,12 @@ class SettingsWindow extends PopupWindow {
       return;
     }
     const z = uiScale.factor;
+    const { workArea } = screen.getDisplayMatching(this.win.getBounds());
     this.win.setResizable(true);
-    this.win.setSize(Math.round(WIDTH * z), Math.round(HEIGHT * z));
+    this.win.setSize(
+      Math.min(Math.round(WIDTH * z), workArea.width - 32),
+      Math.min(Math.round(HEIGHT * z), workArea.height - 32)
+    );
     this.win.setResizable(false);
   }
 }

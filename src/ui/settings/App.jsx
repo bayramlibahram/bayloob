@@ -78,7 +78,8 @@ export function App() {
         save();
       }}
     >
-      <header className="flex items-center gap-2.5 border-b px-4 py-3">
+      {/* the header moves the window (it has no title bar) */}
+      <header className="flex cursor-grab items-center gap-2.5 border-b px-4 py-3 select-none [-webkit-app-region:drag]">
         <Novi agent="manager" className="size-6" />
         <h1 id="settingsTitle" className="text-[15px] font-semibold">
           Settings

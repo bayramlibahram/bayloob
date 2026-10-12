@@ -31,6 +31,18 @@ test("Settings is the React one: six sections, themed, its page runs no inline s
     await expect(win.getByText("Claude Code", { exact: true })).toBeVisible();
     await win.getByRole("tab", { name: /Hosts/ }).click();
     await expect(win.getByText("No hosts yet")).toBeVisible();
+    // Big (960×700, or the screen less a margin), and its header moves it — the window has no title bar
+    const [size, area] = await app.evaluate(({ BrowserWindow, screen }) => {
+      const w = BrowserWindow.getAllWindows().find(x => x.webContents.getURL().includes("settings"));
+      return [w.getBounds(), screen.getDisplayMatching(w.getBounds()).workArea];
+    });
+    expect(size.width).toBe(Math.min(960, area.width - 32));
+    expect(size.height).toBe(Math.min(700, area.height - 32));
+    expect(
+      await win.evaluate(
+        () => getComputedStyle(document.querySelector("header")).getPropertyValue("app-region")
+      )
+    ).toBe("drag");
   } finally {
     await app.close();
   }

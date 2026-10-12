@@ -31,8 +31,9 @@ class PopupWindow {
     const display = screen.getPrimaryDisplay();
     const { workArea } = display;
     const z = uiScale.factor;
-    const width = Math.round(this.opts.width * z);
-    const height = Math.round(this.opts.height * z);
+    // never bigger than the screen (a small laptop, a large UI scale)
+    const width = Math.min(Math.round(this.opts.width * z), workArea.width - 32);
+    const height = Math.min(Math.round(this.opts.height * z), workArea.height - 32);
     const { placement } = this.opts;
     if (placement === "top") {
       // Dropping from the top: below the desktop's top bar, like the pill (workArea alone doesn't know it
