@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.11.0 — 2026-10-12
+
+### Added
+- **Role agents** — Research, Data, Content and Design ship built in (Settings → Agents → Roles); add your own or
+  copy one. A role is its instructions, read-only or writes (enforced by the agent's own flags), the file it answers
+  in, and the agent it runs on — each built-in role has a default (Data: Codex) you can change and reset.
+  New task → Single agent → **Run as** a role; its name is on the session.
+- **Role chain**, a new workflow pattern: Research → Data → Content (you approve the text) → Design builds it →
+  you merge, each stage as its role agent and handing its answer on. Any workflow stage can **Run as** a role in
+  the template builder.
+- **Home**, the Workspace window's dashboard: the headline numbers, agents and role agents at work, tasks by status,
+  what waits for you (Review opens the card; Deny from here — never a one-click Allow), recent activity and the
+  tasks finished over the last 7 days.
+
+### Changed
+- **One prompt box everywhere** (agent, Ask Bayloob, launcher, New task): one Enter sends — a chip says when it's
+  queued or copied to paste; text you type while it goes out stays; it shows sending / sent / error; the tools
+  row gives way on a narrow box and Send always fits.
+- **Menus**: every dropdown is a styled menu (keyboard, type-ahead), and it stays open while an agent's output
+  scrolls by.
+
+### Fixed
+- Text you typed after the first Enter, or while a prompt went out, could be lost.
+- A background task's notification or another agent's report showed as your prompt; Codex prompts showed their
+  response format. The console shows what you typed.
+- A mouse click followed by a live redraw left a keyboard focus ring on the button.
+
 ## 0.10.1 — 2026-10-12
 
 ### Added

@@ -1,7 +1,7 @@
 {
   "name": "bayloob",
   "productName": "Bayloob",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "A local status overlay for AI coding agents (Claude Code, Codex, Gemini CLI)",
   "homepage": "https://baynovix.com",
   "author": {
