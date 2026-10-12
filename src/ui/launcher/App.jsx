@@ -1,34 +1,17 @@
-import {
-  ArrowRightIcon,
-  CheckIcon,
-  ClipboardPasteIcon,
-  FolderIcon,
-  GitForkIcon,
-  XIcon,
-} from "lucide-react";
-import { RadioGroup as RadioPrimitive } from "radix-ui";
+import { ArrowRightIcon, CheckIcon, ClipboardPasteIcon, XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
 import { Composer } from "@/components/composer";
 import { Novi } from "@/components/novi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { InputGroupButton } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { agentColor } from "@/lib/agents";
 import { cn } from "@/lib/utils";
-import { flowOf, isNew, promptOf, tilde, useLauncher, willPaste, willQueue } from "./store";
+import { promptOf, useLauncher, willPaste, willQueue } from "./store";
 
-const STEP_NAMES = { new: ["Task", "Agent", "Confirm"], prompt: ["Write", "Confirm"] };
+const STEPS = ["Write", "Confirm"];
 // A popup of ours is open (the file preview): Esc and Enter are its own
 const POPUP_OPEN = "[data-slot=dialog-content]";
 
@@ -45,7 +28,7 @@ function Label({ children, className }) {
   );
 }
 
-/** The launcher: header (who, steps), the step on view, then the hint and Back / Next. */
+/** The prompt box for a running session: header (who, steps), the step on view, then the hint and Back / Next. */
 export function App() {
   const s = useLauncher();
   const frame = useRef(null);
@@ -73,10 +56,8 @@ export function App() {
   if (!ready) {
     return null;
   }
-  const fresh = isNew(s);
   const session = s.state.session;
-  const flow = flowOf(s);
-  const at = flow.indexOf(s.step);
+  const at = STEPS.indexOf(s.step);
   return (
     <section
       ref={frame}
@@ -87,17 +68,15 @@ export function App() {
     >
       {/* the header moves the window (it has no title bar) */}
       <header className="flex items-center gap-3 border-b py-3 pr-3 pl-4 select-none [-webkit-app-region:drag]">
-        <Novi agent={fresh ? "manager" : session.agent || "manager"} className="size-8" />
+        <Novi agent={session.agent || "manager"} className="size-8" />
         <div className="flex min-w-0 flex-1 flex-col">
           <h1 id="lTitle" className="text-[15px] font-bold">
-            {fresh ? "Ask Bayloob" : `Prompt to ${session.agentName}`}
+            Prompt to {session.agentName}
           </h1>
-          <span className="truncate text-xs text-muted-foreground">
-            {fresh ? "Start a new agent session" : session.project}
-          </span>
+          <span className="truncate text-xs text-muted-foreground">{session.project}</span>
         </div>
         <ol aria-label="Steps" className="flex items-center gap-1">
-          {STEP_NAMES[fresh ? "new" : "prompt"].map((name, i) => (
+          {STEPS.map((name, i) => (
             <li
               key={name}
               aria-current={i === at ? "step" : undefined}
@@ -133,7 +112,7 @@ export function App() {
       </header>
 
       <div className="flex flex-col gap-3 px-4 pt-3.5 pb-1">
-        {s.step === "prompt" ? <Write /> : s.step === "agent" ? <PickAgent /> : <Confirm />}
+        {s.step === "prompt" ? <Write /> : <Confirm />}
       </div>
 
       <Footer />
@@ -141,11 +120,10 @@ export function App() {
   );
 }
 
-// ---------- write: what to do (and, for a new session, where) ----------
+// ---------- write: the prompt ----------
 
 function Write() {
   const s = useLauncher();
-  const fresh = isNew(s);
   const prefilled = !!s.state.prefill && !s.state.draft && s.text === s.state.prefill;
   return (
     <>
@@ -154,7 +132,7 @@ function Write() {
         autoFocus
         caretStart={!!s.state.prefill}
         label="Prompt"
-        placeholder={fresh ? "What should be done?" : "Type a follow-up for the agent…"}
+        placeholder="Type a follow-up for the agent…"
         mono={prefilled}
         className="[&_textarea]:max-h-60 [&_textarea]:text-sm"
         value={s.text}
@@ -174,8 +152,7 @@ function Write() {
           </InputGroupButton>
         }
       />
-      {!fresh && <Queue />}
-      {fresh && <ProjectFolder />}
+      <Queue />
     </>
   );
 }
@@ -218,202 +195,24 @@ function Queue() {
   );
 }
 
-function ProjectFolder() {
-  const s = useLauncher();
-  const { recent, home, agents } = s.state;
-  return (
-    <div className="flex flex-col gap-2">
-      <Label>Project folder</Label>
-      <InputGroup className="h-9">
-        <InputGroupAddon>
-          <FolderIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label="Project folder"
-          placeholder="~/projects/my-app"
-          spellCheck={false}
-          className="font-mono text-[12.5px]"
-          value={s.cwd}
-          onChange={e => s.setCwd(e.target.value)}
-        />
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton variant="secondary" onClick={s.browse}>
-            Browse…
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
-      {recent.length > 0 && (
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          spacing={1}
-          aria-label="Recent projects"
-          className="flex-wrap"
-          value={recent.find(r => tilde(r.cwd, home) === s.cwd)?.cwd || ""}
-          onValueChange={v => v && s.setCwd(tilde(v, home))}
-        >
-          {recent.slice(0, 6).map(r => (
-            <ToggleGroupItem
-              key={r.cwd}
-              value={r.cwd}
-              title={tilde(r.cwd, home)}
-              className="rounded-full"
-            >
-              <span
-                className="size-1.5 rounded-full"
-                style={{ background: agents[r.agent] ? agentColor(r.agent) : "var(--warn)" }}
-              />
-              {r.name}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      )}
-    </div>
-  );
-}
-
-// ---------- agent: which agent runs it (new sessions only) ----------
-
-function PickAgent() {
-  const s = useLauncher();
-  const picked = useRef(null);
-  const prompt = promptOf(s);
-  const terms = s.state.terminals || [];
-  const entries = Object.entries(s.state.agents);
-
-  useEffect(() => {
-    picked.current?.focus();
-  }, []);
-
-  return (
-    <>
-      <blockquote
-        className={cn(
-          "line-clamp-3 rounded-r-lg border-l-2 border-brand bg-brand/6 px-3 py-2 text-[12.5px] break-words whitespace-pre-wrap text-muted-foreground",
-          !prompt && "italic"
-        )}
-      >
-        {prompt || "No prompt — the agent starts and waits for you"}
-      </blockquote>
-      <RadioPrimitive.Root
-        aria-label="Agent"
-        value={s.agent}
-        onValueChange={a => s.pick(a)}
-        className="grid grid-cols-3 gap-2"
-      >
-        {entries.map(([key, a], i) => (
-          <RadioPrimitive.Item
-            key={key}
-            ref={key === s.agent ? picked : null}
-            value={key}
-            disabled={!a.installed}
-            onClick={() => s.pick(key, true)}
-            style={{ "--c": agentColor(key) }}
-            className="relative flex flex-col items-center gap-1.5 rounded-2xl border-[1.5px] border-transparent bg-card px-2 pt-3.5 pb-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:bg-muted disabled:opacity-35 data-[state=checked]:border-(--c) data-[state=checked]:bg-(--c)/12"
-          >
-            <Kbd className="absolute top-2 left-2">{i + 1}</Kbd>
-            {key === s.agent && (
-              <CheckIcon className="absolute top-2 right-2.5 size-3.5 text-(--c)" strokeWidth={3} />
-            )}
-            <Novi agent={key} className="size-11" />
-            <b className="font-semibold">{a.name}</b>
-            {!a.installed && (
-              <small className="text-[11px] text-muted-foreground">not installed</small>
-            )}
-          </RadioPrimitive.Item>
-        ))}
-      </RadioPrimitive.Root>
-      <Field orientation="horizontal" className="rounded-xl border bg-card px-3 py-2.5">
-        <Switch
-          id="worktree"
-          checked={!!s.worktree}
-          onCheckedChange={worktree => useLauncher.setState({ worktree })}
-        />
-        <FieldContent>
-          <FieldLabel htmlFor="worktree">
-            <GitForkIcon className="size-3.5" />
-            In a new git worktree
-          </FieldLabel>
-          <FieldDescription>
-            Its own copy of the repo on a <code>bayloob/…</code> branch, so it never edits the same
-            files as another agent
-          </FieldDescription>
-        </FieldContent>
-      </Field>
-      {terms.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Label className="mr-1">Open in</Label>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            size="sm"
-            spacing={1}
-            aria-label="Open in"
-            value={s.terminal || ""}
-            onValueChange={terminal => terminal && useLauncher.setState({ terminal })}
-          >
-            {terms.map(t => (
-              <ToggleGroupItem key={t.id} value={t.id} className="rounded-full">
-                {t.name}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-      )}
-    </>
-  );
-}
-
 // ---------- confirm: everything that's about to happen, before it happens ----------
 
 function Confirm() {
   const s = useLauncher();
   const items = useStore(s.files, x => x.items);
   const text = promptOf(s, items);
-  const rows = [];
-  if (isNew(s)) {
-    const term = (s.state.terminals || []).find(t => t.id === s.terminal);
-    rows.push(
-      [
-        "Agent",
-        <>
-          <Novi agent={s.agent} className="size-5.5" />
-          <b>{s.state.agents[s.agent]?.name || s.agent}</b>
-        </>,
-      ],
-      ["Folder", <code key="cwd">{s.cwd.trim()}</code>],
-      [
-        "Runs in",
-        s.worktree ? (
-          <>
-            a new git worktree{" "}
-            <small className="text-muted-foreground">
-              next to the project, on a new bayloob/… branch
-            </small>
-          </>
-        ) : (
-          "the folder itself"
-        ),
-      ]
-    );
-    if (term) {
-      rows.push(["Terminal", term.name]);
-    }
-  } else {
-    const ses = s.state.session;
-    rows.push(
-      [
-        "Agent",
-        <>
-          <Novi agent={ses.agent || "manager"} className="size-5.5" />
-          <b>{ses.agentName}</b>
-          <small className="text-muted-foreground">{ses.project}</small>
-        </>,
-      ],
-      ["Delivery", <Delivery key="d" s={s} />]
-    );
-  }
+  const ses = s.state.session;
+  const rows = [
+    [
+      "Agent",
+      <>
+        <Novi agent={ses.agent || "manager"} className="size-5.5" />
+        <b>{ses.agentName}</b>
+        <small className="text-muted-foreground">{ses.project}</small>
+      </>,
+    ],
+    ["Delivery", <Delivery key="d" s={s} />],
+  ];
   if (items.length) {
     rows.push([
       "Files",
@@ -443,11 +242,10 @@ function Confirm() {
         </div>
         <pre
           className={cn(
-            "mt-1.5 max-h-36 overflow-y-auto font-mono text-[12.5px] break-words whitespace-pre-wrap text-muted-foreground",
-            !text && "font-sans italic"
+            "mt-1.5 max-h-36 overflow-y-auto font-mono text-[12.5px] break-words whitespace-pre-wrap text-muted-foreground"
           )}
         >
-          {text || "No prompt — the agent starts and waits for you"}
+          {text}
         </pre>
       </div>
     </div>
@@ -479,13 +277,7 @@ function Delivery({ s }) {
 function Footer() {
   const s = useLauncher();
   const confirm = s.step === "confirm";
-  const label = isNew(s)
-    ? "Launch"
-    : willPaste(s)
-      ? "Copy & open terminal"
-      : willQueue(s)
-        ? "Add to queue"
-        : "Send";
+  const label = willPaste(s) ? "Copy & open terminal" : willQueue(s) ? "Add to queue" : "Send";
   return (
     <footer className="flex items-center gap-2 px-4 pt-3 pb-3.5">
       <div
@@ -522,14 +314,6 @@ function Footer() {
 
 function Hint() {
   const s = useLauncher();
-  if (s.step === "agent") {
-    return (
-      <>
-        <Kbd>1</Kbd>–<Kbd>{Object.keys(s.state.agents).length}</Kbd> or <Kbd>←</Kbd>
-        <Kbd>→</Kbd> pick · <Kbd>⏎</Kbd> next
-      </>
-    );
-  }
   if (s.step === "confirm") {
     return (
       <>
@@ -547,8 +331,8 @@ function Hint() {
 }
 
 /**
- * The launcher's keys: Esc goes back (closes on the first step), 1…n and ← → pick the agent, Enter goes on
- * — except in the box (the Composer's: Shift+Enter is a new line) and on a button of its own.
+ * The prompt box's keys: Esc goes back (closes on the first step), Enter goes on — except in the box (the
+ * Composer's: Shift+Enter is a new line) and on a button of its own.
  */
 export function onLauncherKey(e, s) {
   if (!s.state || document.querySelector(POPUP_OPEN)) {
@@ -559,26 +343,8 @@ export function onLauncherKey(e, s) {
     return s.busy ? undefined : s.back();
   }
   const t = e.target;
-  if (s.step === "agent" && !e.ctrlKey && !e.altKey) {
-    const keys = Object.keys(s.state.agents);
-    const n = Number(e.key);
-    if (n >= 1 && n <= keys.length) {
-      e.preventDefault();
-      return s.pick(keys[n - 1]);
-    }
-    // ← → anywhere on the step (on the agents themselves Radix moves the pick)
-    if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && !t.closest?.("[role=radiogroup]")) {
-      e.preventDefault();
-      return s.cycle(e.key === "ArrowRight" ? 1 : -1);
-    }
-  }
   if (e.key !== "Enter" || e.shiftKey || e.isComposing) {
     return;
-  }
-  // an agent: Enter takes it and goes on (Radix keeps Enter off its radios)
-  if (t.closest?.("[role=radio]")) {
-    e.preventDefault();
-    return s.next();
   }
   if (e.defaultPrevented || t.closest?.("textarea")) {
     return; // the Composer took it

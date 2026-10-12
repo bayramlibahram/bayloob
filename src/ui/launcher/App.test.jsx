@@ -22,27 +22,11 @@ const prompt = (more = {}) => ({
   session: session(),
   ...more,
 });
-const fresh = (more = {}) => ({
-  mode: "new",
-  home: "/home/u",
-  prefill: "",
-  agents: {
-    claude: { name: "Claude Code", installed: true },
-    codex: { name: "Codex", installed: true },
-    gemini: { name: "Gemini CLI", installed: false },
-  },
-  recent: [{ cwd: "/home/u/shop", name: "shop", agent: "claude" }],
-  terminals: [{ id: "ptyxis", name: "Ptyxis" }],
-  preset: null,
-  ...more,
-});
-
 let api;
 beforeEach(() => {
   localStorage.clear();
   api = {
     onShow: cb => (api.show = cb),
-    launch: vi.fn(async () => ({ ok: true })),
     sendPrompt: vi.fn(async () => ({ ok: true })),
     unqueue: vi.fn(async () => ["second"]),
     clipboard: vi.fn(async () => ""),
@@ -89,41 +73,6 @@ test("not in tmux: the prompt is copied for the owner to paste", async () => {
   fireEvent.change(box(), { target: { value: "hi" } });
   await enter(box());
   expect(screen.getByRole("button", { name: /Copy & open terminal/ })).toBeTruthy();
-});
-
-test("a new session: folder, agent (an uninstalled one can't be picked), then Launch", async () => {
-  await open(fresh());
-  expect(screen.getByLabelText("Project folder").value).toBe("~/shop");
-  fireEvent.change(box(), { target: { value: "fix the flaky test" } });
-  await enter(box());
-  expect(screen.getByText("fix the flaky test")).toBeTruthy();
-  await act(async () => fireEvent.keyDown(document.body, { key: "3" }));
-  expect(useLauncher.getState().agent).toBe("claude"); // Gemini isn't installed
-  await act(async () => fireEvent.keyDown(document.body, { key: "2" }));
-  expect(useLauncher.getState().agent).toBe("codex");
-  await enter(document.body);
-  expect(screen.getByRole("button", { name: /Launch/ })).toBeTruthy();
-  await enter(document.body);
-  expect(api.launch).toHaveBeenCalledWith({
-    agent: "codex",
-    cwd: "~/shop",
-    prompt: "fix the flaky test",
-    worktree: false,
-    terminal: "ptyxis",
-  });
-});
-
-test("a new session needs a folder; Esc goes back a step, then closes", async () => {
-  await open(fresh({ recent: [] }));
-  await enter(box());
-  expect(screen.getByRole("status").textContent).toBe("Pick a project folder first");
-  fireEvent.change(screen.getByLabelText("Project folder"), { target: { value: "~/blog" } });
-  await enter(box());
-  expect(useLauncher.getState().step).toBe("agent");
-  await act(async () => fireEvent.keyDown(document.body, { key: "Escape" }));
-  expect(useLauncher.getState().step).toBe("prompt");
-  await act(async () => fireEvent.keyDown(document.body, { key: "Escape" }));
-  expect(api.close).toHaveBeenCalled();
 });
 
 test("what you were writing comes back for that session, and is dropped once sent", async () => {

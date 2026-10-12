@@ -1176,19 +1176,6 @@ class BayloobApp {
     });
   }
 
-  // The earlier 3-step launcher for a new session (kept; the New task dialog replaced it as the entry point)
-  async openClassicLauncher(preset = null, prefill = "") {
-    this.launcherWindow.show({
-      mode: "new",
-      agents: await this.#agentChoices(),
-      recent: this.recent.list(),
-      terminals: this.launcher.terminal.list(),
-      preset,
-      prefill,
-      home: os.homedir(),
-    });
-  }
-
   /**
    * The owner's prompt in its response format: `choice` picked in the prompt box, else the agent's, else the
    * default (Settings). Never for a workflow's or a challenger's prompt.
@@ -1783,9 +1770,6 @@ class BayloobApp {
       this.overlay.send("queues", this.queue.counts());
       return this.queue.list(String(sessionId));
     });
-    ipcMain.handle("launcher:pick-folder", (_e, current) =>
-      this.launcherWindow.pickFolder(current ? expandHome(current) : os.homedir())
-    );
     ipcMain.on("launcher:close", () => this.launcherWindow.hide());
 
     // Files attached to a prompt (launcher and panel): copied into the cache, the agent gets their paths

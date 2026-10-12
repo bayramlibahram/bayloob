@@ -1,13 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { launch } from "./app.mjs";
 
-// The launcher opens on a running session (its prompt box) or for a new one; a test can't wait for the demo's
-// sessions, so the built page gets its own window with its real preload, and main's own channels (send, launch:
-// swapped for ones that keep what they get — nothing reaches an agent)
+// The prompt box opens on a running session; a test can't wait for the demo's sessions, so the built page gets
+// its own window with its real preload, and main's own channels (send: swapped for one that keeps what it gets
+// — nothing reaches an agent)
 async function openLauncher(app) {
   await app.evaluate(async ({ app: a, BrowserWindow, ipcMain }) => {
     globalThis.sent = [];
-    for (const ch of ["launcher:launch", "launcher:send-prompt"]) {
+    for (const ch of ["launcher:send-prompt"]) {
       ipcMain.removeHandler(ch);
       ipcMain.handle(ch, (_e, ...args) => {
         globalThis.sent.push([ch, ...args]);
@@ -62,45 +62,6 @@ test("a follow-up for a busy session is confirmed, then queued through main", as
     await expect
       .poll(() => sent(app))
       .toEqual([["launcher:send-prompt", "s1", "also cover the empty cart"]]);
-  } finally {
-    await app.close();
-  }
-});
-
-test("a new session: the prompt, the agent by its number, then Launch", async () => {
-  const app = await launch();
-  try {
-    const win = await openLauncher(app);
-    await show(app, {
-      mode: "new",
-      home: "/home/u",
-      prefill: "",
-      agents: {
-        claude: { name: "Claude Code", installed: true },
-        codex: { name: "Codex", installed: true },
-      },
-      recent: [{ cwd: "/home/u/shop", name: "shop", agent: "claude" }],
-      terminals: [],
-      preset: null,
-    });
-    const box = win.getByRole("textbox", { name: "Prompt" });
-    await box.fill("fix the flaky checkout test");
-    await box.press("Enter");
-    await win.keyboard.press("2");
-    await win.keyboard.press("Enter");
-    await expect(win.getByRole("button", { name: /Launch/ })).toBeVisible();
-    await win.keyboard.press("Enter");
-    await expect.poll(() => sent(app)).toHaveLength(1);
-    expect((await sent(app))[0]).toEqual([
-      "launcher:launch",
-      {
-        agent: "codex",
-        cwd: "~/shop",
-        prompt: "fix the flaky checkout test",
-        worktree: false,
-        terminal: null,
-      },
-    ]);
   } finally {
     await app.close();
   }
