@@ -9,6 +9,10 @@ export const LIMIT_RANGE = { total: [1, 32], perProject: [1, 32], minFreeGB: [0,
 export const ATTACH_RANGE = { fileMB: [10, 500, 10], taskMB: [50, 2000, 50] }; // [min, max, step] in MB
 export const HINT = "Ctrl+Enter to save";
 
+// Keys for the hosts on view: never reused, so each opening of Settings draws its hosts afresh (the allowed
+// commands box keeps what is typed, blank lines too, until then)
+let hostKey = 0;
+
 const copy = v => JSON.parse(JSON.stringify(v ?? null));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -107,7 +111,7 @@ export const useSettings = create((set, get) => ({
       roleShown,
       fmtShown: draft.promptFormat.default || "adhd",
       hostStatus: {},
-      hostKeys: draft.hosts.map((_, i) => i),
+      hostKeys: draft.hosts.map(() => hostKey++),
       saving: false,
       message: {
         text: state.locked?.length
@@ -318,7 +322,7 @@ export const useSettings = create((set, get) => ({
     get().edit(
       d => void d.hosts.push({ name: "", alias: "", env: "staging", allow: [], notes: "" })
     );
-    set(s => ({ hostKeys: [...s.hostKeys, Math.max(-1, ...s.hostKeys) + 1] }));
+    set(s => ({ hostKeys: [...s.hostKeys, hostKey++] }));
   },
   removeHost(i) {
     get().edit(d => void d.hosts.splice(i, 1));

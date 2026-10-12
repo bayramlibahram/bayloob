@@ -6,13 +6,14 @@ import {
   SlidersHorizontalIcon,
   Volume2Icon,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Novi } from "@/components/novi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { watchPopups } from "@/lib/window";
 import { Agents } from "./Agents";
 import { General } from "./General";
 import { Hosts } from "./Hosts";
@@ -20,6 +21,10 @@ import { Integrations } from "./Integrations";
 import { Permissions } from "./Permissions";
 import { Sounds } from "./Sounds";
 import { useSettings } from "./store";
+
+// a menu or a confirmation open: Esc closes it, not Settings
+const NAV_KEYS = new Set(["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"]);
+const popupOpen = watchPopups("[role=alertdialog],[role=listbox]");
 
 const SECTIONS = [
   ["general", "General", SlidersHorizontalIcon, General],
@@ -35,6 +40,7 @@ const SECTIONS = [
 export function App() {
   const { state, draft, tab, setTab, message, saving, save, api } = useSettings();
   const scroller = useRef(null);
+  const [byPointer, setByPointer] = useState(false); // the last tab was picked with the mouse
   // another section starts at its top (the effect reads no state: tab is only its trigger)
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs on each tab change
   useEffect(() => {
@@ -43,12 +49,20 @@ export function App() {
     }
   }, [tab]);
 
+  // each time Settings opens on General: the cursor in the launcher shortcut, as the old page had it
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when main shows the window (a new state)
+  useEffect(() => {
+    if (useSettings.getState().tab === "general") {
+      document.getElementById("shortcut")?.focus();
+    }
+  }, [state]);
+
   useEffect(() => {
     const onKey = e => {
-      if (
-        e.key === "Escape" &&
-        !document.querySelector("[role=alertdialog],[data-state=open][role=listbox]")
-      ) {
+      if (NAV_KEYS.has(e.key)) {
+        setByPointer(false);
+      }
+      if (e.key === "Escape" && !popupOpen()) {
         api?.close();
       }
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -95,12 +109,19 @@ export function App() {
         onValueChange={setTab}
         className="grid min-h-0 grid-cols-[188px_minmax(0,1fr)] gap-0"
       >
-        <TabsList className="w-full items-stretch justify-start gap-0.5 rounded-none border-r bg-transparent p-2.5 group-data-vertical/tabs:h-full">
+        {/* After a click the tab keeps no focus ring: Chromium may draw one anyway (Radix moves the focus from
+            script, and the input method sends a stray HiraganaKatakana key on focus changes). A navigation key
+            brings it back */}
+        <TabsList
+          className="w-full items-stretch justify-start gap-0.5 rounded-none border-r bg-transparent p-2.5 group-data-vertical/tabs:h-full"
+          data-pointer={byPointer || undefined}
+          onMouseDownCapture={() => setByPointer(true)}
+        >
           {SECTIONS.map(([key, label, Icon]) => (
             <TabsTrigger
               key={key}
               value={key}
-              className="h-9 flex-none justify-start gap-2.5 px-2.5"
+              className="h-9 flex-none justify-start gap-2.5 px-2.5 [[data-pointer]_&]:focus-visible:border-transparent [[data-pointer]_&]:focus-visible:ring-0 [[data-pointer]_&]:focus-visible:outline-none"
             >
               <Icon data-icon="inline-start" />
               {label}

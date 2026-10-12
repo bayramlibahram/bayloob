@@ -27,3 +27,28 @@ export function errorText(err) {
   const m = String(err?.message ?? err ?? "Unknown error");
   return m.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, "");
 }
+
+// Escape and an open menu or dialog: Radix closes it from its own capture-phase listener, and it is gone from
+// the page before a window's bubble-phase key handler looks — which would then close the window as well. So the
+// popups are looked for when the key goes down (window, capture: before anyone else) and remembered.
+const watched = new Map(); // selector → open when the last key went down
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "keydown",
+    () => {
+      for (const sel of watched.keys()) {
+        watched.set(sel, !!document.querySelector(sel));
+      }
+    },
+    true
+  );
+}
+
+/**
+ * → `isOpen()`: is one of `selector` (a menu, a list, a dialog) open now, or was it when this key went down?
+ * A window's key handler leaves Escape to the popup when it is.
+ */
+export function watchPopups(selector) {
+  watched.set(selector, false);
+  return () => watched.get(selector) || !!document.querySelector(selector);
+}

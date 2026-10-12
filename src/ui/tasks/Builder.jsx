@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { displayName } from "@/lib/agents";
 import { cn } from "@/lib/utils";
+import { watchPopups } from "@/lib/window";
 import { Banner, Face, Label } from "./parts";
 import { useTasks } from "./store";
 import {
@@ -54,6 +55,8 @@ import {
   withStage,
 } from "./workflow";
 
+// a menu open (a Select, the {{ values): Esc closes it, not the builder
+const popupOpen = watchPopups("[role=listbox],[data-radix-popper-content-wrapper]");
 const NONE = "none"; // a Select item can't be "": the plain agent, You decide
 const SPLIT = { planner: "Splits the plan into subtasks", builder: "One builder per subtask" };
 const SPLIT_TIP = {
@@ -202,8 +205,8 @@ function onBuilderKey(e, setFocusStage) {
     s.saveTemplate();
     return;
   }
-  // a menu open (a Select) closes on its own Escape
-  if (e.key === "Escape" && !document.querySelector("[data-radix-popper-content-wrapper]")) {
+  // a menu open (a Select, the {{ values) closes on its own Escape
+  if (e.key === "Escape" && !popupOpen()) {
     e.preventDefault();
     s.leaveBuilder();
     return;

@@ -120,3 +120,43 @@ test("hosts keep their own row when one before them goes", () => {
   useSettings.getState().removeHost(0);
   expect(useSettings.getState().hostKeys).toEqual([keyOfSecond]);
 });
+
+test("a button in a section does its own thing — it never saves or closes Settings", async () => {
+  render(<App />);
+  await act(async () => api.show(shown()));
+  // General: a new response format; Agents: one more Claude; Hosts: a new host
+  fireEvent.click(screen.getByRole("button", { name: "New format" }));
+  act(() => useSettings.getState().setTab("agents"));
+  fireEvent.click(screen.getAllByRole("button", { name: "More" })[0]);
+  fireEvent.click(screen.getByRole("button", { name: "New role" }));
+  act(() => useSettings.getState().setTab("hosts"));
+  fireEvent.click(screen.getByRole("button", { name: "Add a host" }));
+  expect(api.save).not.toHaveBeenCalled();
+  expect(api.close).not.toHaveBeenCalled();
+  const d = useSettings.getState().draft;
+  expect(d.agents.claude.max).toBe(5);
+  expect(d.hosts).toHaveLength(1);
+  expect(d.promptFormat.custom).toHaveLength(1);
+});
+
+test("Hosts: what was typed and cancelled is gone when Settings opens again", async () => {
+  const host = {
+    name: "web",
+    alias: "web1",
+    env: "prod",
+    allow: ["systemctl status *"],
+    notes: "",
+  };
+  render(<App />);
+  await act(async () => api.show({ ...shown({ hosts: [host] }), tab: "hosts" }));
+  const box = () => screen.getByLabelText(/Allowed commands/);
+  fireEvent.change(box(), { target: { value: "rm -rf *" } });
+  await act(async () => api.show({ ...shown({ hosts: [host] }), tab: "hosts" }));
+  expect(box().value).toBe("systemctl status *");
+});
+
+test("opening on General puts the cursor in the launcher shortcut", async () => {
+  render(<App />);
+  await act(async () => api.show({ ...shown(), tab: "general" }));
+  expect(document.activeElement.id).toBe("shortcut");
+});

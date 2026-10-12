@@ -72,3 +72,33 @@ test("Save writes the draft (through main's checks); Esc leaves the settings as 
     await app.close();
   }
 });
+
+test("Esc on an open menu closes the menu, not Settings; a section's button doesn't save", async () => {
+  const app = await launch();
+  try {
+    const win = await openSettings(app);
+    const shown = () =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()
+          .find(w => w.webContents.getURL().includes("settings"))
+          ?.isVisible()
+      );
+    await win.getByRole("combobox", { name: "Response format" }).click();
+    await expect(win.getByRole("listbox")).toBeVisible();
+    await win.keyboard.press("Escape");
+    await expect(win.getByRole("listbox")).toBeHidden();
+    await new Promise(r => setTimeout(r, 300));
+    expect(await shown()).toBe(true);
+    await win.getByRole("button", { name: "New format" }).click();
+    await win.getByRole("tab", { name: /Hosts/ }).click();
+    await win.getByRole("button", { name: "Add a host" }).click();
+    await expect(win.getByRole("button", { name: "Test connection" })).toBeVisible();
+    expect(await shown()).toBe(true);
+    // with nothing open, Esc leaves Settings
+    await win.locator("body").click({ position: { x: 5, y: 5 } });
+    await win.keyboard.press("Escape");
+    await expect.poll(shown).toBe(false);
+  } finally {
+    await app.close();
+  }
+});

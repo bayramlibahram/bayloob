@@ -90,7 +90,7 @@ function RoleForm({ r }) {
   return (
     <FieldGroup className="gap-3">
       <Field orientation="horizontal">
-        <FieldLabel htmlFor="roleName" className="w-28">
+        <FieldLabel htmlFor="roleName" className="w-28 flex-none!">
           Name
         </FieldLabel>
         <Input
@@ -102,7 +102,7 @@ function RoleForm({ r }) {
         />
       </Field>
       <Field orientation="horizontal">
-        <FieldLabel htmlFor="roleEngine" className="w-28">
+        <FieldLabel htmlFor="roleEngine" className="w-28 flex-none!">
           Runs on
         </FieldLabel>
         <div className="flex flex-1 items-center gap-2">
@@ -138,7 +138,7 @@ function RoleForm({ r }) {
         </div>
       </Field>
       <Field orientation="horizontal">
-        <FieldLabel className="w-28">Permission</FieldLabel>
+        <FieldLabel className="w-28 flex-none!">Permission</FieldLabel>
         <div className="flex-1">
           <Choice
             label="Permission"
@@ -150,7 +150,7 @@ function RoleForm({ r }) {
         </div>
       </Field>
       <Field orientation="horizontal">
-        <FieldLabel htmlFor="roleArtifact" className="w-28">
+        <FieldLabel htmlFor="roleArtifact" className="w-28 flex-none!">
           Answer file
         </FieldLabel>
         <Input

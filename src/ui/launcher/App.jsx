@@ -9,11 +9,12 @@ import { InputGroupButton } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { watchPopups } from "@/lib/window";
 import { promptOf, useLauncher, willPaste, willQueue } from "./store";
 
 const STEPS = ["Write", "Confirm"];
 // A popup of ours is open (the file preview): Esc and Enter are its own
-const POPUP_OPEN = "[data-slot=dialog-content]";
+const popupOpen = watchPopups("[data-slot=dialog-content]");
 
 function Label({ children, className }) {
   return (
@@ -335,7 +336,7 @@ function Hint() {
  * Composer's: Shift+Enter is a new line) and on a button of its own.
  */
 export function onLauncherKey(e, s) {
-  if (!s.state || document.querySelector(POPUP_OPEN)) {
+  if (!s.state || popupOpen()) {
     return;
   }
   if (e.key === "Escape") {

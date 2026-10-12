@@ -6,6 +6,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { TaskShape } from "@/lib/shared";
 import { cn } from "@/lib/utils";
+import { watchPopups } from "@/lib/window";
 import { Category } from "./Category";
 import { Configure } from "./Configure";
 import { Confirm } from "./Confirm";
@@ -15,7 +16,7 @@ import { useNewTask } from "./store";
 
 const PANES = [null, Project, Category, Configure, Confirm];
 // A popup of ours is open (a menu, the file preview): Esc and Enter are its own
-const POPUP_OPEN = "[role=listbox],[data-slot=dialog-content]";
+const popupOpen = watchPopups("[role=listbox],[data-slot=dialog-content]");
 
 /** The New task dialog: header with the steps, the step on view, and Back / Next. */
 export function App() {
@@ -212,7 +213,7 @@ function StepHint() {
  * goes on — except in the text box (the Composer's: Shift+Enter is a new line) and on a button of its own.
  */
 export function onDialogKey(e, s) {
-  if (!s.state || !s.cfg || document.querySelector(POPUP_OPEN)) {
+  if (!s.state || !s.cfg || popupOpen()) {
     return;
   }
   if (e.key === "Escape") {

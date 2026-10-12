@@ -45,12 +45,16 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  type,
   ...props
 }) {
   const Comp = asChild ? Slot.Root : "button"
 
   return (
     <Comp
+      // Bayloob: a plain button unless it says otherwise — inside a <form> the browser's default ("submit")
+      // would send the form on every click
+      type={asChild ? type : type || "button"}
       data-slot="button"
       data-variant={variant}
       data-size={size}

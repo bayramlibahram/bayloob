@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { displayName } from "@/lib/agents";
 import { cn } from "@/lib/utils";
+import { watchPopups } from "@/lib/window";
 import {
   actionOrder,
   CATEGORY,
@@ -27,6 +28,9 @@ import {
 import { PANES } from "./panes";
 import { Banner, Chip, Output, Tag } from "./parts";
 import { useTasks } from "./store";
+
+// a menu or a dialog open: Esc closes it, not the task
+const popupOpen = watchPopups("[role=listbox],[data-slot=dialog-content]");
 
 const STEP_LOOK = {
   done: "done",
@@ -386,11 +390,7 @@ function Batch({ g }) {
  */
 export function onDetailKey(e, s) {
   const t = s.tasks[s.open];
-  if (
-    s.view !== "detail" ||
-    !t ||
-    document.querySelector("[role=listbox],[data-slot=dialog-content]")
-  ) {
+  if (s.view !== "detail" || !t || popupOpen()) {
     return;
   }
   if (e.key === "Escape") {
