@@ -34,7 +34,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { agentColor } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { clockTime, LIVE } from "./model";
-import { Face, Label, Nothing, Output, useArtifact } from "./parts";
+import { Face, Fold, Label, Nothing, Output, useArtifact } from "./parts";
 import { useTasks } from "./store";
 
 const VIEWS = { thread: "Thread", columns: "Columns", timeline: "Stance timeline", raw: "Raw" };
@@ -567,13 +567,14 @@ function Raw({ d, rounds }) {
   return (
     <div className="flex flex-col gap-1.5">
       {d.messages.map(m => (
-        <details key={m.id} className="rounded-lg border bg-card px-3 py-1.5">
-          <summary className="cursor-pointer font-mono text-xs">
-            {roundName(m.round, rounds)} · {m.from}
-            {m.to ? ` → ${m.to}` : ""} · {m.text.length} chars
-          </summary>
-          <Output className="mt-1.5">{m.text}</Output>
-        </details>
+        <Fold
+          key={m.id}
+          mono
+          className="rounded-lg border bg-card px-3 py-1.5"
+          title={`${roundName(m.round, rounds)} · ${m.from}${m.to ? ` → ${m.to}` : ""} · ${m.text.length} chars`}
+        >
+          <Output>{m.text}</Output>
+        </Fold>
       ))}
     </div>
   );

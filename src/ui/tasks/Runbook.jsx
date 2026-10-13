@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Banner, Chip, Nothing, Output } from "./parts";
+import { Banner, Chip, Fold, Nothing, Output } from "./parts";
 import { useTasks } from "./store";
 
 const RISK = { low: "Low risk", medium: "Medium risk", high: "High risk" };
@@ -187,13 +187,10 @@ function Step({ t, x, n, isNext }) {
       {x.purpose && <p className="text-[13px]">{x.purpose}</p>}
       <Command argv={x.argv} />
       {x.rollback && (
-        <details>
-          <summary className="cursor-pointer text-xs text-muted-foreground">Rollback</summary>
-          <div className="flex flex-col gap-1 pt-1.5">
-            <Command argv={x.rollback} />
-            <Result r={x.rollbackResult} />
-          </div>
-        </details>
+        <Fold title="Rollback">
+          <Command argv={x.rollback} />
+          <Result r={x.rollbackResult} />
+        </Fold>
       )}
       {x.dryResult && (
         <small className="text-xs text-muted-foreground">
@@ -339,17 +336,16 @@ function StepActions({ t, x }) {
       <Button variant="outline" onClick={() => s.runbook(x.id, "skip", { dangerous: false })}>
         Skip
       </Button>
-      <details>
-        <summary className="cursor-pointer text-xs text-muted-foreground">More</summary>
+      <Fold title="More">
         <Button
           size="sm"
           variant="ghost"
-          className="mt-1"
+          className="self-start"
           onClick={() => s.runbook(x.id, "skip", { dangerous: true })}
         >
           Skip — looks dangerous
         </Button>
-      </details>
+      </Fold>
       <span className="flex-1" />
       <Button
         data-run

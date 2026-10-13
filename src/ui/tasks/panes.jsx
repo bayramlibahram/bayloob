@@ -9,9 +9,20 @@ import {
   XIcon,
   ZapIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { Markdown } from "@/components/markdown";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -31,6 +42,7 @@ import {
   Chip,
   Diff,
   Face,
+  Fold,
   Label,
   ModeBadge,
   Nothing,
@@ -271,12 +283,9 @@ function Plan({ t }) {
         <CardContent className="flex flex-col gap-3">
           <Markdown text={body} />
           {raw && (
-            <details>
-              <summary className="cursor-pointer text-xs text-muted-foreground">
-                Subtasks as the planner wrote them (JSON)
-              </summary>
+            <Fold title="Subtasks as the planner wrote them (JSON)">
               <Output>{raw}</Output>
-            </details>
+            </Fold>
           )}
         </CardContent>
       </Card>
@@ -350,16 +359,160 @@ function Subtasks({ t }) {
 
 // ---------- Candidates ----------
 
+const CANDIDATES_VIEW = "bayloob.tasks.candidates"; // cards | table
+
+/** The builders' attempts: as cards, or side by side in a table (tests, change, review, the Arbiter's score). */
 function Candidates({ t }) {
+  const [view, setView] = useState(() => {
+    try {
+      return localStorage.getItem(CANDIDATES_VIEW) || "cards";
+    } catch {
+      return "cards"; // storage unavailable
+    }
+  });
   if (!t.candidates.length) {
     return <Nothing title="No candidates yet" hint="Builders start after the plan is approved." />;
   }
+  const choose = v => {
+    if (!v) {
+      return;
+    }
+    setView(v);
+    try {
+      localStorage.setItem(CANDIDATES_VIEW, v);
+    } catch {
+      /* storage unavailable */
+    }
+  };
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-3">
-      {t.candidates.map(c => (
-        <Candidate key={c.id} t={t} c={c} />
-      ))}
+    <div className="flex flex-col gap-3">
+      {t.candidates.length > 1 && (
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          aria-label="Show as"
+          className="self-start"
+          value={view}
+          onValueChange={choose}
+        >
+          <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
+          <ToggleGroupItem value="table">Compare</ToggleGroupItem>
+        </ToggleGroup>
+      )}
+      {view === "table" && t.candidates.length > 1 ? (
+        <CandidateTable t={t} />
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] gap-3">
+          {t.candidates.map(c => (
+            <Candidate key={c.id} t={t} c={c} />
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** The candidates side by side: one row each, what tells them apart in columns. */
+function CandidateTable({ t }) {
+  const s = useTasks();
+  const picking = !!t.gate?.actions.includes("pick");
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Candidate</TableHead>
+          <TableHead>Tests</TableHead>
+          <TableHead>Change</TableHead>
+          <TableHead>Review</TableHead>
+          <TableHead>Arbiter</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {t.candidates.map(c => {
+          const [color, testsText] = testsLook(c);
+          const score = t.arbiter?.ranking?.find(r => r.candidate === c.id)?.score;
+          const win = t.winner === c.id;
+          return (
+            <TableRow
+              key={c.id}
+              data-state={win || s.picked[t.id] === c.id ? "selected" : undefined}
+              className={cn((c.status === "out" || c.status === "part") && "opacity-70")}
+            >
+              <TableCell>
+                <span className="flex items-center gap-2">
+                  <Face agent={c.adapter} />
+                  <span className="flex flex-col">
+                    <b className="font-mono">{c.id}</b>
+                    <small className="text-muted-foreground">{displayName(c.adapter)}</small>
+                  </span>
+                </span>
+              </TableCell>
+              <TableCell>
+                <Chip color={color}>{testsText}</Chip>
+              </TableCell>
+              <TableCell>
+                {c.diff ? (
+                  <span className="flex flex-col">
+                    <Diff diff={c.diff} />
+                    <small className="text-muted-foreground">
+                      {c.diff.files} file{c.diff.files === 1 ? "" : "s"}
+                    </small>
+                  </span>
+                ) : (
+                  "—"
+                )}
+              </TableCell>
+              <TableCell>
+                <ReviewCount t={t} c={c} />
+              </TableCell>
+              <TableCell>
+                {score == null ? (
+                  "—"
+                ) : (
+                  <span className="flex items-center gap-2 tabular-nums">
+                    <Progress
+                      value={score * 10}
+                      className="w-16"
+                      aria-label={`score ${score} of 10`}
+                    />
+                    {score}/10
+                  </span>
+                )}
+              </TableCell>
+              <TableCell>
+                {win ? (
+                  <Badge>Chosen</Badge>
+                ) : c.status === "out" ? (
+                  <Badge variant="outline">Out</Badge>
+                ) : (
+                  <span className="text-muted-foreground">In the race</span>
+                )}
+              </TableCell>
+              <TableCell className="text-right">
+                {picking && c.status === "active" && <ChooseButton t={t} id={c.id} />}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+/** "2 findings" / "no findings" from the candidate's review, or "—" before one. */
+function ReviewCount({ t, c }) {
+  const review = useArtifact(t.id, `review.${c.id}.md`).text;
+  if (review == null) {
+    return "—";
+  }
+  const n = findingsIn(review);
+  return (
+    <span className={n ? "text-working" : "text-done"}>
+      {n ? `${n} finding${n === 1 ? "" : "s"}` : "no findings"}
+    </span>
   );
 }
 
@@ -391,124 +544,110 @@ function Candidate({ t, c }) {
   const picking = !!t.gate?.actions.includes("pick");
   const picked = s.picked[t.id];
   const out = c.status === "out" || c.status === "part";
+  const attachable = !!builder?.handle && t.status !== "done" && t.status !== "stopped";
+  const choosable = picking && c.status === "active";
   return (
-    <article
+    <Card
+      size="sm"
       className={cn(
-        "flex flex-col gap-2.5 rounded-xl border bg-card p-3",
-        win && "border-brand",
-        !win && picked === c.id && "border-primary",
+        win && "ring-2 ring-brand",
+        !win && picked === c.id && "ring-2 ring-primary",
         out && "opacity-70"
       )}
     >
-      <div className="flex items-center gap-2.5">
+      <CardHeader className="flex items-center gap-2.5">
         <Face agent={c.adapter} className="size-9" />
         <div className="flex min-w-0 flex-1 flex-col">
-          <b>{c.id}</b>
-          <small className="truncate text-muted-foreground" title={c.branch || ""}>
+          <CardTitle className="font-mono">{c.id}</CardTitle>
+          <CardDescription className="truncate" title={c.branch || ""}>
             {displayName(c.adapter)}
             {c.branch ? ` · ${c.branch}` : ""}
-          </small>
+          </CardDescription>
         </div>
-        {c.subtask && (
-          <Chip color="var(--idle)" dot={false}>
-            Part · {c.subtask}
-          </Chip>
-        )}
-        {c.parts && (
-          <Chip color="var(--brand)" dot={false}>
-            All parts
-          </Chip>
-        )}
-        {win ? (
-          <Chip color="var(--brand)" dot={false}>
-            Chosen
-          </Chip>
-        ) : (
-          c.status === "out" && (
-            <Chip color="var(--waiting)" dot={false}>
-              Out
-            </Chip>
-          )
-        )}
-      </div>
-      <div
-        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
-        style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
-      >
-        {color === "var(--done)" ? (
-          <CheckIcon className="size-3.5" />
-        ) : color === "var(--waiting)" ? (
-          <XIcon className="size-3.5" />
-        ) : null}
-        {testsText}
-      </div>
-      <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1 text-xs">
-        <dt className="text-muted-foreground">Diff</dt>
-        <dd>
-          {c.diff ? (
+        <CardAction className="flex gap-1.5">
+          {c.subtask && <Badge variant="outline">Part · {c.subtask}</Badge>}
+          {c.parts && <Badge variant="outline">All parts</Badge>}
+          {win ? <Badge>Chosen</Badge> : c.status === "out" && <Badge variant="outline">Out</Badge>}
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2.5">
+        <div
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+          style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
+        >
+          {color === "var(--done)" ? (
+            <CheckIcon className="size-3.5" />
+          ) : color === "var(--waiting)" ? (
+            <XIcon className="size-3.5" />
+          ) : null}
+          {testsText}
+        </div>
+        <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-muted-foreground">Diff</dt>
+          <dd>
+            {c.diff ? (
+              <>
+                <Diff diff={c.diff} /> · {c.diff.files} file{c.diff.files === 1 ? "" : "s"}
+              </>
+            ) : (
+              "—"
+            )}
+          </dd>
+          {review != null && (
             <>
-              <Diff diff={c.diff} /> · {c.diff.files} file{c.diff.files === 1 ? "" : "s"}
+              <dt className="text-muted-foreground">Review</dt>
+              <dd className={n ? "text-working" : "text-done"}>
+                {n ? `${n} finding${n === 1 ? "" : "s"}` : "no findings"}
+              </dd>
             </>
-          ) : (
-            "—"
           )}
-        </dd>
-        {review != null && (
-          <>
-            <dt className="text-muted-foreground">Review</dt>
-            <dd className={n ? "text-working" : "text-done"}>
-              {n ? `${n} finding${n === 1 ? "" : "s"}` : "no findings"}
-            </dd>
-          </>
+          {c.parts && (
+            <>
+              <dt className="text-muted-foreground">All parts</dt>
+              <dd>{c.parts.join(", ")}</dd>
+            </>
+          )}
+          <dt className="text-muted-foreground">Status</dt>
+          <dd>
+            {win
+              ? t.merged
+                ? `Chosen · ${t.merged.applied ? "applied to" : "merged into"} ${t.merged.into}`
+                : "Chosen"
+              : c.status === "part"
+                ? "Merged into integrate-1"
+                : c.status === "out"
+                  ? c.out || "Out"
+                  : "In the race"}
+          </dd>
+        </dl>
+        {review && (
+          <Fold title="Review">
+            <Markdown text={review} />
+          </Fold>
         )}
-        {c.parts && (
-          <>
-            <dt className="text-muted-foreground">All parts</dt>
-            <dd>{c.parts.join(", ")}</dd>
-          </>
+        {answer && (
+          <Fold title="Builder’s answer">
+            <Markdown text={answer} />
+          </Fold>
         )}
-        <dt className="text-muted-foreground">Status</dt>
-        <dd>
-          {win
-            ? t.merged
-              ? `Chosen · ${t.merged.applied ? "applied to" : "merged into"} ${t.merged.into}`
-              : "Chosen"
-            : c.status === "part"
-              ? "Merged into integrate-1"
-              : c.status === "out"
-                ? c.out || "Out"
-                : "In the race"}
-        </dd>
-      </dl>
-      {review && (
-        <details>
-          <summary className="cursor-pointer text-xs text-muted-foreground">Review</summary>
-          <Markdown text={review} className="pt-2" />
-        </details>
+      </CardContent>
+      {(attachable || choosable) && (
+        <CardFooter className="mt-auto gap-2">
+          {attachable && (
+            <Button
+              size="sm"
+              variant="outline"
+              title="Open a terminal attached to this agent"
+              onClick={() => s.terminal(builder.id)}
+            >
+              <SquareTerminalIcon data-icon="inline-start" />
+              Terminal
+            </Button>
+          )}
+          {choosable && <ChooseButton t={t} id={c.id} />}
+        </CardFooter>
       )}
-      {answer && (
-        <details>
-          <summary className="cursor-pointer text-xs text-muted-foreground">
-            Builder’s answer
-          </summary>
-          <Markdown text={answer} className="pt-2" />
-        </details>
-      )}
-      <div className="mt-auto flex gap-2">
-        {builder?.handle && t.status !== "done" && t.status !== "stopped" && (
-          <Button
-            size="sm"
-            variant="outline"
-            title="Open a terminal attached to this agent"
-            onClick={() => s.terminal(builder.id)}
-          >
-            <SquareTerminalIcon data-icon="inline-start" />
-            Terminal
-          </Button>
-        )}
-        {picking && c.status === "active" && <ChooseButton t={t} id={c.id} />}
-      </div>
-    </article>
+    </Card>
   );
 }
 
@@ -568,17 +707,15 @@ function Decision({ t }) {
           {d.winner ? ` ${d.winner}` : ""}
         </b>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span
-            role="img"
+          <Progress
+            value={d.confidence * 100}
             aria-label={`confidence ${d.confidence}`}
-            className="h-1.5 w-24 overflow-hidden rounded-full bg-muted"
-          >
-            <i
-              className="block h-full"
-              style={{ width: `${d.confidence * 100}%`, background: confColor }}
-            />
+            className="w-24 *:data-[slot=progress-indicator]:bg-(--c)"
+            style={{ "--c": confColor }}
+          />
+          <span title="How sure the Arbiter is (0–1). Below your setting in Settings → Agents, you decide.">
+            confidence {d.confidence.toFixed(2)}
           </span>
-          confidence {d.confidence.toFixed(2)}
         </span>
         {d.retry && <span className="text-[12.5px] text-muted-foreground">“{d.retry}”</span>}
       </div>
@@ -634,9 +771,11 @@ function Decision({ t }) {
                 "—"
               ) : (
                 <>
-                  <span className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
-                    <i className="block h-full bg-brand" style={{ width: `${r.score * 10}%` }} />
-                  </span>
+                  <Progress
+                    value={r.score * 10}
+                    className="w-12"
+                    aria-label={`score ${r.score} of 10`}
+                  />
                   {r.score}/10
                 </>
               )}
@@ -651,12 +790,10 @@ function Decision({ t }) {
         );
       })}
       {text && (
-        <details>
-          <summary className="cursor-pointer text-xs text-muted-foreground">
-            The Arbiter’s answer
-          </summary>
-          <Markdown text={text} className="pt-2" />
-        </details>
+        // open when it wasn't sure: its reasons are what you decide on
+        <Fold title="The Arbiter’s answer" defaultOpen={d.confidence < 0.6}>
+          <Markdown text={text} />
+        </Fold>
       )}
     </div>
   );
@@ -672,7 +809,7 @@ function Tests({ t }) {
     );
   }
   return (
-    <div className="flex max-w-5xl flex-col gap-4">
+    <div className="flex max-w-5xl flex-col gap-2">
       {tested.map(c => (
         <TestOutput key={c.id} t={t} c={c} />
       ))}
@@ -680,25 +817,33 @@ function Tests({ t }) {
   );
 }
 
+/** A candidate's test run: its result next to its name; the output open when it failed, folded when it passed. */
 function TestOutput({ t, c }) {
   const name = `test-output.${c.id}.txt`;
   const { text, entry } = useArtifact(t.id, name);
   const ok = c.tests.skipped ? null : c.tests.ok;
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <Face agent={c.adapter} />
-        <b>{c.id}</b>
+    <Fold
+      defaultOpen={ok === false}
+      className="rounded-xl border bg-card px-3 py-2"
+      title={
+        <span className="flex items-center gap-2 text-foreground">
+          <Face agent={c.adapter} className="size-5" />
+          <b className="font-mono">{c.id}</b>
+        </span>
+      }
+      extra={
         <Chip color={ok === null ? "var(--idle)" : ok ? "var(--done)" : "var(--waiting)"}>
           {ok === null ? "No test command — skipped" : ok ? "Tests pass" : "Tests fail"}
         </Chip>
-      </div>
+      }
+    >
       {entry?.status === "ok" ? (
         <Output>{text || "No output yet"}</Output>
       ) : (
         <ArtifactState id={t.id} name={name} entry={entry} />
       )}
-    </div>
+    </Fold>
   );
 }
 
@@ -761,14 +906,11 @@ function Report({ t }) {
   const audit = useArtifact(t.id, "audit.md").text;
   const inputs = [logs, audit].filter(Boolean);
   const collected = inputs.length > 0 && (
-    <details>
-      <summary className="cursor-pointer text-xs text-muted-foreground">
-        What Bayloob collected for the analysts (read-only)
-      </summary>
+    <Fold title="What Bayloob collected for the analysts (read-only)">
       {inputs.map(x => (
-        <Markdown key={x.slice(0, 40)} text={x} className="pt-2" />
+        <Markdown key={x.slice(0, 40)} text={x} />
       ))}
-    </details>
+    </Fold>
   );
   if (!r) {
     return (
@@ -1009,16 +1151,13 @@ function Turn({ t, n, open }) {
   const name = `orchestrator.${n}.md`;
   const { text, entry } = useArtifact(t.id, name);
   return (
-    <details open={open} className="rounded-xl border bg-card px-3 py-2">
-      <summary className="cursor-pointer text-[13px] font-semibold">Turn {n}</summary>
-      <div className="pt-2">
-        {entry?.status === "ok" ? (
-          <Output>{text || ""}</Output>
-        ) : (
-          <ArtifactState id={t.id} name={name} entry={entry} />
-        )}
-      </div>
-    </details>
+    <Fold title={`Turn ${n}`} defaultOpen={open} className="rounded-xl border bg-card px-3 py-2">
+      {entry?.status === "ok" ? (
+        <Output>{text || ""}</Output>
+      ) : (
+        <ArtifactState id={t.id} name={name} entry={entry} />
+      )}
+    </Fold>
   );
 }
 

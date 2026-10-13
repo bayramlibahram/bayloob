@@ -1,9 +1,10 @@
-import { TriangleAlertIcon } from "lucide-react";
+import { ChevronRightIcon, TriangleAlertIcon } from "lucide-react";
 import { useEffect } from "react";
 import { Novi } from "@/components/novi";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Empty,
   EmptyDescription,
@@ -173,5 +174,43 @@ export function Output({ children, className }) {
     >
       {children}
     </pre>
+  );
+}
+
+/**
+ * Something folded away (an agent's answer, a raw log, a rollback): its title as a small button with a chevron,
+ * the same everywhere. `extra` sits next to the title (a status badge).
+ */
+export function Fold({
+  title,
+  children,
+  defaultOpen = false,
+  extra = null,
+  className,
+  mono = false,
+}) {
+  return (
+    <Collapsible
+      defaultOpen={defaultOpen}
+      className={cn("group/fold flex flex-col gap-1.5", className)}
+    >
+      <div className="flex items-center gap-2">
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="ghost"
+            size="xs"
+            className={cn("-ml-2 text-muted-foreground", mono && "font-mono")}
+          >
+            <ChevronRightIcon
+              data-icon="inline-start"
+              className="transition-transform group-data-[state=open]/fold:rotate-90"
+            />
+            {title}
+          </Button>
+        </CollapsibleTrigger>
+        {extra}
+      </div>
+      <CollapsibleContent className="flex flex-col gap-1.5">{children}</CollapsibleContent>
+    </Collapsible>
   );
 }
