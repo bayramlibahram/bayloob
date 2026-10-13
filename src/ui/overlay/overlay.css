@@ -1,4 +1,4 @@
-/* The pill's own look (moved as it was from the old page, src/renderer/overlay): its shape, the S / M / L
+/* The pill's own look (moved as it was from the old page, now removed — see git history): its shape, the S / M / L
    sizes, the open / full transitions and the mascot's animations. Hand-tuned, so it stays plain CSS on top of
    theme.css — no Tailwind here (its reset would fight it). */
 :root {
