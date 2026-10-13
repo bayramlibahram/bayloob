@@ -15,14 +15,54 @@
   const clamp = (v, [d, lo, hi]) => Math.max(lo, Math.min(hi, Math.trunc(Number(v ?? d)) || d));
   const CATEGORIES = ["single", "workflow", "analysis"];
   const PATTERNS = {
-    pipeline: { name: "Pipeline", hint: "plan → build → test → review" },
-    bestofn: { name: "Best-of-N", hint: "N builders, the Arbiter picks" },
-    split: { name: "Split work", hint: "one subtask each" },
-    board: { name: "Review board", hint: "reviewers on the current branch" },
-    debate: { name: "Design debate", hint: "agents discuss, then one builds" },
-    lead: { name: "Lead + team", hint: "one agent leads, the team builds" },
-    orchestrator: { name: "Orchestrator", hint: "it starts workers as it goes" },
-    roles: { name: "Role chain", hint: "Research → Data → Content → Design" },
+    pipeline: {
+      name: "Pipeline",
+      hint: "plan → build → test → review",
+      group: "Build a change",
+      when: "When the work has clear stages — plan, build, test, then review.",
+    },
+    bestofn: {
+      name: "Best-of-N",
+      hint: "N builders, the Arbiter picks",
+      group: "Build a change",
+      when: "When the change is risky or open-ended — several tries, you keep the best.",
+    },
+    split: {
+      name: "Split work",
+      hint: "one subtask each",
+      group: "Build a change",
+      when: "When the change divides cleanly — each agent owns one subtask.",
+    },
+    board: {
+      name: "Review board",
+      hint: "reviewers on the current branch",
+      group: "Review or decide",
+      when: "When you need several independent reviews of the current branch.",
+    },
+    debate: {
+      name: "Design debate",
+      hint: "agents discuss, then one builds",
+      group: "Review or decide",
+      when: "When the approach is unclear — agents discuss it before one builds.",
+    },
+    lead: {
+      name: "Lead + team",
+      hint: "one agent leads, the team builds",
+      group: "A team",
+      when: "When one agent should coordinate a team working on separate parts.",
+    },
+    orchestrator: {
+      name: "Orchestrator",
+      hint: "it starts workers as it goes",
+      group: "A team",
+      when: "When the work must adapt as it goes — one agent starts workers as needed.",
+    },
+    roles: {
+      name: "Role chain",
+      hint: "Research → Data → Content → Design",
+      group: "A team",
+      when: "When work should pass through a fixed sequence of specialist roles.",
+    },
   };
   const PRESETS = {
     audit: "Code audit",

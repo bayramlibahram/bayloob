@@ -341,18 +341,32 @@ function ConfigWorkflow() {
       c.workflow.pattern = pattern;
       c.workflow.template = null;
     });
+  const groups = Object.entries(TaskShape.PATTERNS).reduce((all, item) => {
+    const group = item[1].group;
+    const found = all.find(([name]) => name === group);
+    if (found) {
+      found[1].push(item);
+    } else {
+      all.push([group, [item]]);
+    }
+    return all;
+  }, []);
+  const orchestrator = !tpl && w.pattern === "orchestrator";
   const head = (
     <>
-      <Options
-        label="Pattern"
-        onPick={pick}
-        items={Object.entries(TaskShape.PATTERNS).map(([k, p]) => [
-          k,
-          p.name,
-          p.hint,
-          !w.template && k === w.pattern,
-        ])}
-      />
+      {groups.map(([group, patterns]) => (
+        <div key={group} className="flex flex-col gap-1.5">
+          <Label>{group}</Label>
+          <Options
+            label={group}
+            onPick={pick}
+            items={patterns.map(([k, p]) => [k, p.name, p.hint, !w.template && k === w.pattern])}
+          />
+        </div>
+      ))}
+      {!w.template && (
+        <p className="text-[12.5px] text-muted-foreground">{TaskShape.PATTERNS[w.pattern]?.when}</p>
+      )}
       {own.length > 0 && (
         <>
           <Label>Your templates</Label>
@@ -367,15 +381,17 @@ function ConfigWorkflow() {
           />
         </>
       )}
+      {!orchestrator && (
+        <TaskBox
+          label="Task"
+          placeholder="Describe the change — what, where, and how to know it works."
+        />
+      )}
     </>
   );
   const tail = (
     <>
       <BaseRow />
-      <TaskBox
-        label="Task"
-        placeholder="Describe the change — what, where, and how to know it works."
-      />
       <Customize />
     </>
   );
@@ -485,6 +501,10 @@ function ConfigOrchestrator() {
   return (
     <>
       <AgentSelect path="workflow.planner" label="Orchestrator" />
+      <TaskBox
+        label="Task"
+        placeholder="Describe the change — what, where, and how to know it works."
+      />
       <Label>Workers it may start</Label>
       <div className="flex flex-wrap gap-1.5">
         {coders(s).map(([k, a]) => (
@@ -552,6 +572,7 @@ function ConfigAnalysis() {
         }
         items={Object.entries(TaskShape.PRESETS).map(([k, n]) => [k, n, null, k === a.preset])}
       />
+      <TaskBox label="Question" placeholder="What should the analysts find out?" rows={2} />
       <Label>Analysts · read-only, in parallel</Label>
       <AgentCounts bag={a.agents} mode="read-only" word="analyst" />
       <AgentSelect
@@ -566,7 +587,6 @@ function ConfigAnalysis() {
           archive
         </Hint>
       )}
-      <TaskBox label="Question" placeholder="What should the analysts find out?" rows={2} />
       {["incident", "warroom"].includes(a.preset) && <LogSources />}
       <SwitchRow
         label="Also prepare an operations plan"

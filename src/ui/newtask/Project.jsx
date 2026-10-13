@@ -110,11 +110,11 @@ export function Project() {
             />
           ))}
         </div>
-      ) : (
-        <Hint>
-          {recent.length ? "No recent project matches" : "No recent projects — choose a folder"}
-        </Hint>
-      )}
+      ) : recent.length ? (
+        <Hint>No recent project matches</Hint>
+      ) : !cwd ? (
+        <Hint>No recent projects — choose a folder</Hint>
+      ) : null}
       {cwd && !recent.some(r => r.cwd === cwd) && (
         <div className="flex flex-col rounded-xl border border-brand bg-brand/10 px-3 py-2">
           <b className="font-semibold">{s.cfg.project.name}</b>
