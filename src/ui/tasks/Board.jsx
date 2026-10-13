@@ -12,6 +12,7 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -34,6 +35,7 @@ import {
   elapsed,
   LIVE,
   patternOf,
+  stageProgress,
   stageText,
   waitingText,
 } from "./model";
@@ -284,6 +286,14 @@ function Card({ t, col, compact }) {
           {stageText(t)}
         </Chip>
       </span>
+      {["running", "needs", "review"].includes(col) && (
+        <Progress
+          value={stageProgress(t)}
+          aria-label={`${stageProgress(t)}% of its stages done`}
+          className="*:data-[slot=progress-indicator]:bg-(--c)"
+          style={{ "--c": colColor(t, col) }}
+        />
+      )}
       {t.gate && (
         <span className="flex items-start gap-1.5 text-waiting">
           <TriangleAlertIcon className="mt-0.5 size-3 shrink-0" />
@@ -554,6 +564,10 @@ function Timeline({ by }) {
               const left = pos(t.createdAt);
               const width = Math.max(0.5, pos(t.endedAt || now) - left);
               const live = !t.endedAt && ["running", "needs", "queued"].includes(col);
+              const wait =
+                !t.endedAt && t.gate?.at > t.createdAt
+                  ? { left: pos(t.gate.at), width: Math.max(0.5, pos(now) - pos(t.gate.at)) }
+                  : null;
               return (
                 <button
                   key={t.id}
@@ -578,13 +592,27 @@ function Timeline({ by }) {
                   </span>
                   <span className="relative h-2 rounded-full bg-muted">
                     <span
-                      className={cn("absolute inset-y-0 rounded-full", live && "animate-pulse")}
+                      className={cn(
+                        "absolute inset-y-0 rounded-full",
+                        live && !wait && "animate-pulse"
+                      )}
                       style={{
                         left: `${left.toFixed(2)}%`,
                         width: `${width.toFixed(2)}%`,
                         background: colColor(t, col),
                       }}
                     />
+                    {wait && (
+                      // the time it has waited on you: striped, so it doesn't read as work
+                      <span
+                        title={`Waiting on you since ${clockTime(t.gate.at)}`}
+                        className="absolute inset-y-0 rounded-r-full bg-[repeating-linear-gradient(135deg,var(--waiting)_0_3px,transparent_3px_6px)] opacity-70"
+                        style={{
+                          left: `${wait.left.toFixed(2)}%`,
+                          width: `${wait.width.toFixed(2)}%`,
+                        }}
+                      />
+                    )}
                   </span>
                   <span className="text-right text-muted-foreground tabular-nums">
                     {elapsed(t)}

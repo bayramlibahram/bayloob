@@ -357,3 +357,29 @@ test("findings are counted in a review (path:line) and in an analysis (severity 
   expect(about).toMatchObject({ id: pipe.candidates[0].id, tests: true });
   expect(pickSummary(pipe, "nope")).toBeNull();
 });
+
+test("the log comes in stages, newest first, and filters down to problems", async () => {
+  const { logGroups, logProblem } = await import("./model");
+  const t = {
+    template: {
+      stages: [
+        { id: "plan", title: "Plan" },
+        { id: "build", title: "Build" },
+      ],
+    },
+  };
+  const log = [
+    { event: "started", actor: "engine" },
+    { event: "stage", stage: "plan", round: 1 },
+    { event: "launched", actor: "engine" },
+    { event: "stage", stage: "build", round: 2 },
+    { event: "launch-failed", actor: "engine" },
+    { event: "gate:approve", actor: "you" },
+  ];
+  const all = logGroups(log, t);
+  expect(all.map(g => g.title)).toEqual(["Build · round 2", "Plan", "Start"]);
+  expect(all[0].lines.map(l => l.e.event)).toEqual(["gate:approve", "launch-failed", "stage"]);
+  const bad = logGroups(log, t, logProblem);
+  expect(bad.map(g => g.title)).toEqual(["Build · round 2"]);
+  expect(bad[0].lines).toHaveLength(1);
+});

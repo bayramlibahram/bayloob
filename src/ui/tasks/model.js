@@ -462,3 +462,40 @@ export function pickSummary(t, id) {
     confidence: t.arbiter?.confidence ?? null,
   };
 }
+
+/** A log line that went wrong: a failure, a refused or invalid answer, a broken rule. */
+export const logProblem = e => /fail|invalid|violation|error|interrupted/.test(e.event);
+
+/**
+ * The log in stages, newest first: each `stage` entry starts a group named after the stage (and its round);
+ * what came before the first one is "Start". `keep` drops lines (a filter); empty groups go.
+ */
+export function logGroups(entries, t, keep = () => true) {
+  const groups = [];
+  let g = { key: "start", title: "Start", lines: [] };
+  entries.forEach((e, n) => {
+    if (e.event === "stage") {
+      groups.push(g);
+      const title = t.template.stages.find(x => x.id === e.stage)?.title || e.stage;
+      g = {
+        key: `${e.stage}-${n}`,
+        title: e.round > 1 ? `${title} · round ${e.round}` : title,
+        lines: [],
+      };
+    }
+    if (keep(e)) {
+      g.lines.push({ e, n });
+    }
+  });
+  groups.push(g);
+  return groups
+    .filter(x => x.lines.length)
+    .reverse()
+    .map(x => ({ ...x, lines: x.lines.reverse() }));
+}
+
+/** How far a task is: its stages done out of all of them, in percent. */
+export function stageProgress(t) {
+  const all = t.stages?.length || 0;
+  return all ? Math.round((t.stages.filter(x => x.status === "done").length / all) * 100) : 0;
+}

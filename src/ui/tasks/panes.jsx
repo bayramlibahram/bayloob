@@ -35,7 +35,17 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { displayName } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { Discussion } from "./Discussion";
-import { clockTime, findingsIn, LIVE, logText, OPEN_TASK, tilde, waitingText } from "./model";
+import {
+  clockTime,
+  findingsIn,
+  LIVE,
+  logGroups,
+  logProblem,
+  logText,
+  OPEN_TASK,
+  tilde,
+  waitingText,
+} from "./model";
 import {
   ArtifactState,
   Banner,
@@ -1022,8 +1032,17 @@ function Report({ t }) {
 
 const ACTOR = { you: UserIcon, agent: BotIcon };
 
+const LOG_KEEP = {
+  all: () => true,
+  you: e => e.actor === "you",
+  agents: e => e.actor === "agent" || !!e.instance,
+  problems: logProblem,
+};
+
+/** What happened, newest first, in its stages; filtered to your decisions, the agents, or what went wrong. */
 function Log({ t }) {
   const home = useTasks(s => s.home);
+  const [show, setShow] = useState("all");
   const { text: entries, entry } = useArtifact(t.id, "#log");
   if (entry?.status !== "ok") {
     return <ArtifactState id={t.id} name="#log" entry={entry} />;
@@ -1036,40 +1055,74 @@ function Log({ t }) {
       />
     );
   }
+  const problems = entries.filter(logProblem).length;
+  const groups = logGroups(entries, t, LOG_KEEP[show]);
   return (
-    <ul className="flex max-w-4xl flex-col">
-      {entries
-        .map((e, n) => ({ e, n }))
-        .reverse()
-        .map(({ e, n }) => {
-          const Icon = ACTOR[e.actor] || ZapIcon;
-          return (
-            <li
-              key={n}
-              className="grid grid-cols-[3.5rem_1.5rem_1fr] items-start gap-2 border-b py-1.5 text-[13px]"
-            >
-              <span className="text-xs text-muted-foreground tabular-nums">{clockTime(e.at)}</span>
-              <span
-                title={e.actor}
-                className={cn(
-                  "grid size-5 place-items-center rounded-full bg-muted text-muted-foreground",
-                  e.actor === "you" && "bg-brand/15 text-brand"
-                )}
-              >
-                <Icon className="size-3" />
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span>{logText(e)}</span>
-                {(e.cwd || e.dir) && (
-                  <small className="truncate text-muted-foreground">
-                    {tilde(e.cwd || e.dir, home)}
-                  </small>
-                )}
-              </span>
-            </li>
-          );
-        })}
-    </ul>
+    <div className="flex max-w-4xl flex-col gap-3">
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        aria-label="Show"
+        className="self-start"
+        value={show}
+        onValueChange={v => v && setShow(v)}
+      >
+        <ToggleGroupItem value="all">All</ToggleGroupItem>
+        <ToggleGroupItem value="you">Your decisions</ToggleGroupItem>
+        <ToggleGroupItem value="agents">Agents</ToggleGroupItem>
+        <ToggleGroupItem value="problems">
+          Problems
+          {problems > 0 && <Badge variant="destructive">{problems}</Badge>}
+        </ToggleGroupItem>
+      </ToggleGroup>
+      {!groups.length && <p className="text-sm text-muted-foreground">Nothing here.</p>}
+      {groups.map(g => (
+        <section key={g.key} aria-label={g.title} className="flex flex-col">
+          <h3 className="sticky top-0 z-1 bg-background py-1 text-xs font-bold text-muted-foreground">
+            {g.title}
+          </h3>
+          <ul className="flex flex-col">
+            {g.lines.map(({ e, n }) => {
+              const Icon = ACTOR[e.actor] || ZapIcon;
+              const bad = logProblem(e);
+              return (
+                <li
+                  key={n}
+                  className={cn(
+                    "grid grid-cols-[3.5rem_1.5rem_1fr] items-start gap-2 border-b py-1.5 text-[13px]",
+                    e.actor === "you" && "bg-brand/5",
+                    bad && "bg-destructive/5"
+                  )}
+                >
+                  <span className="pl-1 text-xs text-muted-foreground tabular-nums">
+                    {clockTime(e.at)}
+                  </span>
+                  <span
+                    title={e.actor}
+                    className={cn(
+                      "grid size-5 place-items-center rounded-full bg-muted text-muted-foreground",
+                      e.actor === "you" && "bg-brand/15 text-brand",
+                      bad && "bg-destructive/15 text-destructive"
+                    )}
+                  >
+                    {bad ? <TriangleAlertIcon className="size-3" /> : <Icon className="size-3" />}
+                  </span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className={cn(bad && "text-destructive")}>{logText(e)}</span>
+                    {(e.cwd || e.dir) && (
+                      <small className="truncate text-muted-foreground">
+                        {tilde(e.cwd || e.dir, home)}
+                      </small>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }
 
