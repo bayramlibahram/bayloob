@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Contrast of the colour tokens in src/renderer/shared/theme.css, in both themes (WCAG 2.1):
+// Contrast of the colour tokens in src/ui/lib/theme.css, in both themes (WCAG 2.1):
 // text tokens need ≥ 4.5:1 and state / brand marks ≥ 3:1 on every surface they sit on.
 //   node scripts/contrast-check.js      (exit code 1 when something is below)
 const fs = require("node:fs");
 const path = require("node:path");
 
-const css = fs.readFileSync(path.join(__dirname, "../src/renderer/shared/theme.css"), "utf8");
+const css = fs.readFileSync(path.join(__dirname, "../src/ui/lib/theme.css"), "utf8");
 const block = selector => {
   const start = css.indexOf(`${selector} {`);
   const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("\n}", start));
@@ -95,15 +95,19 @@ for (const [name, theme] of [
   }
 }
 // Marks outside theme.css, ≥ 3:1 on every surface: each agent's colour (its dot, ring and mascot accent,
-// from ui-common.js) and the keyboard focus ring (blended over the surface first when translucent).
+// from agents.js) and the keyboard focus ring (blended over the surface first when translucent).
 // Disabled controls are exempt (WCAG 1.4.3), so their faded opacity isn't checked.
-const ui = fs.readFileSync(path.join(__dirname, "../src/renderer/shared/ui-common.js"), "utf8");
+const ui = fs.readFileSync(path.join(__dirname, "../src/ui/lib/agents.js"), "utf8");
 // Each agent's colour and, in the light theme, its darker twin (`light:`) when it has one
-const agents = [
-  ...ui.matchAll(
-    /^ {2}(\w+): \{\n(?: {4}.*\n)*? {4}color: "(#[0-9a-f]{6})",\n(?: {4}light: "(#[0-9a-f]{6})")?/gim
-  ),
-].map(m => [m[1], m[2], m[3]]);
+const agentsStart = ui.indexOf("export const AGENTS");
+const agentsBlock = ui.slice(agentsStart, ui.indexOf("\n};", agentsStart));
+const agents = [...agentsBlock.matchAll(/^ {2}(?:"([^"]+)"|([\w-]+)): \{([^}]+)\},?$/gim)].map(
+  m => {
+    const color = /\bcolor: "(#[0-9a-f]{6})"/i.exec(m[3]);
+    const lightColor = /\blight: "(#[0-9a-f]{6})"/i.exec(m[3]);
+    return [m[1] || m[2], color?.[1], lightColor?.[1]];
+  }
+);
 for (const [name, theme] of [
   ["dark", dark],
   ["light", light],

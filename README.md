@@ -549,7 +549,7 @@ New task ─► TaskEngine ─► Scheduler (capacity) ─► TaskRunner (tmux, 
   gone becomes a gate instead of silently failing.
 
 The code is split by Electron process, then by layer: `src/main` (app, modules, infrastructure, windows),
-`src/preload`, `src/renderer` (one page per window) and `src/shared` (used by both sides). See
+`src/preload`, `src/ui` (one React page per window) and `src/shared` (used by both sides). See
 [docs/architecture.md](docs/architecture.md), and for the engine [docs/orchestration/ENGINE.md](docs/orchestration/ENGINE.md).
 
 ## 🧪 Development

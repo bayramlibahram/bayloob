@@ -1,11 +1,11 @@
 /* The React windows' styles: Tailwind, and shadcn/ui themed from Bayloob's own tokens (theme.css) — one source
-   of colours for every window, old or React, so light and dark stay what they are. */
+   of colours for every window, so light and dark stay what they are. */
 @import "tailwindcss";
 @import "tw-animate-css";
 /* shadcn's variants (data-checked:, data-open:, data-vertical:… — what its components style Radix's states by) */
 @import "shadcn/tailwind.css";
 /* in the base layer: its tokens apply, and its focus outline gives way to a component's own (outline-none) */
-@import "../../renderer/shared/theme.css" layer(base);
+@import "../lib/theme.css" layer(base);
 
 /* Light / dark: theme.css switches the tokens on <html data-theme>; Tailwind's dark: follows the same switch */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));

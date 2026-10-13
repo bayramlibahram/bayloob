@@ -1,7 +1,6 @@
 import { createStore } from "zustand/vanilla";
 
-// Files attached to a prompt or a task, and large pasted text — the React side of the old pages'
-// attachments.js and composer.js (the same rules, so a prompt goes out the same from either). Main copies each
+// Files attached to a prompt or a task, and large pasted text. Main copies each
 // file into Bayloob's cache; a prompt carries their paths as `@/path` mentions, a task copies them into its
 // folder when it starts. A file that seems to hold a secret isn't sent until the owner says "Send anyway".
 

@@ -18,7 +18,7 @@ prompt queue, the Inbox cards, transcript adapters and the immune system.
 | Task / Step / Gate state machine | **missing** | — (`docs/workspace/AUDIT.md` §4: "Nothing exists yet") | New `src/main/modules/tasks/` (engine, store, templates); one engine for both specs |
 | Task dir `tasks/<id>/` (`state.json`, `config.json`, `log.jsonl`, `artifacts/`) | **missing** | data dir today is `app.getPath("userData")` = `~/.config/Bayloob` (`src/main/app/bayloob-app.js:199-207`) | See §3.1: use `~/.config/Bayloob/tasks/<id>/` |
 | Workflow templates `workflows/*.json` + schema | **missing** | — | Built-ins in `src/main/modules/tasks/templates/`; user templates in `~/.config/Bayloob/workflows/` |
-| Tasks section (board) | **shell only** | nav at `src/renderer/panel/index.html:506`; empty text `:434`, `:439`; items `[]` at `:687` | Fill from the engine |
+| Tasks section (board) | **shell only** | React shell now lives in `src/ui/panel/` and `src/ui/tasks/` | Fill from the engine |
 | `Ctrl+K → New task` | **missing** | palette commands `panel/index.html:1415-1430` | Add the action with the dialog (command 02) |
 | Audit trail `log.jsonl` | **missing** | — | Append-only JSONL per task (actor: you / engine / agent / arbiter) |
 
@@ -61,7 +61,7 @@ prompt queue, the Inbox cards, transcript adapters and the immune system.
 ### 1.6 UI foundation (spec §6, `PROMPT-UI.md`)
 | Spec item | Status | Where | Plan |
 |---|---|---|---|
-| `src/ui/tokens.css` + components | **missing** (`PROMPT-UI.md` not found) | shared tokens in `src/renderer/shared/theme.css` (46 lines, light set complete, dark partly per page) | Move each page's `:root` block into `theme.css` first; components as needed |
+| `src/ui/tokens.css` + components | **missing** (`PROMPT-UI.md` not found) | shared tokens now live in `src/ui/lib/theme.css` | Move each page's `:root` block into `theme.css` first; components as needed |
 | Raw hex values | **moderate** | ~50 across pages, mostly duplicate `:root` blocks; `--brand` is `#8b4dff` in `overlay/index.html:20` vs `#8b5cff` elsewhere | Fix in the token pass |
 | Attachments (§9) | **partial** | `UploadStore` copies to `~/.cache/bayloob/uploads`, `@path` mentions (`upload-store.js`, `shared/attachments.js`) | Task attachments move to `tasks/<id>/attachments/` + sha256 + manifest (command 11) |
 | Resizable workspace, minimize to pill (§10–11) | **missing** | `PanelWindow` 1080×600 not resizable (`panel-window.js:5`, `popup-window.js:63`); hides on blur | Commands 12, 13 |

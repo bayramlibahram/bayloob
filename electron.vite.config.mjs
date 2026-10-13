@@ -1,5 +1,4 @@
-// electron-vite: builds the main process, the preload scripts and the windows moved to React into out/. Windows
-// not moved yet load as they are from src/renderer (see src/main/app/paths.js).
+// electron-vite builds the main process, preload scripts and React windows into out/.
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";

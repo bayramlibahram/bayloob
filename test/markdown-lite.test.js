@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { renderMarkdown, plainMarkdown } = require("../src/renderer/shared/markdown-lite");
+const { renderMarkdown, plainMarkdown } = require("../src/ui/lib/markdown-lite");
 
 test("everything is escaped; markup comes only from Markdown", () => {
   assert.equal(

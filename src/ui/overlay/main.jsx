@@ -1,4 +1,4 @@
-import "../../renderer/shared/theme.css";
+import "../lib/theme.css";
 import "./overlay.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

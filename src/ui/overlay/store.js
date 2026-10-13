@@ -1,4 +1,4 @@
-import "../../renderer/shared/sounds.js";
+import "../lib/sounds.js";
 import { create } from "zustand";
 import { soundUrl } from "@/lib/assets";
 

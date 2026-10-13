@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { soundCue } = require("../src/renderer/shared/sounds");
+const { soundCue } = require("../src/ui/lib/sounds");
 
 const s = (id, state, extra = {}) => ({ id, agent: "claude", state, ...extra });
 
@@ -34,7 +34,7 @@ test("only the most important sound plays when several things happen at once", (
 });
 
 test("wake stays quiet when another sound just played; sounds respect cooldowns and volume 0", () => {
-  const { SoundPlayer } = require("../src/renderer/shared/sounds");
+  const { SoundPlayer } = require("../src/ui/lib/sounds");
   const played = [];
   global.Audio = class {
     constructor(src) {
@@ -63,7 +63,7 @@ test("wake stays quiet when another sound just played; sounds respect cooldowns 
 });
 
 test("per-sound toggles override the pack's defaults", () => {
-  const { SoundPlayer } = require("../src/renderer/shared/sounds");
+  const { SoundPlayer } = require("../src/ui/lib/sounds");
   const played = [];
   global.Audio = class {
     constructor(src) {

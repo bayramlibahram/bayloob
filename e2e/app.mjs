@@ -1,6 +1,6 @@
 import { _electron as electron } from "@playwright/test";
 
-/** The built app in demo mode; `env` adds to the environment (e.g. BAYLOOB_REACT). */
+/** The built app in demo mode; `env` adds to the environment. */
 export async function launch(env = {}) {
   return electron.launch({
     args: [".", "--demo", "--no-sandbox"],

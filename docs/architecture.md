@@ -14,7 +14,7 @@ except through the channels named here.
 |---|---|---|
 | Main (Node) | `src/main/` | IPC handlers registered in `BayloobApp` |
 | Preload | `src/preload/<page>.js` | one `contextBridge` API per page (`bayloobAPI`, `panelAPI`, …) |
-| Renderer | `src/renderer/<page>/index.html` | only the API its preload exposes; no Node, no `require` |
+| Renderer | `src/ui/<page>/index.html` | only the API its preload exposes; no Node, no `require` |
 | Hooks | `resources/hooks/` | HTTP to `127.0.0.1:7777` (`/ev`, `/perm`) |
 | GNOME Shell extension | `gnome-extension/` | D-Bus on the session bus (`com.baynovix.Bayloob.Windows`) |
 
@@ -49,8 +49,8 @@ src/main/
 - Exports are named (`module.exports = { SessionStore }`), never default. The one exception is the
   GNOME extension, whose entry point GNOME Shell requires to be an `export default` class.
 - Private state and helpers use `#private` members.
-- A renderer page is a folder with an `index.html`; its script defines a view class
-  (`OverlayView`, `PanelView`, …). Code shared by pages lives in `renderer/shared/`.
+- A renderer page is a folder with an `index.html`; its React entry point renders the page component.
+  Code shared by pages lives in `src/ui/components/` and `src/ui/lib/`.
 - Every UI string of a page sits in one `T` object at the top of its script, ready for a language
   switch.
 
@@ -111,7 +111,7 @@ function agentPidOf(pid) { … }
 
 **A new agent** (e.g. another CLI)
 1. `modules/agents/agents.js`: binary, how it takes a first prompt, colors.
-2. `renderer/shared/ui-common.js`: the same agent in `AGENTS` (name, pack, colors).
+2. `src/ui/lib/agents.js`: the same agent in `AGENTS` (name, pack, colors).
 3. Its hook: point the agent at `resources/hooks/bayloob-hook <agent>`.
 
 **A new mascot color**

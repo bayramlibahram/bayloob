@@ -1,5 +1,5 @@
 import "../../assets/packs/meta.js";
-import "../../renderer/shared/novi.js";
+import "../lib/novi.js";
 import { useEffect, useRef } from "react";
 import { gradientsOf, packOf } from "@/lib/agents";
 import { packLayer } from "@/lib/assets";

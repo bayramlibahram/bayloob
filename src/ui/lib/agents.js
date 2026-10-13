@@ -1,5 +1,4 @@
-// The agents' palette for the React windows: names, accent colours and the Novi packs. The same table as the
-// old pages' (src/renderer/shared/ui-common.js) — test/ui-agents.test.js fails if they drift apart.
+// The agents' palette for the React windows: names, accent colours and the Novi packs.
 export const AGENTS = {
   manager: { name: "Bayloob", pack: "purple", color: "#8b5cff" },
   claude: { name: "Claude Code", pack: "coral", color: "#ff7a5c", light: "#d4512f" },

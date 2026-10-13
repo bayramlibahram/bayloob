@@ -106,9 +106,9 @@ Every transition goes to `log.jsonl` with actor `you`, `engine` or `agent`.
   the repository root, so a trusted project's worktrees are trusted.
 
 ## UI (04b, 04c)
-The Tasks page (`src/renderer/tasks/`, shown in the Workspace window's Tasks section; screenshots in `tasks/`), gate cards in the pill and the Inbox, and
+The Tasks page (`src/ui/tasks/`, shown in the Workspace window's Tasks section; screenshots in `tasks/`), gate cards in the pill and the Inbox, and
 Start in the New task dialog for Pipeline, Best-of-N and the owner's templates. The workflow builder
-(`src/renderer/tasks/builder.js`, screenshots in `builder/`) edits templates; `TemplateStore`
+(`src/ui/tasks/Builder.jsx`, screenshots in `builder/`) edits templates; `TemplateStore`
 (`src/main/modules/tasks/template-store.js`) keeps them in `<config>/Bayloob/workflows/`, and the same
 validation (`templateIssues`, per stage) runs in the builder, on save and when a task starts.
 

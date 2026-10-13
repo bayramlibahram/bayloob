@@ -100,17 +100,6 @@
       "javascript": {
         "globals": ["global"]
       }
-    },
-    {
-      "includes": ["src/renderer/**"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "noUndeclaredVariables": "off",
-            "noUnusedVariables": "off"
-          }
-        }
-      }
     }
   ],
   "css": {
