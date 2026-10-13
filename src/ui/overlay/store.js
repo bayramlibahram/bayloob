@@ -71,6 +71,7 @@ export const usePill = create((set, get) => ({
   hovering: false,
   full: false,
   more: false, // the ⋯ row
+  voiceOpen: false, // the voice prompt is open: the pill stays open
   permSince: {}, // perm id → when it appeared or was last reminded about
 
   setSessions(list) {
@@ -166,6 +167,9 @@ export const usePill = create((set, get) => ({
     if (s.full) {
       s.setFull(false);
     }
+    if (s.voiceOpen) {
+      globalThis.__closeVoice?.(); // the voice prompt closes with the list
+    }
     s.setOpen(false);
   },
 
@@ -179,7 +183,7 @@ export const usePill = create((set, get) => ({
       set({ full: false });
       setTimeout(() => {
         api?.setFull?.(false);
-        if (!get().hovering) {
+        if (!get().hovering && !get().voiceOpen) {
           set({ open: false });
         }
       }, 320);

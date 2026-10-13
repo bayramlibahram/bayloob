@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { launch, windowWith } from "./app.mjs";
 
-// The pill in React, side by side with the old page (BAYLOOB_REACT=overlay), on the demo's sessions
+// The pill (React) on the demo's sessions
 test("the pill: the bar on the demo's agents, Novi animated, and it opens on hover", async () => {
-  const app = await launch({ BAYLOOB_REACT: "overlay" });
+  const app = await launch();
   try {
     const win = await windowWith(app, "out/renderer/overlay/index.html");
     const pill = win.locator("#pill");

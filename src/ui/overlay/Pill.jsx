@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { agentColor, displayName } from "@/lib/agents";
 import { Mascot, Thumb } from "./Mascot";
 import { byPriority, COLORS, usePill } from "./store";
+import { useVoice } from "./Voice";
 
 // The pill: a bar (the manager's mascot, what the most urgent agent does, the other agents, its buttons) that
 // opens on hover into the agents' list, a card when something waits for you, the agents running and the open
@@ -70,6 +71,7 @@ export function Pill({ card = null, list = null, voice = null }) {
     n === 1 && statusOn && !s.receipts[top?.id] && "solo",
     deaf && "deaf",
     s.card() && "has-card",
+    s.voiceOpen && "voicing",
     hunger,
   ]
     .filter(Boolean)
@@ -257,6 +259,7 @@ const Svg = ({ children, className = "i" }) => (
 
 function BarButtons() {
   const s = usePill();
+  const voice = s.voiceOpen;
   const soundLabel = s.soundLocked
     ? "Sounds are turned off by BAYLOOB_SOUNDS=0"
     : s.soundOn
@@ -293,11 +296,11 @@ function BarButtons() {
       <button
         type="button"
         id="voiceBtn"
-        className="barbtn"
         title="Voice prompt · transcribed on this machine"
         aria-label="Voice prompt"
-        aria-pressed="false"
-        onClick={() => usePill.getState().openVoice?.()}
+        className={`barbtn${voice ? " on" : ""}`}
+        aria-pressed={voice}
+        onClick={() => useVoice.getState().open()}
       >
         <Svg>
           <rect className="w" x="9" y="3.5" width="6" height="11" rx="3" />
