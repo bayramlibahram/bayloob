@@ -1,11 +1,22 @@
-import { CheckIcon, ChevronLeftIcon, ClockIcon, SquareIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  HandIcon,
+  SquareIcon,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Kbd } from "@/components/ui/kbd";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { displayName } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { watchPopups } from "@/lib/window";
@@ -17,6 +28,7 @@ import {
   GATE_LABELS,
   patternOf,
   pickedFor,
+  pickSummary,
   primaryOf,
   STATUS,
   STATUS_COLOR,
@@ -27,7 +39,7 @@ import {
 } from "./model";
 import { Next } from "./Next";
 import { PANES } from "./panes";
-import { Banner, Chip, Output, Tag } from "./parts";
+import { Banner, Chip, Diff, Output, Tag } from "./parts";
 import { useTasks } from "./store";
 
 // a menu or a dialog open: Esc closes it, not the task
@@ -130,10 +142,11 @@ function Head({ t, title }) {
           {t.title}
         </h1>
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <Chip color={STATUS_COLOR[t.status]} live={t.status === "running"}>
+            {STATUS[t.status]}
+          </Chip>
+          <Tag title={CATEGORY[t.category] || t.category}>{patternOf(t)}</Tag>
           <Tag>{t.project.name}</Tag>
-          <Chip color="var(--cat-workflow)">{CATEGORY[t.category] || t.category}</Chip>
-          <Tag>{patternOf(t)}</Tag>
-          <Chip color={STATUS_COLOR[t.status]}>{STATUS[t.status]}</Chip>
           <span className="inline-flex items-center gap-1">
             <ClockIcon className="size-3" />
             <span className="tabular-nums">{elapsed(t)}</span>
@@ -162,6 +175,7 @@ function Head({ t, title }) {
           <span className="flex gap-2">
             {stageStoppable(t) && (
               <Button
+                size="sm"
                 variant="outline"
                 onClick={() => s.compose({ gate: null, action: "stop-stage" })}
               >
@@ -169,7 +183,12 @@ function Head({ t, title }) {
                 Stop stage
               </Button>
             )}
-            <Button variant="destructive" onClick={() => s.compose({ gate: null, action: "stop" })}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              onClick={() => s.compose({ gate: null, action: "stop" })}
+            >
               <SquareIcon data-icon="inline-start" />
               Stop task
             </Button>
@@ -179,42 +198,84 @@ function Head({ t, title }) {
   );
 }
 
+/**
+ * The stages in order: a step each (done ✓, running, waiting on you !, failed ×), the line to it coloured once
+ * the stage before is done, what each did under its name (the whole of it on hover), and where the task is now.
+ */
 function StageBar({ t }) {
   const live = t.status === "running" || t.status === "needs-you";
   return (
-    <nav aria-label="Stages" className="flex shrink-0 items-center overflow-x-auto px-5 pb-3">
+    <nav aria-label="Stages" className="flex shrink-0 items-start overflow-x-auto px-5 pb-3">
       {t.template.stages.map((st, i) => {
         const look = STEP_LOOK[t.stages[i].status] || "";
+        const before = i > 0 && STEP_LOOK[t.stages[i - 1].status] === "done";
+        const now = i === t.stage && live;
+        const note = stageNote(t, st, t.stages[i]);
         return (
-          <div key={st.id} className="flex items-center">
-            {i > 0 && <span className="mx-2 h-px w-5 bg-input" />}
-            <div
-              aria-current={i === t.stage && live ? "step" : undefined}
-              className={cn(
-                "flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground",
-                (look === "run" || look === "wait") && "font-semibold text-foreground"
-              )}
-            >
+          <div key={st.id} className="flex items-start">
+            {i > 0 && (
               <span
-                className={cn(
-                  "grid size-4.5 place-items-center rounded-full border text-[10px] font-bold",
-                  look === "done" && "border-done bg-done/15 text-done",
-                  look === "run" && "animate-pulse border-thinking bg-thinking/15",
-                  look === "wait" && "border-waiting bg-waiting text-white",
-                  look === "fail" && "border-waiting text-waiting"
-                )}
-              >
-                {look === "done" ? (
-                  <CheckIcon className="size-2.5" />
-                ) : look === "wait" ? (
-                  "!"
-                ) : look === "fail" ? (
-                  "×"
-                ) : null}
-              </span>
-              {st.title}
-              <small className="text-muted-foreground">{stageNote(t, st, t.stages[i])}</small>
-            </div>
+                aria-hidden="true"
+                className={cn("mx-2 mt-3 h-0.5 w-8 rounded-full bg-border", before && "bg-done/60")}
+              />
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  aria-current={now ? "step" : undefined}
+                  className={cn(
+                    "flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] whitespace-nowrap text-muted-foreground",
+                    now && "bg-muted text-foreground"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "mt-px grid size-6 shrink-0 place-items-center rounded-full border-2 text-xs font-bold",
+                      look === "done" && "border-done bg-done text-white",
+                      look === "run" &&
+                        "animate-pulse border-thinking bg-thinking/15 text-thinking",
+                      look === "wait" && "border-waiting bg-waiting text-white",
+                      look === "fail" && "border-waiting text-waiting"
+                    )}
+                  >
+                    {look === "done" ? (
+                      <CheckIcon className="size-3.5" />
+                    ) : look === "wait" ? (
+                      "!"
+                    ) : look === "fail" ? (
+                      "×"
+                    ) : (
+                      i + 1
+                    )}
+                  </span>
+                  <span className="flex flex-col leading-tight">
+                    <span
+                      className={cn(
+                        "font-medium",
+                        (look === "run" || look === "wait") && "font-semibold text-foreground"
+                      )}
+                    >
+                      {st.title}
+                    </span>
+                    {note && <small className="max-w-40 truncate text-[11.5px]">{note}</small>}
+                  </span>
+                  {now && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "mt-0.5",
+                        t.status === "needs-you"
+                          ? "border-waiting/50 text-waiting"
+                          : "border-thinking/50 text-thinking"
+                      )}
+                    >
+                      {t.status === "needs-you" ? "Needs you" : "Now"}
+                    </Badge>
+                  )}
+                </div>
+              </TooltipTrigger>
+              {note && <TooltipContent>{`${st.title}: ${note}`}</TooltipContent>}
+            </Tooltip>
           </div>
         );
       })}
@@ -299,60 +360,102 @@ function Actions({ t }) {
   const picked = pickedFor(t, s.picked[t.id]);
   const hint =
     (g.kind === "merge" && t.base.fromWorktree ? GATE_HINT.apply : GATE_HINT[g.kind]) || "";
+  // the candidate it's about: the one to merge, the one picked, or the Arbiter's
+  const about = pickSummary(t, g.kind === "merge" ? t.winner : picked || t.arbiter?.winner);
+  const button = a => {
+    const main = a === primary;
+    const isPick = a === "pick";
+    const text =
+      a === "merge"
+        ? t.base.fromWorktree
+          ? "Apply to my files"
+          : `Merge into ${t.base.branch}`
+        : isPick && picked
+          ? `${labels.pick} ${picked}`
+          : labels[a] || a;
+    return (
+      <Button
+        key={a}
+        data-decide={a}
+        data-primary={main || undefined}
+        variant={main ? "default" : a === "abort" ? "ghost" : "outline"}
+        className={cn(a === "abort" && "text-destructive hover:text-destructive")}
+        disabled={isPick && !picked}
+        title={
+          isPick && !picked ? "Choose a candidate first (Decision or Candidates tab)" : undefined
+        }
+        onKeyDown={guardBare(a)}
+        onKeyUp={guardBare(a)}
+        onClick={() => s.press(a)}
+      >
+        {main && <CheckIcon data-icon="inline-start" />}
+        {text}
+        {(main || isPick) && (
+          <Kbd className={cn(main && "bg-primary-foreground/20 text-primary-foreground")}>
+            {main ? "Alt A" : "Alt P"}
+          </Kbd>
+        )}
+      </Button>
+    );
+  };
+  const order = actionOrder(g);
   return (
-    <div className="flex shrink-0 items-start gap-2 border-t bg-card px-5 py-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-xs text-muted-foreground">
-        <b className="text-sm text-foreground">{g.title}</b>
-        {hint && <small>{hint}</small>}
-        {g.detail && <small>{g.detail}</small>}
-        {g.error && <small className="text-destructive">{g.error}</small>}
-        {g.hint && (
-          <small>
-            <b className="text-foreground">Fix:</b> {g.hint}
-          </small>
-        )}
-        {g.screen && (
-          <details>
-            <summary className="cursor-pointer">What its screen said last</summary>
-            <Output>{g.screen}</Output>
-          </details>
-        )}
-        {g.batch && <Batch g={g} />}
-      </div>
-      {actionOrder(g).map(a => {
-        const main = a === primary;
-        const isPick = a === "pick";
-        const text =
-          a === "merge"
-            ? t.base.fromWorktree
-              ? "Apply to my files"
-              : `Merge into ${t.base.branch}`
-            : isPick && picked
-              ? `${labels.pick} ${picked}`
-              : labels[a] || a;
-        return (
-          <Button
-            key={a}
-            data-decide={a}
-            data-primary={main || undefined}
-            variant={main ? "default" : a === "abort" ? "destructive" : "outline"}
-            disabled={isPick && !picked}
-            title={
-              isPick && !picked
-                ? "Choose a candidate first (Decision or Candidates tab)"
-                : undefined
-            }
-            onKeyDown={guardBare(a)}
-            onKeyUp={guardBare(a)}
-            onClick={() => s.press(a)}
-          >
-            {main && <CheckIcon data-icon="inline-start" />}
-            {text}
-            {(main || isPick) && <Kbd>{main ? "Alt A" : "Alt P"}</Kbd>}
-          </Button>
-        );
-      })}
-    </div>
+    <section aria-label="Your decision" className="shrink-0 border-t px-5 py-3">
+      <Alert className="border-waiting/40 bg-waiting/5">
+        <HandIcon className="text-waiting" />
+        <AlertTitle className="text-[14px] font-semibold">{g.title}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-1.5">
+          {about && <About a={about} />}
+          {hint && <p>{hint}</p>}
+          {g.detail && <p>{g.detail}</p>}
+          {g.error && <p className="text-destructive">{g.error}</p>}
+          {g.hint && (
+            <p>
+              <b className="text-foreground">Fix:</b> {g.hint}
+            </p>
+          )}
+          {g.screen && (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="link" size="xs" className="px-0">
+                  <ChevronRightIcon data-icon="inline-start" />
+                  What its screen said last
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Output>{g.screen}</Output>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+          {g.batch && <Batch g={g} />}
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-1.5">
+            {order.includes("abort") && button("abort")}
+            {order.includes("abort") && order.length > 1 && (
+              <Separator orientation="vertical" className="mx-1 h-5" />
+            )}
+            {order.filter(a => a !== "abort" && a !== primary).map(button)}
+            {primary && order.includes(primary) && button(primary)}
+          </div>
+        </AlertDescription>
+      </Alert>
+    </section>
+  );
+}
+
+/** "build-1 · tests pass · +2 −0 · 9/10 · 0.90 sure" — the candidate a decision is about. */
+function About({ a }) {
+  return (
+    <span className="flex flex-wrap items-center gap-1.5 text-[13px] text-foreground">
+      <code className="font-mono font-semibold">{a.id}</code>
+      {a.tests !== null && (
+        <Chip color={a.tests ? "var(--done)" : "var(--waiting)"}>
+          {a.tests ? "tests pass" : "tests fail"}
+        </Chip>
+      )}
+      {a.diff && <Diff diff={a.diff} />}
+      {a.score !== null && <Badge variant="outline">score {a.score}</Badge>}
+      {a.confidence !== null && <Badge variant="outline">{a.confidence.toFixed(2)} sure</Badge>}
+    </span>
   );
 }
 

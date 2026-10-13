@@ -346,3 +346,14 @@ test("a task applied to your files offers no push; a running one has no 'what ne
   act(() => api.task({ ...pipe, status: "running", endedAt: null }));
   expect(screen.queryByRole("region", { name: "What next" })).toBeNull();
 });
+
+test("findings are counted in a review (path:line) and in an analysis (severity first)", async () => {
+  const { findingsIn, pickSummary } = await import("./model");
+  expect(findingsIn("- src/cart.js:12 — off by one\nsrc/a.js:3 — x\nNo more")).toBe(2);
+  expect(findingsIn("high — logs/app.log:2 — the db pool ran out\nlow — a typo")).toBe(2);
+  expect(findingsIn("No findings")).toBe(0);
+  const pipe = byPattern(demo(), "pipeline");
+  const about = pickSummary(pipe, pipe.candidates[0].id);
+  expect(about).toMatchObject({ id: pipe.candidates[0].id, tests: true });
+  expect(pickSummary(pipe, "nope")).toBeNull();
+});

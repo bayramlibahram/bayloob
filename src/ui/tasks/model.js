@@ -132,8 +132,15 @@ export function instName(id) {
 }
 
 /** How many findings a review lists (lines that start with file:line). */
+/**
+ * How many findings an answer lists: lines that start with `path:line` (a review) or with a severity, then
+ * the place (an analysis: "high — logs/app.log:2 — the db pool ran out").
+ */
 export const findingsIn = text =>
-  (String(text || "").match(/^\s*[-*]?\s*`?[\w./-]+:\d+/gm) || []).length;
+  (
+    String(text || "").match(/^\s*[-*]?\s*(?:(?:critical|high|medium|low)\b|`?[\w./-]+:\d+)/gim) ||
+    []
+  ).length;
 
 /** The winner's change, or the largest one. */
 export function bestDiff(t) {
@@ -435,4 +442,23 @@ export function logText(e) {
     return `You: ${e.event.slice(5)}${e.candidate ? ` ${e.candidate}` : ""}${e.note ? ` — “${e.note}”` : ""}`;
   }
   return e.event;
+}
+
+/**
+ * The candidate a gate is about, in one line's parts: its tests, its change, the Arbiter's score and how sure
+ * it was. → { id, tests: true | false | null, diff, score, confidence } | null
+ */
+export function pickSummary(t, id) {
+  const c = id && t.candidates.find(x => x.id === id);
+  if (!c) {
+    return null;
+  }
+  const r = t.arbiter?.ranking?.find(x => x.candidate === id);
+  return {
+    id,
+    tests: c.tests ? !!c.tests.ok : null,
+    diff: c.diff || null,
+    score: r?.score ?? null,
+    confidence: t.arbiter?.confidence ?? null,
+  };
 }

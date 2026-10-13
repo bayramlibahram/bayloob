@@ -4,6 +4,7 @@ import { Novi } from "@/components/novi";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { displayName } from "@/lib/agents";
 import { cn } from "@/lib/utils";
 import { Board } from "./Board";
@@ -27,31 +28,33 @@ export function App() {
 
   const detail = s.view === "detail" && s.tasks[s.open];
   return (
-    <div
-      className={cn(
-        "grid h-full grid-rows-[52px_minmax(0,1fr)] bg-background",
-        s.embedded && "grid-rows-[46px_minmax(0,1fr)]"
-      )}
-    >
-      <Header />
-      <main className="flex min-h-0 flex-col">
-        {!s.ready ? (
-          <Loading />
-        ) : detail ? (
-          <Detail />
-        ) : s.view === "builder" && s.edit ? (
-          <Builder />
-        ) : s.view === "templates" ? (
-          <Templates />
-        ) : (
-          <Board />
+    <TooltipProvider delayDuration={400}>
+      <div
+        className={cn(
+          "grid h-full grid-rows-[52px_minmax(0,1fr)] bg-background",
+          s.embedded && "grid-rows-[46px_minmax(0,1fr)]"
         )}
-      </main>
-      <p role="status" aria-live="polite" className="sr-only">
-        {s.said}
-      </p>
-      <Toaster position="bottom-center" />
-    </div>
+      >
+        <Header />
+        <main className="flex min-h-0 flex-col">
+          {!s.ready ? (
+            <Loading />
+          ) : detail ? (
+            <Detail />
+          ) : s.view === "builder" && s.edit ? (
+            <Builder />
+          ) : s.view === "templates" ? (
+            <Templates />
+          ) : (
+            <Board />
+          )}
+        </main>
+        <p role="status" aria-live="polite" className="sr-only">
+          {s.said}
+        </p>
+        <Toaster position="bottom-center" />
+      </div>
+    </TooltipProvider>
   );
 }
 
