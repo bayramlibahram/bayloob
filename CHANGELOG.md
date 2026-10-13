@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.14.0 — 2026-10-13
+
+### Added
+- **What next, after a task** (Tasks → the task, under it): **push** what it merged (where and how many commits
+  asked first, never forced), **run the project's tests**, a **follow-up** — to the task's agent or as a new task
+  like it, either way knowing what the task was asked and did — and **Run again** (the same task as a new draft).
+- On the project, from there: **the change** it made (stat and patch), a **terminal** in the project, the
+  project's **dev command** in one, and a **pull request** for a branch it kept but didn't merge (pushed, then
+  GitHub's or GitLab's page opens).
+- **The pill keeps a task that just ended** for half an hour: what it did, Push, Again, open it, or hide it.
+
+### Changed
+- **A discussion reads as a chat**: each agent's turn a message with its face, its stance and its confidence;
+  rounds as separators; your turns on the right; it follows the newest and jumps back to it.
+- **A task's page, reworked**: one status in the header; bigger stage steps with their state, what each did and
+  where the task is now; the decision as one panel with the candidate it's about (tests, change, the Arbiter's
+  score and how sure it was), Abort set apart.
+- Candidates as cards or side by side (**Compare**); the Arbiter's answer opens when it wasn't sure; a failed
+  test run opens, a passing one stays folded; every folded section looks and works the same.
+- **The log** is grouped by stage, with filters (your decisions, the agents, problems); the board shows how far
+  an open task is; the timeline stripes the time a task waited on you.
+
+### Fixed
+- An analysis's findings ("high — file:line — …") were counted as none on the analysts' cards.
+
 ## 0.13.0 — 2026-10-13
 
 ### Changed
