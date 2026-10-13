@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.13.0 — 2026-10-13
+
+### Changed
+- **Every window is React now.** The last two moved: the **Workspace** (the popup and the window — Home, the
+  lists, an agent's console and prompt box, the Inbox's cards, Ask Bayloob) and the **pill** (the bar, Novi,
+  the cards, the agents' list, the voice prompt). They look and behave as before: the pill was checked pixel
+  for pixel against the old one.
+- **Ctrl+K** in the Workspace: go to a section or an agent, or run an action (Ask Bayloob, New task, Launch
+  app, the agent's terminal or folder, Settings).
+- A clicked button keeps no focus ring in any window; the keyboard brings the rings back.
+
+### Fixed
+- The pill's sounds didn't play (the page's security policy refused them).
+- In the Workspace, Allow could stay locked on a short command until something else changed on screen.
+
 ## 0.12.0 — 2026-10-13
 
 0.11.0 was never published on its own: this release carries it too (below).
