@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.12.0 — 2026-10-13
+
+0.11.0 was never published on its own: this release carries it too (below).
+
+### Added
+- **Grok** (xAI's Grok CLI) as an agent: start it from New task or Ask Bayloob, continue a conversation in tmux,
+  and use it in workflows and as a ⚔ challenger. Read-only runs use Grok's own kernel sandbox. Nothing to set
+  up: Grok runs Claude Code's hooks, and Bayloob tells its sessions apart. (It has no console yet — its activity
+  shows instead — and approvals stay in its terminal.)
+- **Built-in response formats can be changed** (Settings → General → Formats): an edited one is marked •, and
+  Reset to default brings it back.
+
+### Changed
+- **The windows move to React** (the same look, sturdier underneath): Settings, New task, the Launcher and Tasks —
+  the board, a task's detail, the discussion, the runbook, the templates and the workflow builder. The Workspace
+  follows in the next release; its React version can be tried with `BAYLOOB_REACT=panel`.
+- Settings is a bigger window (960×700) that moves by its header; the cursor starts in the launcher shortcut.
+
+### Fixed
+- In Settings, a stepper, New format, New role, Add a host or Test connection also saved and closed the window.
+- Esc on an open menu closed the whole window (Settings, New task, the Launcher, Tasks), not just the menu.
+- Hosts: an edit of the allowed commands that was cancelled came back when Settings opened again.
+- A clicked button or tab kept a keyboard focus ring (the input method sends a stray key on every focus change).
+- Roles: "Runs on" and "Permission" didn't line up with the other fields.
+
 ## 0.11.0 — 2026-10-12
 
 ### Added
