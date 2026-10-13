@@ -414,7 +414,7 @@ function FollowUp({ t }) {
             <SendIcon data-icon="inline-start" />
           )}
           Send to {displayName(agent)}
-          <Kbd>Ctrl ⏎</Kbd>
+          <Kbd className="bg-primary-foreground/20 text-primary-foreground">Ctrl ⏎</Kbd>
         </Button>
       </div>
     </div>
