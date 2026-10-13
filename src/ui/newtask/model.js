@@ -23,7 +23,7 @@ export const ORCHESTRATOR_DEFAULT = { writers: true, workers: 6, turns: 8, minut
 export const CATS = {
   single: {
     title: "Single agent",
-    desc: "One agent, one prompt — what Ask Bayloob does today.",
+    desc: "One agent, one prompt — the same as Ask Bayloob.",
     safe: "Normal permissions — you approve in the pill",
   },
   workflow: {

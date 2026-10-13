@@ -82,6 +82,16 @@ test("opens on the last project; a typed path picks a folder and reads its git s
   expect(api.project).toHaveBeenCalledWith("/home/u/work/blog");
 });
 
+test("does not show the empty-recents hint after a project is picked", async () => {
+  await open(shown({ recent: [] }));
+  expect(screen.getByText("No recent projects — choose a folder")).toBeTruthy();
+  const search = screen.getByLabelText("Search recent projects, or type a folder path");
+  fireEvent.change(search, { target: { value: "/home/u/new" } });
+  fireEvent.keyDown(search, { key: "Enter" });
+  expect(screen.queryByText("No recent projects — choose a folder")).toBeNull();
+  expect(screen.getByText("new")).toBeTruthy();
+});
+
 test("single agent: a role picks its engine; Start sends the prompt with its pasted text", async () => {
   await open();
   await act(async () => useNewTask.getState().go(3));
@@ -116,6 +126,30 @@ test("an agent that isn't installed can't be picked; the category keys pick, Ent
   // no task text yet: Next says why instead of going on
   await act(async () => useNewTask.getState().next());
   expect(screen.getByRole("status").textContent).toMatch(/describe|task/i);
+});
+
+test("a workflow puts the task before its agents and explains the selected pattern", async () => {
+  await open();
+  await act(async () => {
+    useNewTask.getState().setCategory("workflow");
+    useNewTask.getState().go(3);
+  });
+  expect(screen.getByRole("group", { name: "Build a change" })).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Review or decide" })).toBeTruthy();
+  expect(screen.getByRole("group", { name: "A team" })).toBeTruthy();
+  const task = screen.getByLabelText("Task");
+  const planner = screen.getByLabelText("Planner");
+  expect(task.compareDocumentPosition(planner) & 4).toBeTruthy();
+  expect(
+    screen.getByText("When the change is risky or open-ended — several tries, you keep the best.")
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Pipeline/ }));
+  expect(
+    screen.getByText("When the work has clear stages — plan, build, test, then review.")
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("When the change is risky or open-ended — several tries, you keep the best.")
+  ).toBeNull();
 });
 
 test("a workflow is saved as a draft as it changes, and Start sends it with its base", async () => {
