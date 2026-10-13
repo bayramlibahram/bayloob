@@ -13,6 +13,9 @@ const TEXT_SYSTEM =
   "change anything. Everything you need is in the message — answer from it, in the format it asks for.";
 
 const TRUST = /\btrust\b/i;
+// Grok's trust screen has no cursor and no Enter hint, so it isn't a menu to parseMenu: its options are
+// hotkeys ("Yes, proceed  y" / "No, quit  n"; grok 1.0.52) and "y" answers it
+const GROK_TRUST = /do you trust the contents of this directory\?[\s\S]*\byes, proceed\s+y\b/i;
 // An agent that isn't signed in waits on its login screen forever: Gemini's "How would you like to authenticate",
 // Claude Code's "Select login method", a "Failed to sign in" — the task is told, never left waiting
 const SIGN_IN =
@@ -184,6 +187,12 @@ class TaskRunner {
         const from = Math.max(0, lines.findIndex(l => SIGN_IN.test(l)) - 2);
         this.onSignIn(taskId, pane, lines.slice(from, from + SCREEN_LINES).join("\n"));
         return;
+      }
+      if (!trusted && GROK_TRUST.test(screen)) {
+        trusted = true;
+        await this.sendKey(pane, "y");
+        this.onTrust(taskId, pane, "Do you trust the contents of this directory?");
+        continue;
       }
       const menu = trusted ? null : parseMenu(screen);
       if (!menu || !TRUST.test(`${menu.question} ${menu.options.join(" ")}`)) {

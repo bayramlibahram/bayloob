@@ -40,6 +40,15 @@ const CODEX_162_TRUST = `  Folder access
 
   enter continue · esc back
 `;
+const GROK_TRUST = `                 Do you trust the contents of this directory?
+                 /w/shop
+
+        Grok Build may run or modify contents in this directory,
+                       posing security risks.
+
+                   Yes, proceed                 y
+                   No, quit                     n
+`;
 const UPDATE = `  ✨ Update available! 0.154.0 -> 0.162.1
 
 › 1. Update now
@@ -165,6 +174,21 @@ test("Codex 0.162's new trust screen is answered too", async () => {
   });
   await settle();
   assert.deepEqual(calls.keys, ["%7:Enter"]);
+  assert.deepEqual(calls.trusted, ["t1:%7"]);
+});
+
+test("Grok's trust screen (hotkeys, no cursor) is answered with y, once", async () => {
+  const { runner, calls } = make(["", GROK_TRUST, GROK_TRUST, ""]);
+  await runner.launch({
+    adapter: "grok",
+    cwd: "/w/b1",
+    prompt: "x",
+    mode: "writes",
+    role: "builder",
+    taskId: "t1",
+  });
+  await settle();
+  assert.deepEqual(calls.keys, ["%7:y"]);
   assert.deepEqual(calls.trusted, ["t1:%7"]);
 });
 
