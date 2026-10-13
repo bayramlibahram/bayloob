@@ -1,9 +1,26 @@
 import { CheckIcon, PinIcon, SearchIcon, XIcon } from "lucide-react";
 import { Fragment } from "react";
 import { Markdown } from "@/components/markdown";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
+import { Marker, MarkerContent } from "@/components/ui/marker";
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+  MessageFooter,
+  MessageHeader,
+} from "@/components/ui/message";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
 import {
   Select,
   SelectContent,
@@ -138,7 +155,8 @@ export function Discussion({ t }) {
   return (
     <div
       className={cn(
-        "grid min-h-0 grid-cols-[13rem_minmax(0,1fr)_19rem] gap-4",
+        // the thread scrolls on its own (a chat); the people and the summary each scroll beside it
+        "grid h-full min-h-0 grid-cols-[13rem_minmax(0,1fr)_19rem] gap-4 *:min-h-0 *:overflow-y-auto",
         s.discussionMode && "grid-cols-[15rem_minmax(0,1fr)_22.5rem]"
       )}
     >
@@ -278,6 +296,11 @@ function View(ctx) {
   return <Thread {...ctx} />;
 }
 
+/**
+ * The thread as a chat: a marker for each round (with how far they agree), each agent's turn on the left with
+ * its Novi, name, stance and confidence, yours on the right; the one speaking now shimmers "Thinking…". It
+ * follows new turns unless you scrolled up (then "jump to latest").
+ */
 function Thread({ d, rounds, name, adapter, color, live, open }) {
   const s = useTasks();
   const q = s.disc.q.trim().toLowerCase();
@@ -287,91 +310,121 @@ function Thread({ d, rounds, name, adapter, color, live, open }) {
   const byRound = [...new Set(shown.map(m => m.round))].sort((a, b) => a - b);
   const thinking = [...live].filter(([, st]) => LIVE.has(st)).map(([id]) => id);
   return (
-    <div
-      role="feed"
-      aria-busy={live.size > 0}
-      aria-label="Discussion thread"
-      className="flex flex-col gap-2.5"
-    >
-      {byRound.map(r => (
-        <div key={r} className="flex flex-col gap-2.5">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <b className="text-foreground">{roundName(r, rounds)}</b>
-            {r === d.round && <small>{agreeText(d.agreement)}</small>}
-            <hr className="flex-1 border-border" />
-          </div>
-          {shown
-            .filter(m => m.round === r)
-            .map(m => (
-              <Message
-                key={m.id}
-                m={m}
-                rounds={rounds}
-                name={name}
-                adapter={adapter}
-                color={color}
-                open={open}
-              />
-            ))}
-        </div>
-      ))}
-      {thinking.map(id => (
-        <article
-          key={id}
-          aria-label={`${id === "decider" ? "Decision" : name(id)} is thinking`}
-          className="flex items-center gap-2 rounded-xl border-l-3 bg-card px-3 py-2 text-[13px] text-muted-foreground"
-          style={{ borderColor: id === "decider" ? "var(--brand)" : color(id) }}
+    <MessageScrollerProvider autoScroll>
+      <MessageScroller className="min-h-48 flex-1 rounded-xl border bg-card/40">
+        <MessageScrollerViewport
+          role="feed"
+          aria-busy={live.size > 0}
+          aria-label="Discussion thread"
         >
-          {id !== "decider" && <Face agent={adapter(id)} />}
-          {id === "decider" ? "Decision" : name(id)} is thinking
-          <span className="flex gap-0.5" aria-hidden="true">
-            {[0, 1, 2].map(k => (
-              <i
-                key={k}
-                className="size-1 animate-pulse rounded-full bg-current"
-                style={{ animationDelay: `${k * 150}ms` }}
-              />
+          <MessageScrollerContent className="flex flex-col gap-4 p-4">
+            {byRound.map(r => (
+              <MessageScrollerItem key={`round-${r}`} messageId={`round-${r}`}>
+                <div className="flex flex-col gap-4">
+                  <Marker variant="separator">
+                    <MarkerContent>
+                      <b className="text-foreground">{roundName(r, rounds)}</b>
+                      {r === d.round && ` · ${agreeText(d.agreement)}`}
+                    </MarkerContent>
+                  </Marker>
+                  {shown
+                    .filter(m => m.round === r)
+                    .map(m => (
+                      <Turn
+                        key={m.id}
+                        m={m}
+                        rounds={rounds}
+                        name={name}
+                        adapter={adapter}
+                        color={color}
+                        open={open}
+                      />
+                    ))}
+                </div>
+              </MessageScrollerItem>
             ))}
-          </span>
-        </article>
-      ))}
-    </div>
+            {thinking.map(id => (
+              <MessageScrollerItem key={`thinking-${id}`} messageId={`thinking-${id}`}>
+                <Message
+                  role="article"
+                  align="start"
+                  aria-label={`${id === "decider" ? "Decision" : name(id)} is thinking`}
+                >
+                  <MessageAvatar>
+                    <Face agent={id === "decider" ? "manager" : adapter(id)} className="size-8" />
+                  </MessageAvatar>
+                  <MessageContent>
+                    <MessageHeader>
+                      <span style={{ color: id === "decider" ? "var(--brand)" : color(id) }}>
+                        {id === "decider" ? "Decision" : name(id)}
+                      </span>
+                    </MessageHeader>
+                    <Bubble variant="ghost">
+                      <BubbleContent>
+                        <span className="shimmer text-muted-foreground">Thinking…</span>
+                      </BubbleContent>
+                    </Bubble>
+                  </MessageContent>
+                </Message>
+              </MessageScrollerItem>
+            ))}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton />
+      </MessageScroller>
+    </MessageScrollerProvider>
   );
 }
 
-function Message({ m, rounds, name, adapter, color, open }) {
+/** One turn: who (their Novi and name, in their colour), to whom, when, its stance; what they said. */
+function Turn({ m, rounds, name, adapter, color, open }) {
   const s = useTasks();
   const you = m.from === "you";
   const label = `${name(m.from)}, ${roundName(m.round, rounds)}${m.reply ? `, ${STANCE[m.reply.stance]}` : ""}`;
   return (
-    <article
-      id={`dm-${m.id}`}
-      aria-label={label}
-      className={cn(
-        "flex flex-col gap-2 rounded-xl border border-l-3 bg-card px-3.5 py-2.5",
-        you && "bg-brand/6"
-      )}
-      style={{ borderLeftColor: color(m.from) }}
-    >
-      <header className="flex flex-wrap items-center gap-2 text-[13px]">
-        <Face agent={you ? "manager" : adapter(m.from)} />
-        <b>{name(m.from)}</b>
-        {m.to && <small className="text-muted-foreground">→ {name(m.to)}</small>}
-        <small className="text-muted-foreground">{clockTime(m.at)}</small>
-        <span className="ml-auto flex items-center gap-1.5">
+    <Message id={`dm-${m.id}`} role="article" align={you ? "end" : "start"} aria-label={label}>
+      <MessageAvatar>
+        <Face agent={you ? "manager" : adapter(m.from)} className="size-8" />
+      </MessageAvatar>
+      <MessageContent>
+        <MessageHeader className="flex-wrap gap-x-2 gap-y-1">
+          <span className="font-semibold" style={{ color: color(m.from) }}>
+            {name(m.from)}
+          </span>
+          {m.to && <span>→ {name(m.to)}</span>}
+          <span className="font-normal tabular-nums">{clockTime(m.at)}</span>
           {m.pinned && <Stance kind="pinned">Pinned</Stance>}
           {m.changed && <Stance kind="changed">Changed stance</Stance>}
           {m.reply ? (
             <>
               <Stance kind={m.reply.stance}>{STANCE[m.reply.stance]}</Stance>
-              <small className="text-muted-foreground tabular-nums">
-                {m.reply.confidence.toFixed(2)}
-              </small>
+              <span className="font-normal tabular-nums">{m.reply.confidence.toFixed(2)}</span>
             </>
           ) : (
             m.unstructured && <Stance kind="unstructured">Unstructured</Stance>
           )}
-          {open && (
+        </MessageHeader>
+        <Bubble variant={you ? "tinted" : "muted"} align={you ? "end" : "start"}>
+          <BubbleContent className="flex flex-col gap-2.5">
+            {m.reply ? (
+              <>
+                <Part title="Position" text={m.reply.position} />
+                {m.reply.responses && <Part title="Responses" text={m.reply.responses} />}
+                {m.reply.proposal && <Part title="Proposal" text={m.reply.proposal} />}
+              </>
+            ) : (
+              <Markdown text={m.text} />
+            )}
+          </BubbleContent>
+        </Bubble>
+        {open && (
+          // the pin shows on hover or focus (on every turn it would only be noise)
+          <MessageFooter
+            className={cn(
+              "opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100",
+              m.pinned && "opacity-100"
+            )}
+          >
             <Button
               size="xs"
               variant="ghost"
@@ -381,19 +434,10 @@ function Message({ m, rounds, name, adapter, color, open }) {
               <PinIcon data-icon="inline-start" />
               {m.pinned ? "Unpin" : "Pin"}
             </Button>
-          )}
-        </span>
-      </header>
-      {m.reply ? (
-        <>
-          <Part title="Position" text={m.reply.position} />
-          {m.reply.responses && <Part title="Responses" text={m.reply.responses} />}
-          {m.reply.proposal && <Part title="Proposal" text={m.reply.proposal} />}
-        </>
-      ) : (
-        <Markdown text={m.text} />
-      )}
-    </article>
+          </MessageFooter>
+        )}
+      </MessageContent>
+    </Message>
   );
 }
 
