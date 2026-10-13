@@ -19,6 +19,7 @@
 //               integrate({ root, taskId, sha, candidate, branches }) → { ok, dir, branch, head, error?, conflicts? },
 //               reviewRange({ root, sha, head, fromWorktree }) → { from, to, label },
 //               diff(root, sha, branch) → text,
+//               pushInfo({ root, branch }) → { ok, remote, upstream, ahead }, push({ root, branch }) → { ok, error? },
 //               collect({ root, dir, sources, audit }) → { logs: { markdown, results } | null, audit: { markdown, ran } | null } }
 // Nothing destructive or outward-facing happens without decide() from the human: merging is a gate action,
 // worktrees and branches are never deleted here.
@@ -640,6 +641,64 @@ class TaskEngine extends EventEmitter {
   }
 
   /** Stops a task: queued instances are dropped, its sessions stopped; worktrees and branches stay. */
+  /**
+   * After a task: what you do with what it left (each one your click). push-info: where a push of the branch it
+   * merged into would go, and how many commits; push: that push (never forced); tests: the project's own test
+   * command on your project, as it is now. → { ok, … } | { ok: false, error }
+   */
+  async after(taskId, action) {
+    const task = this.#tasks.get(taskId);
+    if (task?.status !== "done") {
+      return { ok: false, error: "Only a finished task can do that" };
+    }
+    const root = task.project.root;
+    if (action === "push-info" || action === "push") {
+      const m = task.merged;
+      if (!m || m.applied) {
+        return {
+          ok: false,
+          error: m
+            ? "Its change went into your files, not a commit: commit it first, then push"
+            : "Nothing was merged",
+        };
+      }
+      if (action === "push-info") {
+        return this.workspace.pushInfo({ root, branch: m.into });
+      }
+      const r = await this.workspace
+        .push({ root, branch: m.into })
+        .catch(e => ({ ok: false, error: e.message }));
+      task.after = {
+        ...task.after,
+        push: { ok: r.ok, error: r.error || null, remote: r.remote || null, at: this.now() },
+      };
+      this.#log(task, "you", r.ok ? "pushed" : "push-failed", {
+        branch: m.into,
+        remote: r.remote || null,
+        error: r.error || null,
+      });
+      this.#save(task);
+      return r;
+    }
+    if (action === "tests") {
+      if (!task.testCommand) {
+        return { ok: false, error: "This project has no test command Bayloob knows" };
+      }
+      const r = await this.workspace
+        .runTests(root, task.testCommand)
+        .catch(e => ({ ok: false, code: null, output: e.message }));
+      this.store.writeArtifact(task.id, "after-tests.txt", r.output || "");
+      task.after = { ...task.after, tests: { ok: !!r.ok, code: r.code ?? null, at: this.now() } };
+      this.#log(task, "you", r.ok ? "tests-passed" : "tests-failed", {
+        command: task.testCommand,
+        code: r.code ?? null,
+      });
+      this.#save(task);
+      return { ok: true, passed: !!r.ok, code: r.code ?? null, output: r.output || "" };
+    }
+    return { ok: false, error: `Unknown action: ${action}` };
+  }
+
   stop(taskId) {
     const task = this.#tasks.get(taskId);
     if (!task || !OPEN.has(task.status)) {

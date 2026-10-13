@@ -68,6 +68,7 @@ const { reportMarkdown } = require("../modules/tasks/arbiter");
 const { OpsRunner } = require("../modules/tasks/ops-runner");
 const { OpsMemory } = require("../modules/tasks/ops-memory");
 const { normalizeHost } = require("../modules/tasks/runbook");
+const { followUpAgent, followUpPrompt, rerunConfig } = require("../modules/tasks/follow-up");
 const { parseSource } = require("../modules/tasks/log-sources");
 const { sshAliases } = require("../infrastructure/system/ssh-config");
 const { TaskRunner } = require("../modules/tasks/task-runner");
@@ -1243,6 +1244,40 @@ class BayloobApp {
     return launch;
   }
 
+  /**
+   * A finished task's follow-up: as "agent", one agent (the task's builder unless another is picked) starts in
+   * the project with the prompt; as "task", a new task like this one starts with it. → { ok, … }
+   */
+  async #followUp(id, { text = "", as = "agent", agent = null } = {}) {
+    const task = this.engine.get(id);
+    if (!task) {
+      throw new Error("That task is gone");
+    }
+    const prompt = followUpPrompt(task, text);
+    if (as === "task") {
+      const saved = this.tasks.saveDraft(
+        rerunConfig(this.tasks.get(id), prompt),
+        Object.keys(AGENTS)
+      );
+      const next = await this.engine.start(
+        saved,
+        templateFor(saved, t => this.templates.get(t), this.#roleEngine)
+      );
+      this.openTasks(next.id);
+      return { taskId: next.id };
+    }
+    const who = agent && AGENTS[agent] ? agent : followUpAgent(task);
+    await this.#launchOwn({ agent: who, cwd: task.project.cwd, prompt });
+    return { agent: who };
+  }
+
+  /** Run again: the task's configuration as a new draft; the New task dialog opens on it. */
+  async #runAgain(id) {
+    const draft = this.tasks.saveDraft(rerunConfig(this.tasks.get(id)), Object.keys(AGENTS));
+    await this.openLauncher();
+    return { draftId: draft.id };
+  }
+
   /** Types (tmux), queues (busy) or copies (other terminals) a prompt for a session — see PromptDelivery. */
   deliverPrompt(s, text) {
     return this.delivery.deliver(s, text);
@@ -1614,6 +1649,14 @@ class BayloobApp {
           () => ({ ok: true }),
           e => ({ ok: false, error: e.message })
         );
+    // the same, keeping what it returned: { ok: true, ...value }, or the value itself when it says ok itself
+    const reply = fn =>
+      Promise.resolve()
+        .then(fn)
+        .then(
+          v => (v && typeof v.ok === "boolean" ? v : { ok: true, ...(v || {}) }),
+          e => ({ ok: false, error: e.message })
+        );
 
     // Overlay
     // The pill's cards grow and shrink: centred popups (Settings, the launcher, New task) stay clear of them
@@ -1924,6 +1967,16 @@ class BayloobApp {
         argv: Array.isArray(opts?.argv) ? opts.argv.map(String).slice(0, 200) : undefined,
       })
     );
+    // After a task (each one the owner's click): push what it merged, run the tests on the project
+    ipcMain.handle("tasks:after", (_e, id, action) =>
+      reply(() => this.engine.after(String(id), String(action)))
+    );
+    // A follow-up: the owner's next ask, with what the task did, to one agent or as a new task like it
+    ipcMain.handle("tasks:follow-up", (_e, id, opts) =>
+      reply(() => this.#followUp(String(id), opts && typeof opts === "object" ? opts : {}))
+    );
+    // Run again: the same task as a new draft, in the New task dialog to change or start
+    ipcMain.handle("tasks:run-again", (_e, id) => reply(() => this.#runAgain(String(id))));
     // Combo's offer: add a command to a host's allow patterns (never offered for prod)
     ipcMain.handle("tasks:allow-pattern", (_e, hostId, pattern) => {
       const hosts = this.settings.get("hosts");

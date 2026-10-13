@@ -314,6 +314,52 @@ class TaskWorkspace {
   }
 
   /**
+   * Where a push of `branch` would go and what it carries: its upstream (or the first remote, set as the
+   * upstream on push), and how many of its commits that remote doesn't have yet. → { ok, remote, upstream, ahead }
+   */
+  async pushInfo({ root, branch }) {
+    const upstream = (
+      (await tryRun(root, [
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        `${branch}@{u}`,
+      ])) || ""
+    ).trim();
+    const remotes = ((await tryRun(root, ["remote"])) || "").split("\n").filter(Boolean);
+    const remote = upstream
+      ? upstream.split("/")[0]
+      : remotes.includes("origin")
+        ? "origin"
+        : remotes[0];
+    if (!remote) {
+      return { ok: false, error: "This project has no remote to push to" };
+    }
+    const range = upstream ? [`${upstream}..${branch}`] : [branch, "--not", "--remotes"];
+    const ahead =
+      Number(((await tryRun(root, ["rev-list", "--count", ...range])) || "0").trim()) || 0;
+    return { ok: true, remote, upstream: upstream || null, branch, ahead };
+  }
+
+  /** `git push` of `branch` (never forced; without an upstream, it's set). → { ok, output?, error? } */
+  async push({ root, branch }) {
+    const info = await this.pushInfo({ root, branch });
+    if (!info.ok) {
+      return info;
+    }
+    const args = info.upstream
+      ? ["push", info.remote, branch]
+      : ["push", "--set-upstream", info.remote, branch];
+    try {
+      // a push asks nobody for anything: no terminal prompt for a password (it fails and says why instead)
+      const out = await run(root, args, 120_000, { ...process.env, GIT_TERMINAL_PROMPT: "0" });
+      return { ok: true, remote: info.remote, branch, ahead: info.ahead, output: out.trim() };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  /**
    * Split work: the parts' branches merged one by one into a new candidate `<candidate>` (its own worktree and
    * branch, from the base). A conflict is undone in that worktree and listed; the parts merged before it stay,
    * so a retry after the owner resolved it there goes on from where it stopped.

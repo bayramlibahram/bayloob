@@ -25,6 +25,7 @@ import {
   TAB_NAME,
   tabsOf,
 } from "./model";
+import { Next } from "./Next";
 import { PANES } from "./panes";
 import { Banner, Chip, Output, Tag } from "./parts";
 import { useTasks } from "./store";
@@ -104,6 +105,10 @@ export function Detail() {
         </div>
       </Tabs>
       {t.gate && <Actions t={t} />}
+      {/* after it ended: push, the tests, a follow-up, run it again */}
+      {!t.gate && !s.discussionMode && ["done", "failed", "stopped"].includes(t.status) && (
+        <Next t={t} />
+      )}
     </div>
   );
 }

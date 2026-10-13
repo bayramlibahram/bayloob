@@ -109,6 +109,20 @@ class FakeWorkspace {
     this.applies.push(opts);
     return Promise.resolve({ ok: true });
   }
+  pushes = [];
+  pushInfo({ branch }) {
+    return Promise.resolve({
+      ok: true,
+      remote: "origin",
+      upstream: `origin/${branch}`,
+      branch,
+      ahead: 2,
+    });
+  }
+  push(opts) {
+    this.pushes.push(opts);
+    return Promise.resolve({ ok: true, remote: "origin", branch: opts.branch, ahead: 2 });
+  }
 }
 
 function setup({ caps, roles = null } = {}) {
@@ -2104,4 +2118,53 @@ test("a stage whose role was removed runs as the plain agent (and says so in the
   const [planner] = env.runner.sessions;
   assert.doesNotMatch(planner.prompt, /^You are/);
   assert.ok(env.store.log(config.id).some(e => e.event === "role-missing"));
+});
+
+test("after a merged task: where a push would go, the push (logged), and the tests on the project", async () => {
+  const env = setup();
+  const task = await startBest(env);
+  // nothing to do while it runs
+  assert.equal((await env.engine.after(task.id, "push")).ok, false);
+  await endTurn(env, task, env.runner.sessions[0], "1. Edit cart.js");
+  await decide(env, task, "approve");
+  for (const b of env.runner.by({ role: "builder" })) {
+    await endTurn(env, task, b, "done");
+  }
+  await decide(env, task, "pick", { candidate: "build-1" });
+  await decide(env, task, "merge");
+  assert.equal(task.status, "done");
+
+  assert.deepEqual(await env.engine.after(task.id, "push-info"), {
+    ok: true,
+    remote: "origin",
+    upstream: "origin/main",
+    branch: "main",
+    ahead: 2,
+  });
+  const pushed = await env.engine.after(task.id, "push");
+  assert.equal(pushed.ok, true);
+  assert.deepEqual(env.workspace.pushes, [{ root: "/w/shop", branch: "main" }]);
+  assert.equal(task.after.push.ok, true);
+
+  const tests = await env.engine.after(task.id, "tests");
+  assert.deepEqual(tests, { ok: true, passed: true, code: 0, output: "all pass" });
+  assert.equal(env.store.readArtifact(task.id, "after-tests.txt"), "all pass");
+  const events = env.store.log(task.id).map(e => `${e.actor}:${e.event}`);
+  assert.ok(events.includes("you:pushed") && events.includes("you:tests-passed"));
+  assert.match((await env.engine.after(task.id, "nope")).error, /Unknown action/);
+});
+
+test("after a task applied to your files: no push (commit first)", async () => {
+  const env = setup();
+  const task = await startBest(env, { ...BEST, base: "worktree" });
+  await endTurn(env, task, env.runner.sessions[0], "plan");
+  await decide(env, task, "approve");
+  for (const b of env.runner.by({ role: "builder" })) {
+    await endTurn(env, task, b, "done");
+  }
+  await decide(env, task, "pick", { candidate: "build-1" });
+  await decide(env, task, "merge");
+  assert.equal(task.merged.applied, true);
+  assert.match((await env.engine.after(task.id, "push")).error, /commit it first/);
+  assert.deepEqual(env.workspace.pushes, []);
 });

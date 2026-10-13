@@ -279,3 +279,70 @@ test("an edited command goes back as argv", async () => {
   expect(parseArgv(`grep -r "a b" 'c d' e`)).toEqual(["grep", "-r", "a b", "c d", "e"]);
   expect(commandLine(["echo", "it's", "a b"])).toBe(`echo 'it'\\''s' 'a b'`);
 });
+
+// ---------- after a task: what next ----------
+
+test("a finished task: Push (asked first), the tests, a follow-up, Run again", async () => {
+  const tasks = demo();
+  const pipe = byPattern(tasks, "pipeline");
+  Object.assign(pipe, {
+    status: "done",
+    gate: null,
+    merged: { branch: `bayloob/${pipe.id}/build-1`, into: "main", applied: false, at: 1 },
+    testCommand: "npm test",
+  });
+  api.after = vi.fn(async (_id, action) =>
+    action === "push-info"
+      ? { ok: true, remote: "origin", upstream: "origin/main", branch: "main", ahead: 3 }
+      : action === "push"
+        ? { ok: true, remote: "origin", branch: "main" }
+        : { ok: true, passed: false, code: 1, output: "1 failing" }
+  );
+  api.followUp = vi.fn(async () => ({ ok: true, agent: "claude" }));
+  api.runAgain = vi.fn(async () => ({ ok: true, draftId: "d2" }));
+  await open(tasks);
+  act(() => useTasks.getState().openTask(pipe.id));
+  const next = screen.getByRole("region", { name: "What next" });
+  expect(next.textContent).toContain(`Merged bayloob/${pipe.id}/build-1 into main`);
+
+  await act(async () => fireEvent.click(within(next).getByRole("button", { name: /Push…/ })));
+  expect(within(next).getByRole("alert").textContent).toMatch(/Push main to origin — 3 commits\?/);
+  expect(api.after).toHaveBeenCalledTimes(1); // only asked where so far
+  await act(async () => fireEvent.click(within(next).getByRole("button", { name: /^Push$/ })));
+  expect(api.after).toHaveBeenLastCalledWith(pipe.id, "push");
+
+  await act(async () =>
+    fireEvent.click(within(next).getByRole("button", { name: /Run the tests/ }))
+  );
+  expect(next.textContent).toContain("1 failing"); // a failure opens its output
+
+  const box = within(next).getByRole("textbox", { name: "What should happen next" });
+  fireEvent.change(box, { target: { value: "Add a test for the edge case" } });
+  await act(async () => fireEvent.keyDown(box, { key: "Enter", ctrlKey: true }));
+  expect(api.followUp).toHaveBeenCalledWith(pipe.id, {
+    text: "Add a test for the edge case",
+    as: "agent",
+    agent: expect.any(String),
+  });
+  expect(box.value).toBe("");
+
+  await act(async () => fireEvent.click(within(next).getByRole("button", { name: /Run again/ })));
+  expect(api.runAgain).toHaveBeenCalledWith(pipe.id);
+});
+
+test("a task applied to your files offers no push; a running one has no 'what next'", async () => {
+  const tasks = demo();
+  const pipe = byPattern(tasks, "pipeline");
+  Object.assign(pipe, {
+    status: "done",
+    gate: null,
+    merged: { branch: "b", into: "your files", applied: true, at: 1 },
+  });
+  await open(tasks);
+  act(() => useTasks.getState().openTask(pipe.id));
+  const next = screen.getByRole("region", { name: "What next" });
+  expect(next.textContent).toContain("Applied to your files, uncommitted");
+  expect(within(next).queryByRole("button", { name: /Push/ })).toBeNull();
+  act(() => api.task({ ...pipe, status: "running", endedAt: null }));
+  expect(screen.queryByRole("region", { name: "What next" })).toBeNull();
+});

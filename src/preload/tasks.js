@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld("tasksAPI", {
   // Opens a terminal attached to one instance's tmux session
   terminal: (id, instanceId) => ipcRenderer.invoke("tasks:terminal", id, instanceId),
   newTask: () => ipcRenderer.send("open-launcher"),
+  // After a finished task: push-info · push · tests → { ok, … }
+  after: (id, action) => ipcRenderer.invoke("tasks:after", id, action),
+  // The owner's next ask: { text, as: "agent" | "task", agent } → { ok, agent | taskId }
+  followUp: (id, opts) => ipcRenderer.invoke("tasks:follow-up", id, opts),
+  // The same task as a new draft, in the New task dialog → { ok, draftId }
+  runAgain: id => ipcRenderer.invoke("tasks:run-again", id),
   // Workflow templates: built-ins are read-only; save → { ok, template } | { ok: false, issues }
   templates: {
     list: () => ipcRenderer.invoke("templates:list"),
