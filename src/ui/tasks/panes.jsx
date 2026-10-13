@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Markdown } from "@/components/markdown";
+import { MiniNovi } from "@/components/mini-novi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -201,7 +202,7 @@ function InstanceRow({ t, i }) {
     <TableRow>
       <TableCell>
         <span className="flex items-center gap-2">
-          <Face agent={i.adapter} />
+          <MiniNovi agent={i.adapter} state={i.status} size={24} />
           <span className="flex flex-col">
             {displayName(i.adapter)}
             <small className="font-mono text-muted-foreground">{i.id}</small>

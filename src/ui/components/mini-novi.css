@@ -1,0 +1,91 @@
+.mini-novi {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  transform-origin: 50% 88%;
+}
+
+.mini-novi__rig,
+.mini-novi__rig img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mini-novi__rig {
+  transform-origin: 50% 88%;
+  animation-play-state: paused;
+}
+
+.mini-novi__rig img {
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+.mini-novi[data-s="thinking"] .mini-novi__rig {
+  animation: mini-novi-float 2.6s ease-in-out infinite paused;
+}
+
+.mini-novi[data-s="working"] .mini-novi__rig {
+  animation: mini-novi-bob 0.45s ease-in-out infinite paused;
+}
+
+.mini-novi[data-s="waiting"] .mini-novi__rig {
+  animation: mini-novi-attention 1.8s ease-in-out infinite paused;
+}
+
+.mini-novi[data-s="done"] .mini-novi__rig {
+  animation: mini-novi-hop 0.65s cubic-bezier(0.3, 1.6, 0.5, 1) 1 both paused;
+}
+
+.mini-novi.mini-novi--active .mini-novi__rig {
+  animation-play-state: running;
+}
+
+@keyframes mini-novi-float {
+  50% {
+    transform: translateY(-3%) rotate(-1.5deg);
+  }
+}
+
+@keyframes mini-novi-bob {
+  50% {
+    transform: translateY(-2.5%) scale(0.985, 1.015);
+  }
+}
+
+@keyframes mini-novi-attention {
+  0%,
+  70%,
+  100% {
+    transform: none;
+  }
+  78% {
+    transform: scale(1.035) rotate(-2deg);
+  }
+  86% {
+    transform: scale(1.035) rotate(2deg);
+  }
+  94% {
+    transform: none;
+  }
+}
+
+@keyframes mini-novi-hop {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: translateY(-10%) scale(1.03, 0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-novi__rig {
+    animation: none !important;
+    transform: none !important;
+  }
+}
