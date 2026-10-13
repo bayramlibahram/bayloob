@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.15.0 — 2026-10-13
+
+### Changed
+- **New task, Agentic workflow:** the task text comes right after the pattern (it was below the agents, off
+  screen); the eight patterns are in three groups — build a change, review or decide, a team — with one line on
+  when to use the one picked. The Analysis question sits right after its preset.
+- **A task's decision panel** is one row: what it's about on the left, the buttons on the right — no empty band.
+- **What next:** the project row reads "In shop: The change · Open terminal"; the Ctrl+Enter hint on Send is
+  readable.
+- **Agent rows move:** in the pill, the Workspace and a task's agents, each agent is a small Novi showing its
+  state — floating while it thinks, busy while it works, wiggling when it needs you, a hop when done. CSS only,
+  still when off screen or with reduced motion, at most 12 moving at once.
+
+### Fixed
+- **Stopping a helper agent stopped the agent that started it.** A helper run from another agent's shell
+  (`codex exec` from Claude Code) inherits its tmux pane, so Stop killed the parent's session. Such helpers no
+  longer take on the parent's terminal.
+- **A finished helper stayed in the list as Done** — it was taken for the parent's session, which is still
+  alive. It now goes when its process ends.
+- A helper started by another agent showed **Idle** while working (it reports only at the end); it now says
+  **Helper**. Codex's app-server / MCP server isn't listed as an agent.
+
 ## 0.14.0 — 2026-10-13
 
 ### Added
