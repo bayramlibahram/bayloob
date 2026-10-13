@@ -383,3 +383,54 @@ test("the log comes in stages, newest first, and filters down to problems", asyn
   expect(bad.map(g => g.title)).toEqual(["Build · round 2"]);
   expect(bad[0].lines).toHaveLength(1);
 });
+
+test("what next on the project: the change, a pull request for a kept branch, a terminal, the dev command", async () => {
+  const tasks = demo();
+  const pipe = byPattern(tasks, "pipeline");
+  Object.assign(pipe, { status: "done", gate: null, merged: null, winner: pipe.candidates[0].id });
+  api.after = vi.fn(async (_id, action) =>
+    action === "diff"
+      ? { ok: true, stat: " cart.js | 2 +-", patch: "+const discount = 0.1;", cut: false }
+      : action === "pr-info"
+        ? {
+            ok: true,
+            remote: "origin",
+            branch: "bayloob/x/build-1",
+            ahead: 2,
+            base: "main",
+            url: "https://github.com/o/r/compare/main...x",
+          }
+        : {
+            ok: true,
+            remote: "origin",
+            branch: "bayloob/x/build-1",
+            url: "https://github.com/o/r/compare/main...x",
+          }
+  );
+  api.project = vi.fn(async () => ({ ok: true, dev: "npm run dev" }));
+  api.openIn = vi.fn(async (_id, what) => ({
+    ok: true,
+    ...(what === "dev" ? { command: "npm run dev" } : {}),
+  }));
+  await open(tasks);
+  await act(async () => useTasks.getState().openTask(pipe.id));
+  const next = screen.getByRole("region", { name: "What next" });
+  expect(within(next).queryByRole("button", { name: /Push…/ })).toBeNull(); // nothing merged to push
+
+  await act(async () => fireEvent.click(within(next).getByRole("button", { name: /The change/ })));
+  expect(next.textContent).toContain("+const discount = 0.1;");
+
+  await act(async () =>
+    fireEvent.click(within(next).getByRole("button", { name: /Pull request…/ }))
+  );
+  expect(within(next).getByRole("alert").textContent).toMatch(/open a pull request into main/);
+  await act(async () => fireEvent.click(within(next).getByRole("button", { name: /Push & open/ })));
+  expect(api.after).toHaveBeenLastCalledWith(pipe.id, "pr");
+
+  await act(async () => fireEvent.click(within(next).getByRole("button", { name: /^Terminal$/ })));
+  expect(api.openIn).toHaveBeenLastCalledWith(pipe.id, "terminal");
+  await act(async () =>
+    fireEvent.click(within(next).getByRole("button", { name: /Run npm run dev/ }))
+  );
+  expect(api.openIn).toHaveBeenLastCalledWith(pipe.id, "dev");
+});

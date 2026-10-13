@@ -1,5 +1,15 @@
-import { ChevronRightIcon, PlayIcon, RefreshCwIcon, SendIcon, UploadIcon } from "lucide-react";
-import { useState } from "react";
+import {
+  ChevronRightIcon,
+  FileDiffIcon,
+  GitPullRequestIcon,
+  PlayIcon,
+  RefreshCwIcon,
+  RocketIcon,
+  SendIcon,
+  SquareTerminalIcon,
+  UploadIcon,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -50,9 +60,11 @@ export function Next({ t }) {
         )}
         <span className="flex-1" />
         {pushable && <Push t={t} />}
+        {done && !t.merged && t.winner && <PullRequest t={t} />}
         {done && t.testCommand && <Tests t={t} />}
         <RunAgain t={t} />
       </div>
+      <Project t={t} />
       <FollowUp t={t} />
     </section>
   );
@@ -162,6 +174,164 @@ function Tests({ t }) {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * A change it kept but didn't merge, as a pull request: where its branch goes is asked first; then it's pushed
+ * (never forced) and the host's page opens (GitHub, GitLab), or Bayloob says where it went.
+ */
+function PullRequest({ t }) {
+  const api = useTasks(s => s.api);
+  const [ask, setAsk] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const prepare = async () => {
+    setBusy(true);
+    const info = await api.after(t.id, "pr-info");
+    setBusy(false);
+    if (!info?.ok) {
+      return toast.error(info?.error || "Couldn’t tell where to push");
+    }
+    setAsk(info);
+  };
+  const open = async () => {
+    setBusy(true);
+    const r = await api.after(t.id, "pr");
+    setBusy(false);
+    setAsk(null);
+    if (!r?.ok) {
+      return toast.error(r?.error || "The push failed");
+    }
+    toast(
+      r.url
+        ? `Pushed ${r.branch} — the pull request page opened`
+        : `Pushed ${r.branch} to ${r.remote} — open the pull request on your host`
+    );
+  };
+  if (ask) {
+    return (
+      <span role="alert" className="flex flex-wrap items-center gap-2 text-[13px]">
+        <span>
+          Push <code className="font-mono">{ask.branch}</code> to <b>{ask.remote}</b>
+          {ask.ahead ? ` (${ask.ahead} commit${ask.ahead === 1 ? "" : "s"})` : ""} and open a pull
+          request into <code className="font-mono">{ask.base}</code>
+          {ask.url ? "" : " (Bayloob can’t open this host’s page)"}?
+        </span>
+        <Button size="sm" variant="outline" onClick={() => setAsk(null)}>
+          Cancel
+        </Button>
+        <Button size="sm" disabled={busy} onClick={open}>
+          {busy ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <GitPullRequestIcon data-icon="inline-start" />
+          )}
+          Push & open
+        </Button>
+      </span>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={busy}
+      title="Push the branch it kept and open a pull request"
+      onClick={prepare}
+    >
+      {busy ? (
+        <Spinner data-icon="inline-start" />
+      ) : (
+        <GitPullRequestIcon data-icon="inline-start" />
+      )}
+      Pull request…
+    </Button>
+  );
+}
+
+/**
+ * On the project, after it: what it changed (the diff, here), a terminal there, and the project's dev command
+ * in one (when Bayloob knows it) — to try the result yourself.
+ */
+function Project({ t }) {
+  const api = useTasks(s => s.api);
+  const [dev, setDev] = useState(null);
+  const [diff, setDiff] = useState(null); // { stat, patch, cut } once loaded
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const changed = t.status === "done" && (t.merged || t.winner);
+  useEffect(() => {
+    let on = true;
+    api
+      .project?.(t.id)
+      .then(r => on && setDev(r?.dev || null))
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+  }, [api, t.id]);
+  const showDiff = async () => {
+    if (diff) {
+      return setOpen(!open);
+    }
+    setBusy(true);
+    const r = await api.after(t.id, "diff");
+    setBusy(false);
+    if (!r?.ok) {
+      return toast.error(r?.error || "Couldn’t show the change");
+    }
+    setDiff(r);
+    setOpen(true);
+  };
+  const run = async what => {
+    const r = await api.openIn(t.id, what);
+    if (!r?.ok) {
+      toast.error(r?.error || "Couldn’t open a terminal");
+    } else if (what === "dev") {
+      toast(`${r.command} — running in a terminal`);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="mr-1 text-xs text-muted-foreground">In {t.project.name}</span>
+      {changed && (
+        <Button size="sm" variant="ghost" disabled={busy} onClick={showDiff}>
+          {busy ? <Spinner data-icon="inline-start" /> : <FileDiffIcon data-icon="inline-start" />}
+          {open ? "Hide the change" : "The change"}
+        </Button>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        title={`A terminal in ${t.project.root}`}
+        onClick={() => run("terminal")}
+      >
+        <SquareTerminalIcon data-icon="inline-start" />
+        Terminal
+      </Button>
+      {dev && (
+        <Button
+          size="sm"
+          variant="ghost"
+          title={`${dev} in a terminal — to try it yourself`}
+          onClick={() => run("dev")}
+        >
+          <RocketIcon data-icon="inline-start" />
+          Run <code className="font-mono">{dev}</code>
+        </Button>
+      )}
+      {open && diff && (
+        <div className="flex basis-full flex-col gap-1.5">
+          <Output className="max-h-24">{diff.stat || "No change."}</Output>
+          {diff.patch && <Output className="max-h-72">{diff.patch}</Output>}
+          {diff.cut && (
+            <small className="text-xs text-muted-foreground">
+              Cut — the whole change is longer; see it with git in a terminal
+            </small>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

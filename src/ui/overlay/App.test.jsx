@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 // The Classic mascot here (?mascot=svg): Novi animates with the Web Animations API, which jsdom lacks
@@ -88,6 +88,7 @@ beforeEach(() => {
     health: { ok: true, issues: [] },
     usage: null,
     tasks: [],
+    tasksDismissed: [],
     wsMinimized: false,
     taskGates: null,
     music: null,
@@ -493,4 +494,46 @@ test("a terminal that can't come forward says so on its row; the music row plays
   fireEvent.click(screen.getByRole("button", { name: "Play / pause" }));
   expect(api.music).toHaveBeenCalledWith("toggle");
   expect(pill().querySelector(".music .t").textContent).toBe("SongBand · Firefox");
+});
+
+test("a task that just ended stays under the bar: push (asked first), again, open, hide", async () => {
+  render(<App />);
+  api.taskAfter = vi.fn(async (_id, action) =>
+    action === "push-info"
+      ? { ok: true, remote: "origin", branch: "main", ahead: 3 }
+      : { ok: true, remote: "origin", branch: "main" }
+  );
+  api.taskRunAgain = vi.fn(async () => ({ ok: true }));
+  act(() => {
+    api.tasksummary([
+      {
+        id: "t9",
+        title: "Discount",
+        project: "shop",
+        ended: "done",
+        endedAt: Date.now() - 60_000,
+        merged: { into: "main", applied: false },
+        pushed: false,
+      },
+      { id: "t8", title: "Old", project: "shop", ended: "done", endedAt: Date.now() - 3_600_000 },
+    ]);
+  });
+  const fin = screen.getByRole("region", { name: "Finished task: Discount" });
+  expect(screen.queryByRole("region", { name: "Finished task: Old" })).toBeNull(); // over half an hour
+  expect(fin.textContent).toContain("merged into main");
+
+  await act(async () => fireEvent.click(within(fin).getByRole("button", { name: "Push" })));
+  expect(api.taskAfter).toHaveBeenCalledWith("t9", "push-info");
+  await act(async () =>
+    fireEvent.click(within(fin).getByRole("button", { name: /Push 3 → origin\?/ }))
+  );
+  expect(api.taskAfter).toHaveBeenLastCalledWith("t9", "push");
+  expect(fin.textContent).toContain("Pushed to origin");
+
+  fireEvent.click(within(fin).getByRole("button", { name: "Again" }));
+  expect(api.taskRunAgain).toHaveBeenCalledWith("t9");
+  fireEvent.click(within(fin).getByRole("button", { name: /Discount/ }));
+  expect(api.openTasks).toHaveBeenCalledWith("t9");
+  fireEvent.click(within(fin).getByRole("button", { name: "Hide it here" }));
+  expect(screen.queryByRole("region", { name: "Finished task: Discount" })).toBeNull();
 });

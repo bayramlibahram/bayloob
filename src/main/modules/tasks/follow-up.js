@@ -85,4 +85,26 @@ function rerunConfig(config, text = null) {
   return { ...rest, ...(text ? { text } : {}) };
 }
 
-module.exports = { followUpPrompt, followUpAgent, rerunConfig, outcome };
+/**
+ * Where a pull request for `branch` into `base` is opened on the remote's host, from its URL (ssh or https):
+ * GitHub's compare page or GitLab's new merge request; null for any other host.
+ */
+function pullRequestUrl(remoteUrl, base, branch) {
+  const m = /^(?:git@|ssh:\/\/git@|https?:\/\/(?:[^@/]+@)?)([^/:]+)[:/](.+?)(?:\.git)?\/?$/.exec(
+    String(remoteUrl || "").trim()
+  );
+  if (!m) {
+    return null;
+  }
+  const [, host, repo] = m;
+  const enc = encodeURIComponent;
+  if (/(^|\.)github\.com$/.test(host)) {
+    return `https://${host}/${repo}/compare/${enc(base)}...${enc(branch)}?expand=1`;
+  }
+  if (/(^|\.)gitlab\./.test(host)) {
+    return `https://${host}/${repo}/-/merge_requests/new?merge_request[source_branch]=${enc(branch)}&merge_request[target_branch]=${enc(base)}`;
+  }
+  return null;
+}
+
+module.exports = { followUpPrompt, followUpAgent, rerunConfig, outcome, pullRequestUrl };

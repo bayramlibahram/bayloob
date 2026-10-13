@@ -73,6 +73,33 @@ function detectTests(dir) {
   return null;
 }
 
+/**
+ * The command that runs the project for you to try (a dev server, the app), or null when none is obvious:
+ * a package.json "dev" (else "start") script with its package manager, artisan serve, manage.py runserver.
+ */
+function detectDev(dir) {
+  const scripts = readJson(path.join(dir, "package.json"))?.scripts || {};
+  const name = scripts.dev ? "dev" : scripts.start ? "start" : null;
+  if (name) {
+    const pm =
+      has(dir, "bun.lock") || has(dir, "bun.lockb")
+        ? "bun"
+        : has(dir, "pnpm-lock.yaml")
+          ? "pnpm"
+          : has(dir, "yarn.lock")
+            ? "yarn"
+            : "npm";
+    return `${pm} run ${name}`;
+  }
+  if (has(dir, "artisan")) {
+    return "php artisan serve";
+  }
+  if (has(dir, "manage.py")) {
+    return "python manage.py runserver";
+  }
+  return null;
+}
+
 class ProjectInfo {
   constructor({ git }) {
     this.git = git;
@@ -114,4 +141,4 @@ class ProjectInfo {
   }
 }
 
-module.exports = { ProjectInfo, detectStack, detectTests };
+module.exports = { ProjectInfo, detectStack, detectTests, detectDev };

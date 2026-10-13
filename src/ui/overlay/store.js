@@ -46,7 +46,8 @@ export const usePill = create((set, get) => ({
   music: null, // { title, artist, app, playing }
   health: { ok: true, issues: [] },
   usage: null,
-  tasks: [], // open workflow tasks (the summary under the usage band)
+  tasks: [], // open workflow tasks (the summary under the usage band), then the ones that just ended
+  tasksDismissed: [], // finished task ids closed in the pill
   size: "l", // s | m | l
   soundOn: true,
   soundLocked: false,

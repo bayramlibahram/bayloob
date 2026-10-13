@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("tasksAPI", {
   newTask: () => ipcRenderer.send("open-launcher"),
   // After a finished task: push-info · push · tests → { ok, … }
   after: (id, action) => ipcRenderer.invoke("tasks:after", id, action),
+  // What can run in a task's project → { ok, dev }; and running it: "terminal" | "dev"
+  project: id => ipcRenderer.invoke("tasks:project", id),
+  openIn: (id, what) => ipcRenderer.invoke("tasks:open", id, what),
   // The owner's next ask: { text, as: "agent" | "task", agent } → { ok, agent | taskId }
   followUp: (id, opts) => ipcRenderer.invoke("tasks:follow-up", id, opts),
   // The same task as a new draft, in the New task dialog → { ok, draftId }

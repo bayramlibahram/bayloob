@@ -123,6 +123,14 @@ class FakeWorkspace {
     this.pushes.push(opts);
     return Promise.resolve({ ok: true, remote: "origin", branch: opts.branch, ahead: 2 });
   }
+  diffs = [];
+  changeOf(opts) {
+    this.diffs.push(opts);
+    return Promise.resolve({ ok: true, stat: "1 file changed", patch: "+x", cut: false });
+  }
+  remoteUrl() {
+    return Promise.resolve("git@github.com:me/shop.git");
+  }
 }
 
 function setup({ caps, roles = null } = {}) {
@@ -2167,4 +2175,32 @@ test("after a task applied to your files: no push (commit first)", async () => {
   assert.equal(task.merged.applied, true);
   assert.match((await env.engine.after(task.id, "push")).error, /commit it first/);
   assert.deepEqual(env.workspace.pushes, []);
+});
+
+test("after a task that kept its branch: the change, and a pull request (pushed, the host's page)", async () => {
+  const env = setup();
+  const task = await startBest(env);
+  await endTurn(env, task, env.runner.sessions[0], "1. Edit cart.js");
+  await decide(env, task, "approve");
+  for (const b of env.runner.by({ role: "builder" })) {
+    await endTurn(env, task, b, "done");
+  }
+  await decide(env, task, "pick", { candidate: "build-1" });
+  await decide(env, task, "keep");
+  assert.equal(task.status, "done");
+  assert.equal(task.merged, null);
+  const branch = task.candidates.find(c => c.id === "build-1").branch;
+
+  assert.equal((await env.engine.after(task.id, "diff")).patch, "+x");
+  assert.deepEqual(env.workspace.diffs, [{ root: "/w/shop", from: task.base.sha, to: branch }]);
+  assert.match((await env.engine.after(task.id, "push")).error, /Nothing was merged/);
+
+  const info = await env.engine.after(task.id, "pr-info");
+  assert.equal(info.base, "main");
+  assert.match(info.url, /^https:\/\/github\.com\/me\/shop\/compare\/main\.\.\./);
+  const pr = await env.engine.after(task.id, "pr");
+  assert.equal(pr.ok, true);
+  assert.equal(pr.url, info.url);
+  assert.deepEqual(env.workspace.pushes, [{ root: "/w/shop", branch }]);
+  assert.ok(env.store.log(task.id).some(e => e.event === "pr-opened"));
 });

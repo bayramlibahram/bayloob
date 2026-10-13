@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld("bayloobAPI", {
   // { pillSize: 's' | 'm' | 'l' } from Settings
   onAppearance: cb => ipcRenderer.on("appearance", (_e, a) => cb(a)),
   openTasks: taskId => ipcRenderer.send("open-tasks", taskId || null),
+  // A finished task, from the pill: push it (push-info first), or the same task again as a new draft
+  taskAfter: (taskId, action) => ipcRenderer.invoke("tasks:after", taskId, action),
+  taskRunAgain: taskId => ipcRenderer.invoke("tasks:run-again", taskId),
   // The Workspace window minimized to the pill (or back): { minimized }
   onWorkspace: cb => ipcRenderer.on("workspace", (_e, ws) => cb(ws)),
   openWorkspace: () => ipcRenderer.send("open-workspace"),

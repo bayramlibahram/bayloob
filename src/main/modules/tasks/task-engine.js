@@ -37,6 +37,7 @@ const { arbiterInput, parseDecision, parseReport, needsOwner } = require("./arbi
 const { LOCAL, parseRunbook, reclassify, confirmLevel, classifyRisk } = require("./runbook");
 const Discussion = require("./discussion");
 const Orchestrator = require("./orchestrator");
+const { pullRequestUrl } = require("./follow-up");
 const { AGENTS } = require("../agents/agents");
 
 const ARTIFACT_IN_PROMPT = 12_000; // an artifact pasted into a prompt keeps its tail beyond this
@@ -679,6 +680,55 @@ class TaskEngine extends EventEmitter {
       });
       this.#save(task);
       return r;
+    }
+    if (action === "diff") {
+      // what it changed: the merged (or kept) candidate since the base, or the files' uncommitted change
+      const c = task.candidates.find(x => x.id === task.winner);
+      if (task.merged?.applied) {
+        return this.workspace.changeOf({ root });
+      }
+      if (!c?.branch) {
+        return { ok: false, error: "It kept no change to show" };
+      }
+      return this.workspace.changeOf({ root, from: task.base.sha, to: c.branch });
+    }
+    if (action === "pr-info" || action === "pr") {
+      // a change it kept but didn't merge: its branch is pushed and a pull request opened on the host
+      const c = task.candidates.find(x => x.id === task.winner);
+      if (task.merged || !c?.branch) {
+        return {
+          ok: false,
+          error: task.merged ? "It's merged already — push it instead" : "It kept no branch",
+        };
+      }
+      const info = await this.workspace.pushInfo({ root, branch: c.branch });
+      if (!info.ok) {
+        return info;
+      }
+      const url = pullRequestUrl(
+        await this.workspace.remoteUrl({ root, remote: info.remote }),
+        task.base.branch,
+        c.branch
+      );
+      if (action === "pr-info") {
+        return { ...info, url, base: task.base.branch };
+      }
+      const r = info.ahead
+        ? await this.workspace
+            .push({ root, branch: c.branch })
+            .catch(e => ({ ok: false, error: e.message }))
+        : { ok: true, remote: info.remote };
+      task.after = {
+        ...task.after,
+        pr: { ok: r.ok, error: r.error || null, url: r.ok ? url : null, at: this.now() },
+      };
+      this.#log(task, "you", r.ok ? "pr-opened" : "push-failed", {
+        branch: c.branch,
+        remote: info.remote,
+        error: r.error || null,
+      });
+      this.#save(task);
+      return r.ok ? { ...r, branch: c.branch, url } : r;
     }
     if (action === "tests") {
       if (!task.testCommand) {

@@ -61,7 +61,7 @@ const { checked } = require("../ipc/checked");
 const { SettingsSave } = require("../ipc/schemas");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { TemplateStore } = require("../modules/tasks/template-store");
-const { ProjectInfo } = require("../modules/tasks/project-info");
+const { ProjectInfo, detectDev } = require("../modules/tasks/project-info");
 const { Scheduler } = require("../modules/tasks/scheduler");
 const { TaskEngine } = require("../modules/tasks/task-engine");
 const { reportMarkdown } = require("../modules/tasks/arbiter");
@@ -142,6 +142,8 @@ function detectAgents() {
 }
 
 /** Wires the event server, launcher, panel, settings, music watcher and terminal focuser to the windows and tray. */
+const FINISHED_SHOWN_MS = 30 * 60_000; // a finished task stays in the pill this long
+
 class BayloobApp {
   overlay = new OverlayWindow({ topBar: () => this.windows.panel() });
   launcherWindow = new LauncherWindow();
@@ -1031,7 +1033,8 @@ class BayloobApp {
 
   // The pill's line per open task: where it is (stage n of m) and how many of its agents work or wait
   #taskSummary() {
-    return (this.engine?.list() || [])
+    const all = this.engine?.list() || [];
+    return all
       .filter(t => t.status === "running" || t.status === "needs-you")
       .map(t => ({
         id: t.id,
@@ -1043,6 +1046,24 @@ class BayloobApp {
         live: t.instances.filter(i => i.status === "starting" || i.status === "running").length,
         queued: t.instances.filter(i => i.status === "queued").length,
         needsYou: t.status === "needs-you",
+      }))
+      .concat(this.#finishedSummary(all));
+  }
+
+  // …and the tasks that ended in the last half hour, with what's left to do after them (push, run again)
+  #finishedSummary(all) {
+    const since = Date.now() - FINISHED_SHOWN_MS;
+    return all
+      .filter(t => ["done", "failed", "stopped"].includes(t.status) && t.endedAt > since)
+      .sort((a, b) => b.endedAt - a.endedAt)
+      .map(t => ({
+        id: t.id,
+        title: t.title,
+        project: t.project.name,
+        ended: t.status,
+        endedAt: t.endedAt,
+        merged: t.merged ? { into: t.merged.into, applied: !!t.merged.applied } : null,
+        pushed: !!t.after?.push?.ok,
       }));
   }
 
@@ -1969,7 +1990,42 @@ class BayloobApp {
     );
     // After a task (each one the owner's click): push what it merged, run the tests on the project
     ipcMain.handle("tasks:after", (_e, id, action) =>
-      reply(() => this.engine.after(String(id), String(action)))
+      reply(async () => {
+        const r = await this.engine.after(String(id), String(action));
+        // a pull request: its branch is pushed, then the host's page opens in the browser
+        if (action === "pr" && r?.ok && r.url) {
+          shell.openExternal(r.url);
+        }
+        return r;
+      })
+    );
+    // After a task, on its project: what can run there (the dev command)
+    ipcMain.handle("tasks:project", (_e, id) => {
+      const t = this.engine.get(String(id));
+      return t
+        ? { ok: true, dev: detectDev(t.project.root) }
+        : { ok: false, error: "No such task" };
+    });
+    // …and running it: a terminal in the project, or the dev command in one (it stays open after)
+    ipcMain.handle("tasks:open", (_e, id, what) =>
+      reply(() => {
+        const t = this.engine.get(String(id));
+        if (!t) {
+          throw new Error("No such task");
+        }
+        const root = t.project.root;
+        const sh = process.env.SHELL || "sh";
+        if (what === "dev") {
+          const dev = detectDev(root);
+          if (!dev) {
+            throw new Error("This project has no dev command Bayloob knows");
+          }
+          this.launcher.terminal.open(["sh", "-c", `${dev}; exec "\${SHELL:-sh}"`], { cwd: root });
+          return { command: dev };
+        }
+        this.launcher.terminal.open([sh], { cwd: root });
+        return {};
+      })
     );
     // A follow-up: the owner's next ask, with what the task did, to one agent or as a new task like it
     ipcMain.handle("tasks:follow-up", (_e, id, opts) =>

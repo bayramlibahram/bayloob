@@ -341,6 +341,30 @@ class TaskWorkspace {
     return { ok: true, remote, upstream: upstream || null, branch, ahead };
   }
 
+  /**
+   * A change as text: `from`...`to` (what `to` did since they parted), or with `to` null the files' own
+   * uncommitted change against HEAD. The stat first; the patch cut at `max` characters. → { ok, stat, patch, cut }
+   */
+  async changeOf({ root, from = null, to = null, max = 400_000 }) {
+    const range = to ? [`${from}...${to}`] : ["HEAD"];
+    const stat = await tryRun(root, ["diff", "--stat", ...range]);
+    if (stat === null) {
+      return { ok: false, error: "git couldn't show that change" };
+    }
+    const patch = (await tryRun(root, ["diff", ...range])) || "";
+    return {
+      ok: true,
+      stat: stat.trim(),
+      patch: patch.length > max ? patch.slice(0, max) : patch,
+      cut: patch.length > max,
+    };
+  }
+
+  /** The URL a remote is fetched from, or null. */
+  async remoteUrl({ root, remote }) {
+    return ((await tryRun(root, ["remote", "get-url", remote])) || "").trim() || null;
+  }
+
   /** `git push` of `branch` (never forced; without an upstream, it's set). → { ok, output?, error? } */
   async push({ root, branch }) {
     const info = await this.pushInfo({ root, branch });

@@ -18,7 +18,8 @@ const STATE = {
 };
 const DEAF = { "not-installed": "no hooks", broken: "hook missing", unheard: "agent silent" };
 const STACK_MAX = 3; // agent tiles on the bar before "+N"
-const TASKS_SHOWN = 2; // open tasks under the usage band before "+N more"
+const TASKS_SHOWN = 2; // open tasks under the usage band before "+N more" (and finished ones shown)
+const FINISHED_SHOWN_MS = 30 * 60_000; // a finished task stays this long (main sends it as long)
 const HOVER_OPEN_MS = 70;
 const HOVER_CLOSE_MS = 220;
 const PILL_OPEN_WIDTH = 560;
@@ -479,12 +480,19 @@ const ICON_FLOW = (
   </svg>
 );
 
-/** One line per open task (at most two, then "+N more"): its stage, who works, or that it needs you. */
+/**
+ * One line per open task (at most two, then "+N more"): its stage, who works, or that it needs you. Under
+ * them, the tasks that just ended, each with what's left after it: push what it merged, run it again, open it.
+ */
 function TaskSummary() {
-  const { tasks, api } = usePill();
+  const { tasks, tasksDismissed, api } = usePill();
+  const open = tasks.filter(t => !t.ended);
+  const ended = tasks.filter(
+    t => t.ended && !tasksDismissed.includes(t.id) && Date.now() - t.endedAt < FINISHED_SHOWN_MS
+  );
   return (
-    <div className={`tasksum${tasks.length ? " on" : ""}`}>
-      {tasks.slice(0, TASKS_SHOWN).map(t => (
+    <div className={`tasksum${open.length || ended.length ? " on" : ""}`}>
+      {open.slice(0, TASKS_SHOWN).map(t => (
         <button
           key={t.id}
           type="button"
@@ -512,8 +520,98 @@ function TaskSummary() {
           )}
         </button>
       ))}
-      {tasks.length > TASKS_SHOWN && <div className="more">+{tasks.length - TASKS_SHOWN} more</div>}
+      {open.length > TASKS_SHOWN && <div className="more">+{open.length - TASKS_SHOWN} more</div>}
+      {ended.slice(0, TASKS_SHOWN).map(t => (
+        <Finished key={t.id} t={t} />
+      ))}
     </div>
+  );
+}
+
+const ENDED = { done: "done", failed: "failed", stopped: "stopped" };
+
+/** A task that just ended: what it did, and Push (asked first) · Again · Open · ×. */
+function Finished({ t }) {
+  const api = usePill(s => s.api);
+  const [ask, setAsk] = useState(null); // push-info while asking, or { busy }
+  const [note, setNote] = useState("");
+  const pushable = t.ended === "done" && t.merged && !t.merged.applied && !t.pushed;
+  const what = t.merged
+    ? t.merged.applied
+      ? "applied to your files"
+      : `merged into ${t.merged.into}${t.pushed ? " · pushed" : ""}`
+    : ENDED[t.ended];
+  const push = async () => {
+    if (!ask) {
+      setAsk({ busy: true });
+      const info = await api?.taskAfter(t.id, "push-info");
+      if (!info?.ok) {
+        setAsk(null);
+        return setNote(info?.error || "Can't push");
+      }
+      return setAsk(info);
+    }
+    setAsk({ busy: true });
+    const r = await api?.taskAfter(t.id, "push");
+    setAsk(null);
+    setNote(r?.ok ? `Pushed to ${r.remote}` : r?.error || "The push failed");
+  };
+  const asking = ask && !ask.busy;
+  return (
+    <section className={`fin ${t.ended}`} aria-label={`Finished task: ${t.title}`}>
+      <button
+        type="button"
+        className="ft"
+        title={`${t.title} — ${t.project}\nOpen it: its What next has the follow-up, the tests and more`}
+        onClick={() => api?.openTasks(t.id)}
+      >
+        <span className="mk">{t.ended === "done" ? "✓" : "×"}</span>
+        <span className="tt">{t.title}</span>
+        <span className="sg">{note || what}</span>
+      </button>
+      {pushable && (
+        <button
+          type="button"
+          className={asking ? "go" : ""}
+          disabled={ask?.busy || (asking && !ask.ahead)}
+          title={
+            asking ? `Push ${ask.branch} to ${ask.remote} — never forced` : "Push what it merged"
+          }
+          onClick={push}
+        >
+          {ask?.busy
+            ? "…"
+            : asking
+              ? ask.ahead
+                ? `Push ${ask.ahead} → ${ask.remote}?`
+                : "Nothing to push"
+              : "Push"}
+        </button>
+      )}
+      {asking && (
+        <button type="button" onClick={() => setAsk(null)}>
+          Cancel
+        </button>
+      )}
+      {!asking && (
+        <button
+          type="button"
+          title="The same task as a new draft in New task"
+          onClick={() => api?.taskRunAgain(t.id)}
+        >
+          Again
+        </button>
+      )}
+      <button
+        type="button"
+        className="x"
+        aria-label="Hide it here"
+        title="Hide it here (it stays on the board)"
+        onClick={() => usePill.setState(s => ({ tasksDismissed: [...s.tasksDismissed, t.id] }))}
+      >
+        ×
+      </button>
+    </section>
   );
 }
 

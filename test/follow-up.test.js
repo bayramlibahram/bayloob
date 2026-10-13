@@ -72,3 +72,42 @@ test("run again: the stored configuration without its id and status; the text ca
   assert.equal(rerunConfig(config, "Another ask").text, "Another ask");
   assert.throws(() => rerunConfig(null), /configuration is gone/);
 });
+
+test("pullRequestUrl: GitHub and GitLab pages from ssh and https remotes, null elsewhere", () => {
+  const { pullRequestUrl } = require("../src/main/modules/tasks/follow-up");
+  assert.equal(
+    pullRequestUrl("git@github.com:me/shop.git", "main", "bayloob/t1/build-1"),
+    "https://github.com/me/shop/compare/main...bayloob%2Ft1%2Fbuild-1?expand=1"
+  );
+  assert.equal(
+    pullRequestUrl("https://github.com/me/shop", "main", "b"),
+    "https://github.com/me/shop/compare/main...b?expand=1"
+  );
+  assert.match(
+    pullRequestUrl("https://token@gitlab.com/grp/sub/app.git", "dev", "b"),
+    /^https:\/\/gitlab\.com\/grp\/sub\/app\/-\/merge_requests\/new\?merge_request\[source_branch\]=b&merge_request\[target_branch\]=dev$/
+  );
+  assert.equal(pullRequestUrl("/srv/git/shop.git", "main", "b"), null);
+  assert.equal(pullRequestUrl("git@bitbucket.org:me/shop.git", "main", "b"), null);
+});
+
+test("detectDev: the dev script with its package manager, else start, artisan, manage.py", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { detectDev } = require("../src/main/modules/tasks/project-info");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bayloob-dev-"));
+  assert.equal(detectDev(dir), null);
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({ scripts: { start: "node ." } })
+  );
+  assert.equal(detectDev(dir), "npm run start");
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({ scripts: { dev: "vite", start: "x" } })
+  );
+  fs.writeFileSync(path.join(dir, "bun.lock"), "");
+  assert.equal(detectDev(dir), "bun run dev");
+  fs.rmSync(dir, { recursive: true, force: true });
+});

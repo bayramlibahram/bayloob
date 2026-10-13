@@ -397,6 +397,11 @@ const LOG = {
   launched: e =>
     `${displayName(e.adapter)} ${e.reused ? "continues" : "started"} · ${instName(e.instance)}`,
   worktree: e => `Worktree for ${e.candidate}: ${e.branch}`,
+  pushed: e => `You pushed ${e.branch} to ${e.remote}`,
+  "push-failed": e => `Push of ${e.branch} failed${e.error ? ` — ${e.error}` : ""}`,
+  "pr-opened": e => `You pushed ${e.branch} to ${e.remote} for a pull request`,
+  "tests-passed": e => `The project's tests pass (${e.command})`,
+  "tests-failed": e => `The project's tests fail (${e.command}, exit ${e.code ?? "—"})`,
   "stop-instance": e =>
     `You stopped ${instName(e.instance)}${e.candidate ? ` (${e.candidate} out, its worktree kept)` : ""}`,
   "stop-stage": e =>
