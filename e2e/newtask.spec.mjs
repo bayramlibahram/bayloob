@@ -58,6 +58,7 @@ test("a workflow goes through Confirm, and Start hands main the saved draft", as
     await win.keyboard.press("Enter");
     await expect(win.getByText("Tests", { exact: true })).toBeVisible();
     await win.keyboard.press("Alt+ArrowRight");
+    await expect(win.locator('[data-cat="workflow"]')).toBeEnabled(); // once git has answered
     await win.keyboard.press("2");
     await win.keyboard.press("Alt+ArrowRight");
     await win.getByLabel("Task", { exact: true }).fill("add a dark mode toggle");
