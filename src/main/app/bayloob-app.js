@@ -47,6 +47,7 @@ const { TerminalFocuser } = require("../infrastructure/desktop/terminal-focuser"
 const { WindowService } = require("../infrastructure/desktop/window.service");
 const { Git } = require("../infrastructure/system/git");
 const { AgentDiscovery } = require("../infrastructure/system/agent-discovery");
+const { CodexThreads } = require("../infrastructure/system/codex-threads");
 const { SystemStats } = require("../infrastructure/system/system-stats");
 const { AgentConsole } = require("../modules/console/agent-console");
 const { MenuWatcher } = require("../modules/agents/terminal-menu");
@@ -275,9 +276,14 @@ class BayloobApp {
     const data = app.getPath("userData");
     this.settings = new Settings(path.join(data, "settings.json"));
     // Codex (local): its model, and its own CODEX_HOME with only Bayloob's hook in it
+    const codexLocalHome = this.#codexLocalHome(data);
     configureAgents({
       codexLocalModel: () => this.settings.get("ollama").coder,
-      codexLocalHome: this.#codexLocalHome(data),
+      codexLocalHome,
+    });
+    // Codex's helper threads (title, guardian) notify too: told apart by their rollouts in either home
+    this.server.codexThreads = new CodexThreads({
+      homes: [process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), codexLocalHome],
     });
     this.settings.on("change", keys => this.#applySettings(keys));
     uiScale.set(this.settings.get("uiScale"));
@@ -1622,9 +1628,9 @@ class BayloobApp {
           adopted = true;
         }
       }
-      // Interactive Codex (0.162) doesn't call `notify`, so a task's Codex instance can't report the end of
-      // its turn by hook: its rollout's task_complete (seen here) does it instead — only if it's newer than
-      // the turn the engine is waiting for
+      // A task's Codex instance reports the end of its turn by `notify` (codex-cli 0.162.1 does, checked
+      // 2026-10-13); its rollout's task_complete (seen here) does it too, for when the hook didn't get
+      // through — only if it's newer than the turn the engine is waiting for
       for (const a of found) {
         if (a.agent === "codex" && a.state === "done" && a.term?.tmux && a.statusAt) {
           this.engine?.turnEnded(a.term.tmux, a.message || "", { at: a.statusAt });

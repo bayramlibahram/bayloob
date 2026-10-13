@@ -171,6 +171,44 @@ test("a request a rule allows gets no card, and the app is told about it", async
   assert.deepEqual(told, [{ sessionId: "claude:r1", key: "npm test", command: "npm test" }]);
 });
 
+test("a Codex helper thread's notify (title generator) makes no session; the conversation's does", async t => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { CodexThreads, uuidTime } = require("../src/main/infrastructure/system/codex-threads");
+  const main = "01a13407-b290-7622-a895-793a049dc469";
+  const title = "01a13407-ba7b-7c63-9363-2de183671f76";
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bl-codex-"));
+  const d = new Date(uuidTime(main));
+  const day = path.join(
+    home,
+    "sessions",
+    String(d.getFullYear()),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0")
+  );
+  fs.mkdirSync(day, { recursive: true });
+  fs.writeFileSync(
+    path.join(day, `rollout-2026-10-13T10-50-00-${main}.jsonl`),
+    JSON.stringify({ type: "session_meta", payload: { id: main, source: "cli" } }) + "\n"
+  );
+  const server = new EventServer({ token: TOKEN }).listen();
+  await new Promise(r => server.http.once("listening", r));
+  t.after(() => stop(server));
+  server.codexThreads = new CodexThreads({ homes: [home] });
+  const notify = (id, message) =>
+    request("/ev?agent=codex&cwd=%2Fw%2Fshop&tmux=%257", {
+      type: "agent-turn-complete",
+      "thread-id": id,
+      cwd: "/w/shop",
+      "last-assistant-message": message,
+    });
+  await notify(title, '{"title":"Reply hi"}');
+  assert.equal(server.store.get(`codex:${title}`), undefined);
+  await notify(main, "hi");
+  assert.equal(server.store.get(`codex:${main}`).state, "done");
+});
+
 test("a challenger's non-read-only requests are refused without a card; its full answer is kept", async t => {
   const server = new EventServer({ token: TOKEN }).listen();
   await new Promise(r => server.http.once("listening", r));

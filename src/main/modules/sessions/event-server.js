@@ -333,6 +333,10 @@ class EventServer {
       if (agent === "grok" && !fromGrok(ev)) {
         return res.end("ok");
       }
+      // A Codex helper thread's turn (title generator, guardian): not a session, and not the turn of one
+      if (agent === "codex" && this.codexThreads?.isHelper(ev)) {
+        return res.end("ok");
+      }
       const id = `${agent}:${ev.session_id || ev["thread-id"] || ev.cwd || query.get("cwd") || "default"}`;
 
       if (isPerm) {
