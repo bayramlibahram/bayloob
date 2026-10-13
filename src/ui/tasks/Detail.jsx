@@ -315,12 +315,12 @@ function Actions({ t }) {
   const c = s.composing?.gate === g.id ? s.composing : null;
   if (c && (c.action === "changes" || c.action === "retry")) {
     return (
-      <div className="flex shrink-0 items-end gap-2 border-t bg-card px-5 py-3">
+      <div className="flex shrink-0 flex-wrap items-end justify-end gap-2 border-t bg-card px-5 py-3">
         <Textarea
           autoFocus
           aria-label={NOTE_PH[c.action]}
           placeholder={NOTE_PH[c.action]}
-          className="min-h-16 flex-1"
+          className="min-h-16 min-w-64 flex-1"
           value={c.note || ""}
           onChange={e => s.note(e.target.value)}
           onKeyDown={e => {
@@ -341,8 +341,8 @@ function Actions({ t }) {
   if (c?.action === "abort") {
     const plan = g.kind === "runbook";
     return (
-      <div className="flex shrink-0 items-center gap-2 border-t bg-card px-5 py-3">
-        <span className="flex-1 text-sm font-semibold text-waiting">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-card px-5 py-3">
+        <span className="min-w-64 flex-1 text-sm font-semibold text-waiting">
           {plan
             ? "Stop this plan? Steps not run stay as they are."
             : "Abort this task? Its agents stop; worktrees and branches stay."}
@@ -403,32 +403,36 @@ function Actions({ t }) {
     <section aria-label="Your decision" className="shrink-0 border-t px-5 py-3">
       <Alert className="border-waiting/40 bg-waiting/5">
         <HandIcon className="text-waiting" />
-        <AlertTitle className="text-[14px] font-semibold">{g.title}</AlertTitle>
-        <AlertDescription className="flex flex-col gap-1.5">
-          {about && <About a={about} />}
-          {hint && <p>{hint}</p>}
-          {g.detail && <p>{g.detail}</p>}
-          {g.error && <p className="text-destructive">{g.error}</p>}
-          {g.hint && (
-            <p>
-              <b className="text-foreground">Fix:</b> {g.hint}
-            </p>
-          )}
-          {g.screen && (
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="link" size="xs" className="px-0">
-                  <ChevronRightIcon data-icon="inline-start" />
-                  What its screen said last
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <Output>{g.screen}</Output>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-          {g.batch && <Batch g={g} />}
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-1.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex min-w-64 flex-1 flex-col gap-1.5">
+            <AlertTitle className="text-[14px] font-semibold">{g.title}</AlertTitle>
+            <AlertDescription className="flex flex-col gap-1.5 [&_p]:mb-0">
+              {about && <About a={about} />}
+              {hint && <p>{hint}</p>}
+              {g.detail && <p>{g.detail}</p>}
+              {g.error && <p className="text-destructive">{g.error}</p>}
+              {g.hint && (
+                <p>
+                  <b className="text-foreground">Fix:</b> {g.hint}
+                </p>
+              )}
+              {g.screen && (
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="link" size="xs" className="px-0">
+                      <ChevronRightIcon data-icon="inline-start" />
+                      What its screen said last
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Output>{g.screen}</Output>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              {g.batch && <Batch g={g} />}
+            </AlertDescription>
+          </div>
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
             {order.includes("abort") && button("abort")}
             {order.includes("abort") && order.length > 1 && (
               <Separator orientation="vertical" className="mx-1 h-5" />
@@ -436,7 +440,7 @@ function Actions({ t }) {
             {order.filter(a => a !== "abort" && a !== primary).map(button)}
             {primary && order.includes(primary) && button(primary)}
           </div>
-        </AlertDescription>
+        </div>
       </Alert>
     </section>
   );

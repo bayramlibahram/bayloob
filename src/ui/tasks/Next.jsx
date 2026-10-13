@@ -293,7 +293,9 @@ function Project({ t }) {
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="mr-1 text-xs text-muted-foreground">In {t.project.name}</span>
+      <span className="mr-1 text-xs text-muted-foreground">
+        In <span className="font-medium text-foreground">{t.project.name}</span>:
+      </span>
       {changed && (
         <Button size="sm" variant="ghost" disabled={busy} onClick={showDiff}>
           {busy ? <Spinner data-icon="inline-start" /> : <FileDiffIcon data-icon="inline-start" />}
@@ -307,7 +309,7 @@ function Project({ t }) {
         onClick={() => run("terminal")}
       >
         <SquareTerminalIcon data-icon="inline-start" />
-        Terminal
+        Open terminal
       </Button>
       {dev && (
         <Button

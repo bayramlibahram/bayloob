@@ -416,6 +416,9 @@ test("what next on the project: the change, a pull request for a kept branch, a 
   await act(async () => useTasks.getState().openTask(pipe.id));
   const next = screen.getByRole("region", { name: "What next" });
   expect(within(next).queryByRole("button", { name: /Push…/ })).toBeNull(); // nothing merged to push
+  expect(within(next).getByText(pipe.project.name).parentElement.textContent).toBe(
+    `In ${pipe.project.name}:`
+  );
 
   await act(async () => fireEvent.click(within(next).getByRole("button", { name: /The change/ })));
   expect(next.textContent).toContain("+const discount = 0.1;");
@@ -427,7 +430,9 @@ test("what next on the project: the change, a pull request for a kept branch, a 
   await act(async () => fireEvent.click(within(next).getByRole("button", { name: /Push & open/ })));
   expect(api.after).toHaveBeenLastCalledWith(pipe.id, "pr");
 
-  await act(async () => fireEvent.click(within(next).getByRole("button", { name: /^Terminal$/ })));
+  await act(async () =>
+    fireEvent.click(within(next).getByRole("button", { name: "Open terminal" }))
+  );
   expect(api.openIn).toHaveBeenLastCalledWith(pipe.id, "terminal");
   await act(async () =>
     fireEvent.click(within(next).getByRole("button", { name: /Run npm run dev/ }))
