@@ -54,6 +54,7 @@ class FakeWorkspace {
   }
   tests = new Map(); // dir → [results in order]; default ok
   dirtyDirs = new Set();
+  changed = new Map();
   merges = [];
   applies = [];
   prepared = [];
@@ -86,6 +87,9 @@ class FakeWorkspace {
   }
   dirty(dir) {
     return Promise.resolve(this.dirtyDirs.has(dir));
+  }
+  changedFiles(dir) {
+    return Promise.resolve(this.changed.get(dir) || []);
   }
   diffstat() {
     return Promise.resolve({ files: 2, added: 10, deleted: 1 });
@@ -588,6 +592,37 @@ test("Split work: one builder per subtask → integrate → tests on the whole �
   await decide(env, task, "merge");
   assert.equal(env.workspace.merges[0].branch, `bayloob/${task.id}/integrate-1`);
   assert.equal(task.status, "done");
+});
+
+test("Split work: a builder changing files outside its subtask is logged", async () => {
+  const env = setup();
+  splitWorkspace(env);
+  const task = await startBest(env, {
+    pattern: "split",
+    planner: "claude",
+    agents: { claude: 1, codex: 1 },
+  });
+  await endTurn(env, task, env.runner.sessions[0], SPLIT_PLAN);
+  await decide(env, task, "approve");
+  const [builder] = env.runner.by({ role: "builder" });
+  assert.match(builder.prompt, /STATUS: done \| partial \| blocked/);
+  env.workspace.changed.set(builder.cwd, ["src/ui/checkout.vue"]);
+
+  await endTurn(
+    env,
+    task,
+    builder,
+    helperReport({ changed: "src/ui/checkout.vue", verify: "node --test -> pass" })
+  );
+  const inst = task.instances.find(i => i.candidate === "build-1" && i.role === "builder");
+  assert.deepEqual(inst.scope, { outside: ["src/ui/checkout.vue"], ok: false });
+  assert.deepEqual(
+    env.store
+      .log(task.id)
+      .filter(e => e.event === "scope-outside")
+      .map(e => ({ instance: e.instance, files: e.files })),
+    [{ instance: inst.id, files: ["src/ui/checkout.vue"] }]
+  );
 });
 
 test("Split work: subtasks that share files stop at a gate; a plan without subtasks can't be approved", async () => {
@@ -1876,6 +1911,8 @@ test("Ollama's turn fails (not running, model missing): the gate shows its error
 
 const asks = (actions, next = "wait") =>
   `On it.\n\n\`\`\`json\n${JSON.stringify({ actions, next })}\n\`\`\``;
+const helperReport = ({ changed, verify = "npm test -> pass" }) =>
+  `Done.\n\nSTATUS: done\nCHANGED: ${changed}\nVERIFY: ${verify}\nNOTES: none`;
 const wstart = (id, agent, files, extra = {}) => ({
   do: "start",
   id,
@@ -1979,6 +2016,47 @@ test("Orchestrator: it asks for workers, you approve the first batch, results co
   assert.match(env.store.readArtifact(task.id, "orchestrator.1.md"), /On it/);
 });
 
+test("Orchestrator: writer reports and actual files are checked and returned to the orchestrator", async () => {
+  const env = setup();
+  const task = await startOrchestrator(env);
+  await endTurn(
+    env,
+    task,
+    orchestratorNow(env),
+    asks([wstart("api", "codex", ["src/api/"]), wstart("docs", "claude", ["README.md"])])
+  );
+  await decide(env, task, "approve");
+  const api = env.runner.sessions.find(s => /Do api/.test(s.prompt));
+  const docs = env.runner.sessions.find(s => /Do docs/.test(s.prompt));
+  env.workspace.changed.set(api.cwd, ["src/api/coupons.js"]);
+  env.workspace.changed.set(docs.cwd, ["docs/other.md"]);
+
+  await endTurn(env, task, api, helperReport({ changed: "src/api/coupons.js" }));
+  const apiInst = task.instances.find(i => i.worker === "api");
+  assert.equal(apiInst.report.status, "done");
+  assert.equal(apiInst.report.verify.passed, true);
+  assert.deepEqual(apiInst.reportGap, []);
+  assert.deepEqual(apiInst.scope, { outside: [], ok: true });
+  assert.equal(
+    env.store.log(task.id).some(e => e.event === "scope-outside" && e.instance === apiInst.id),
+    false
+  );
+
+  await endTurn(env, task, docs, "Done without a report");
+  const docsInst = task.instances.find(i => i.worker === "docs");
+  assert.equal(docsInst.report, null);
+  assert.deepEqual(docsInst.scope, { outside: ["docs/other.md"], ok: false });
+  assert.deepEqual(
+    env.store
+      .log(task.id)
+      .filter(e => e.event === "scope-outside")
+      .map(e => ({ instance: e.instance, files: e.files })),
+    [{ instance: docsInst.id, files: ["docs/other.md"] }]
+  );
+  assert.match(lastPrompt(env), /Its report: STATUS done, VERIFY npm test -> pass/);
+  assert.match(lastPrompt(env), /Changed files outside its scope: docs\/other\.md[\s\S]*No report/);
+});
+
 test("Orchestrator: refused or unreadable three turns in a row stops it for you; Run again goes on", async () => {
   const env = setup();
   const task = await startOrchestrator(env);
@@ -2068,7 +2146,7 @@ test("Orchestrator: a worker that can't start is told to the orchestrator with w
   assert.equal(task.candidates.find(c => c.id === "worker-1").status, "out");
 });
 
-test("Orchestrator: a follow-up reuses a live worker session with only the new prompt", async () => {
+test("Orchestrator: a follow-up reuses a live worker session with the report rule", async () => {
   const env = setup();
   const task = await startOrchestrator(env);
   await endTurn(env, task, orchestratorNow(env), asks([wstart("look", "claude")]));
@@ -2081,7 +2159,11 @@ test("Orchestrator: a follow-up reuses a live worker session with only the new p
     orchestratorNow(env),
     asks([{ do: "send", id: "look", prompt: "Check the edge case" }])
   );
-  assert.deepEqual(env.runner.prompts.at(-1), [worker.name, "Check the edge case"]);
+  assert.equal(env.runner.prompts.at(-1)[0], worker.name);
+  assert.match(
+    env.runner.prompts.at(-1)[1],
+    /Check the edge case[\s\S]*STATUS: done \| partial \| blocked[\s\S]*CHANGED: none/
+  );
 });
 
 test("Orchestrator: a follow-up in a new worker session repeats its rules and earlier task", async () => {
@@ -2107,7 +2189,7 @@ test("Orchestrator: a follow-up in a new worker session repeats its rules and ea
   assert.notEqual(followUp.name, worker.name);
   assert.match(
     followUp.prompt,
-    /Change only these files: src\/api\/\.[\s\S]*Earlier task:\nBuild the endpoint\n\nFollow-up:\nCheck the edge case$/
+    /Change only these files: src\/api\/\.[\s\S]*Earlier task:\nBuild the endpoint\n\nFollow-up:\nCheck the edge case[\s\S]*NOTES:/
   );
 });
 

@@ -13,6 +13,7 @@
 //   workspace { prepare({ cwd, taskId }) → { root, sha, branch, roDir },
 //               addCandidate({ root, taskId, candidate, sha }) → { dir, branch },
 //               snapshot(dir, message) → sha | null, head(dir) → sha, dirty(dir) → bool,
+//               changedFiles(dir, base) → [path],
 //               diffstat(root, sha, branch) → { files, added, deleted },
 //               testCommand(root) → string | null, runTests(dir, command) → { ok, code, output },
 //               merge({ root, branch, into, message }) → { ok, error?, conflicts? },
@@ -33,7 +34,13 @@ const {
 const Roles = require("../../../shared/roles");
 const { parseFindings } = require("../agents/challenge-report");
 const { parseSubtasks, overlaps, describeSubtask } = require("./subtasks");
-const { arbiterInput, parseDecision, parseReport, needsOwner } = require("./arbiter");
+const {
+  arbiterInput,
+  parseDecision,
+  parseReport: parseArbiterReport,
+  needsOwner,
+} = require("./arbiter");
+const { parseReport: parseHelperReport, scopeCheck, reportGap } = require("./helper-report");
 const { LOCAL, parseRunbook, reclassify, confirmLevel, classifyRisk } = require("./runbook");
 const Discussion = require("./discussion");
 const Orchestrator = require("./orchestrator");
@@ -1683,6 +1690,8 @@ class TaskEngine extends EventEmitter {
         diff: cand?.diff
           ? `${cand.diff.files} files, +${cand.diff.added} −${cand.diff.deleted}`
           : null,
+        report: inst.report || null,
+        outside: inst.scope?.outside || [],
       });
       await this.#orchestratorCheck(task, st);
       return;
@@ -1820,7 +1829,14 @@ class TaskEngine extends EventEmitter {
           files: known.files,
           others: known.others || [],
         });
-        this.#orchestratorWorker(task, st, known, a.prompt, last?.handle || null, restartPrompt);
+        this.#orchestratorWorker(
+          task,
+          st,
+          known,
+          `${a.prompt}\n\n${Orchestrator.reportPrompt(known.mode)}`,
+          last?.handle || null,
+          restartPrompt
+        );
         m.wait.push(a.id);
       } else {
         for (const i of task.instances.filter(x => x.worker === a.id && !ENDED.has(x.status))) {
@@ -2131,7 +2147,11 @@ ${prompt}`;
       task.attachments?.length && AGENTS[inst.adapter]?.kind !== "text"
         ? this.attachments(task.id).manifest()
         : "";
-    return files ? `${text}\n\n${files}` : text;
+    const withReport =
+      st?.role === "builder" && cand?.subtask
+        ? `${text}\n\n${Orchestrator.reportPrompt("writes")}`
+        : text;
+    return files ? `${withReport}\n\n${files}` : withReport;
   }
 
   // An artifact by the name a template uses: the candidate's own copy first (test-output.build-2.txt)
@@ -2218,6 +2238,26 @@ ${prompt}`;
       this.#log(task, "engine", "read-only-violation", { instance: inst.id, cwd: inst.cwd });
     }
     if (cand && inst.role === "builder") {
+      inst.report = parseHelperReport(message);
+      // its worktree gone or git failing: no scope check, never a broken turn end
+      const changedFiles = await this.workspace
+        .changedFiles(cand.dir, task.base.sha)
+        .catch(() => []);
+      if (inst.report) {
+        inst.reportGap = reportGap(inst.report, changedFiles);
+      }
+      const ownedFiles = inst.worker
+        ? task.orchestrator?.workers.find(w => w.id === inst.worker)?.files
+        : task.subtasks?.list.find(sub => sub.id === cand.subtask)?.files;
+      if (ownedFiles) {
+        inst.scope = scopeCheck(changedFiles, ownedFiles);
+        if (!inst.scope.ok) {
+          this.#log(task, "engine", "scope-outside", {
+            instance: inst.id,
+            files: inst.scope.outside,
+          });
+        }
+      }
       const sha = await this.workspace.snapshot(cand.dir, `bayloob: ${task.title} (${cand.id})`);
       cand.head = sha || (await this.workspace.head(cand.dir));
       cand.diff = await this.workspace.diffstat(task.project.root, task.base.sha, cand.branch);
@@ -2226,6 +2266,9 @@ ${prompt}`;
         head: cand.head,
         diff: cand.diff,
       });
+    }
+    if (inst.worker && inst.role !== "builder") {
+      inst.report = parseHelperReport(message);
     }
     if (st.role === "orchestrator" && task.orchestrator) {
       await this.#orchestratorEnded(task, st, inst, message);
@@ -2520,7 +2563,7 @@ ${prompt}`;
     const text = (inst?.artifact && this.#readArtifact(task, inst.artifact)) || "";
     const board = !task.template.stages.some(s => s.role === "builder");
     const parsed = board
-      ? parseReport(text)
+      ? parseArbiterReport(text)
       : parseDecision(
           text,
           this.#active(task).map(c => c.id)

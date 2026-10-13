@@ -156,6 +156,25 @@ class TaskWorkspace {
     return (await run(dir, ["status", "--porcelain"])).trim() !== "";
   }
 
+  /** Files changed in a writer's worktree since the task began, including uncommitted and untracked files. */
+  async changedFiles(dir, base) {
+    const output = await Promise.all([
+      run(dir, ["diff", "--name-only", `${base}...HEAD`]),
+      run(dir, ["diff", "--name-only", "HEAD"]),
+      run(dir, ["ls-files", "--others", "--exclude-standard"]),
+    ]);
+    return [
+      ...new Set(
+        output.flatMap(value =>
+          value
+            .split("\n")
+            .map(x => x.trim())
+            .filter(Boolean)
+        )
+      ),
+    ];
+  }
+
   async diffstat(root, sha, branch) {
     return parseShortstat(await run(root, ["diff", "--shortstat", `${sha}...${branch}`]));
   }

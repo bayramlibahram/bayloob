@@ -398,6 +398,8 @@ const LOG = {
     `${displayName(e.adapter)} ${e.reused ? "continues" : "started"} · ${instName(e.instance)}`,
   worktree: e => `Worktree for ${e.candidate}: ${e.branch}`,
   pushed: e => `You pushed ${e.branch} to ${e.remote}`,
+  "scope-outside": e =>
+    `${instName(e.instance)} changed files outside its part: ${e.files.join(", ")}`,
   "push-failed": e => `Push of ${e.branch} failed${e.error ? ` — ${e.error}` : ""}`,
   "pr-opened": e => `You pushed ${e.branch} to ${e.remote} for a pull request`,
   "tests-passed": e => `The project's tests pass (${e.command})`,
@@ -469,7 +471,7 @@ export function pickSummary(t, id) {
 }
 
 /** A log line that went wrong: a failure, a refused or invalid answer, a broken rule. */
-export const logProblem = e => /fail|invalid|violation|error|interrupted/.test(e.event);
+export const logProblem = e => /fail|invalid|violation|error|interrupted|outside/.test(e.event);
 
 /**
  * The log in stages, newest first: each `stage` entry starts a group named after the stage (and its round);
