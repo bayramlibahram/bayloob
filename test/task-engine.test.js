@@ -2068,6 +2068,82 @@ test("Orchestrator: a worker that can't start is told to the orchestrator with w
   assert.equal(task.candidates.find(c => c.id === "worker-1").status, "out");
 });
 
+test("Orchestrator: a follow-up reuses a live worker session with only the new prompt", async () => {
+  const env = setup();
+  const task = await startOrchestrator(env);
+  await endTurn(env, task, orchestratorNow(env), asks([wstart("look", "claude")]));
+  await decide(env, task, "approve");
+  const worker = env.runner.by({ role: "worker" })[0];
+  await endTurn(env, task, worker, "Looked");
+  await endTurn(
+    env,
+    task,
+    orchestratorNow(env),
+    asks([{ do: "send", id: "look", prompt: "Check the edge case" }])
+  );
+  assert.deepEqual(env.runner.prompts.at(-1), [worker.name, "Check the edge case"]);
+});
+
+test("Orchestrator: a follow-up in a new worker session repeats its rules and earlier task", async () => {
+  const env = setup();
+  const task = await startOrchestrator(env);
+  await endTurn(
+    env,
+    task,
+    orchestratorNow(env),
+    asks([wstart("api", "codex", ["src/api/"], { prompt: "Build the endpoint" })])
+  );
+  await decide(env, task, "approve");
+  const worker = env.runner.by({ role: "builder" })[0];
+  await endTurn(env, task, worker, "Built");
+  env.runner.dead.add(worker.name);
+  await endTurn(
+    env,
+    task,
+    orchestratorNow(env),
+    asks([{ do: "send", id: "api", prompt: "Check the edge case" }])
+  );
+  const followUp = env.runner.by({ role: "builder" }).at(-1);
+  assert.notEqual(followUp.name, worker.name);
+  assert.match(
+    followUp.prompt,
+    /Change only these files: src\/api\/\.[\s\S]*Earlier task:\nBuild the endpoint\n\nFollow-up:\nCheck the edge case$/
+  );
+});
+
+test("Orchestrator: a worker gives up after two failed turns and cannot be sent again", async () => {
+  const env = setup();
+  const task = await startOrchestrator(env);
+  await endTurn(env, task, orchestratorNow(env), asks([wstart("look", "claude")]));
+  await decide(env, task, "approve");
+  const first = env.runner.by({ role: "worker" })[0];
+  env.runner.dead.add(first.name);
+  env.engine.sessionGone(first.paneId);
+  await env.engine.settled(task.id);
+  await endTurn(
+    env,
+    task,
+    orchestratorNow(env),
+    asks([{ do: "send", id: "look", prompt: "Try again" }])
+  );
+  const second = env.runner.by({ role: "worker" }).at(-1);
+  env.runner.dead.add(second.name);
+  env.engine.sessionGone(second.paneId);
+  await env.engine.settled(task.id);
+  assert.match(lastPrompt(env), /## look \(claude, read-only\) — gave up after 2 failures/);
+  await endTurn(
+    env,
+    task,
+    orchestratorNow(env),
+    asks([{ do: "send", id: "look", prompt: "One more try" }])
+  );
+  assert.match(
+    lastPrompt(env),
+    /Refused — send "look": failed twice — do it another way or leave it/
+  );
+  assert.equal(env.runner.by({ role: "worker" }).length, 2);
+});
+
 test("Role chain: each stage runs as its role agent, hands its answer on, you approve the text, Design builds", async () => {
   const Roles = require("../src/shared/roles");
   // the owner moved the Research Agent to Gemini (Settings → Agents → Roles)

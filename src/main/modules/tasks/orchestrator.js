@@ -113,8 +113,12 @@ function checkBatch(actions, { allowed, workers = [], budget = DEFAULT_BUDGET })
       continue;
     }
     if (a.do === "send") {
-      if (!known || known.status === "stopped") {
+      if (!known) {
         no(a, `no worker "${a.id}" to send to`);
+      } else if (!ENDED.has(known.status)) {
+        no(a, `worker "${a.id}" is still working — wait for it`);
+      } else if ((known.failures || 0) >= 2) {
+        no(a, "failed twice — do it another way or leave it");
       } else if (accepted.some(x => x.id === a.id && x.do === "send")) {
         no(a, `one message per worker per turn`);
       } else {
@@ -254,7 +258,7 @@ function nextPrompt({ results = [], refused = [], error = null, left }) {
 }
 
 /** What a worker is told before the orchestrator's prompt: its place, its files, the rules nobody can lift. */
-function workerPrompt({ prompt, mode, files = [], others = [] }) {
+function workerPrompt({ prompt, mode, files = [], others = [], earlierPrompt = null }) {
   const rules =
     mode === "writes"
       ? [
@@ -267,7 +271,10 @@ function workerPrompt({ prompt, mode, files = [], others = [] }) {
           "You are one of several workers on this task. Read only: don't change any file.",
           "Don't fetch anything from the network.",
         ];
-  return [...rules, "", "Your part:", prompt].join("\n");
+  const task = earlierPrompt
+    ? ["", "Earlier task:", earlierPrompt, "", "Follow-up:", prompt]
+    : ["", "Your part:", prompt];
+  return [...rules, ...task].join("\n");
 }
 
 module.exports = {

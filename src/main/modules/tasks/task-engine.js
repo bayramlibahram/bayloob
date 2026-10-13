@@ -1571,7 +1571,7 @@ class TaskEngine extends EventEmitter {
       turns: 0,
       startedAt: this.now(),
       budget,
-      workers: [], // { id, agent, mode, files, status, candidate, turn }
+      workers: [], // { id, agent, mode, files, prompt, others, status, failures, candidate, turn }
       inbox: [], // workers' results not yet told to the orchestrator
       refusedNow: [], // what its last batch had refused (told in its next turn)
       refusedRun: 0, // batches in a row with nothing accepted
@@ -1625,7 +1625,7 @@ class TaskEngine extends EventEmitter {
   }
 
   // One turn of a worker: a writer is a builder in its own worktree (its candidate is the part integrate merges)
-  #orchestratorWorker(task, st, w, prompt, reuse) {
+  #orchestratorWorker(task, st, w, prompt, reuse, restartPrompt = null) {
     const n = task.instances.filter(i => i.stage === st.id).length + 1;
     const inst = {
       id: `${st.id}.${task.orchestrator.turns}.${w.id}.${n}`,
@@ -1640,6 +1640,7 @@ class TaskEngine extends EventEmitter {
       raw: true,
       vars: {},
       reuse,
+      restartPrompt,
       worker: w.id,
       status: "queued",
       waiting: null,
@@ -1662,6 +1663,9 @@ class TaskEngine extends EventEmitter {
       const w = m.workers.find(x => x.id === inst.worker);
       const cand = w.candidate ? task.candidates.find(c => c.id === w.candidate) : null;
       w.status = inst.status;
+      if (inst.status === "failed" || inst.status === "interrupted") {
+        w.failures = (w.failures || 0) + 1;
+      }
       if (cand && inst.status !== "done") {
         Object.assign(cand, { status: "out", out: inst.error || "The worker failed" });
       }
@@ -1669,7 +1673,12 @@ class TaskEngine extends EventEmitter {
         id: w.id,
         agent: w.agent,
         mode: w.mode,
-        status: inst.status === "failed" ? `failed: ${inst.error || "?"}` : inst.status,
+        status:
+          w.failures >= 2
+            ? "gave up after 2 failures"
+            : inst.status === "failed"
+              ? `failed: ${inst.error || "?"}`
+              : inst.status,
         answer: message,
         diff: cand?.diff
           ? `${cand.diff.files} files, +${cand.diff.added} −${cand.diff.deleted}`
@@ -1760,7 +1769,9 @@ class TaskEngine extends EventEmitter {
           agent: a.agent,
           mode: a.mode,
           files: a.files,
+          prompt: a.prompt,
           status: "queued",
+          failures: 0,
           candidate: null,
           turn: m.turns,
         };
@@ -1784,6 +1795,7 @@ class TaskEngine extends EventEmitter {
         const others = m.workers
           .filter(x => x.mode === "writes" && !ENDED.has(x.status))
           .flatMap(x => x.files);
+        w.others = others;
         m.workers.push(w);
         this.#orchestratorWorker(
           task,
@@ -1801,7 +1813,14 @@ class TaskEngine extends EventEmitter {
             Object.assign(c, { status: "active", out: null }); // another try in its worktree
           }
         }
-        this.#orchestratorWorker(task, st, known, a.prompt, last?.handle || null);
+        const restartPrompt = Orchestrator.workerPrompt({
+          prompt: a.prompt,
+          earlierPrompt: known.prompt || "(original task unavailable)",
+          mode: known.mode,
+          files: known.files,
+          others: known.others || [],
+        });
+        this.#orchestratorWorker(task, st, known, a.prompt, last?.handle || null, restartPrompt);
         m.wait.push(a.id);
       } else {
         for (const i of task.instances.filter(x => x.worker === a.id && !ENDED.has(x.status))) {
@@ -2028,6 +2047,9 @@ class TaskEngine extends EventEmitter {
       }
       let prompt = this.#prompt(task, inst, cand);
       const reuse = inst.reuse && (await this.runner.alive(inst.reuse).catch(() => false));
+      if (inst.worker && inst.restartPrompt && !reuse) {
+        prompt = inst.restartPrompt;
+      }
       if (inst.orchestratorTurn && !inst.first && !reuse) {
         // a new session for the orchestrator (its old one is gone): it needs the protocol again before the news
         const st = task.template.stages.find(s => s.id === inst.stage);

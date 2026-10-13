@@ -151,6 +151,33 @@ test("orchestrator: the budget — new workers per turn, workers in all; send an
   assert.equal(M.overBudget({ turns: 1, startedAt: 0, now: 60 * 60_000 }), "the 60 minutes are up");
 });
 
+test("orchestrator: send waits for a running worker and gives up after two failures", () => {
+  const send = id => ({ do: "send", id, prompt: "more" });
+  const workers = [
+    { id: "queued", status: "queued" },
+    { id: "starting", status: "starting" },
+    { id: "running", status: "running" },
+    { id: "done", status: "done" },
+    { id: "failed", status: "failed", failures: 1 },
+    { id: "stopped", status: "stopped" },
+    { id: "gave-up", status: "interrupted", failures: 2 },
+  ];
+  const r = M.checkBatch(
+    workers.map(w => send(w.id)),
+    { allowed, workers }
+  );
+  assert.deepEqual(
+    r.accepted.map(a => a.id),
+    ["done", "failed", "stopped"]
+  );
+  assert.deepEqual(whys(r), [
+    'queued: worker "queued" is still working — wait for it',
+    'starting: worker "starting" is still working — wait for it',
+    'running: worker "running" is still working — wait for it',
+    "gave-up: failed twice — do it another way or leave it",
+  ]);
+});
+
 test("orchestrator: prompts — the protocol and limits first; workers' answers come back fenced, as data", () => {
   const first = M.firstPrompt({ task: "Coupons at checkout", allowed });
   assert.match(first, /End EVERY answer with one ```json block/);
@@ -198,5 +225,14 @@ test("orchestrator: prompts — the protocol and limits first; workers' answers 
   assert.match(
     M.workerPrompt({ prompt: "Check it", mode: "read-only" }),
     /Read only: don't change any file/
+  );
+  assert.match(
+    M.workerPrompt({
+      prompt: "Check the edge case",
+      earlierPrompt: "Build the endpoint",
+      mode: "writes",
+      files: ["src/api/"],
+    }),
+    /Change only these files: src\/api\/\.[\s\S]*Earlier task:\nBuild the endpoint\n\nFollow-up:\nCheck the edge case$/
   );
 });
