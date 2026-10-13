@@ -29,6 +29,7 @@ const csp = dev =>
     `script-src 'self'${dev ? " 'unsafe-inline'" : ""}`,
     "style-src 'self' 'unsafe-inline'", // Radix positions popovers with inline styles
     "img-src 'self' data:",
+    "media-src 'self' data:", // the pill's sounds (Vite inlines the small ones)
     "font-src 'self' data:",
     `connect-src 'self'${dev ? " ws: http://localhost:*" : ""}`,
   ].join("; ");

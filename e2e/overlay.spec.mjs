@@ -15,9 +15,12 @@ test("the pill: the bar on the demo's agents, Novi animated, and it opens on hov
     // Novi runs (its layers in place), and the bar tells the most urgent agent's project
     await expect(win.locator("#pill .mascot.nv .rig img").first()).toBeAttached();
     await expect(pill.locator(".stack .mini").first()).toBeVisible({ timeout: 10_000 });
+    // from outside the pill (Playwright's pointer starts nowhere: no mouseenter without a move first)
+    await win.mouse.move(5, 5);
     await pill.locator(".bar").hover();
     await expect(pill).toHaveClass(/\bopen\b/);
     await expect(pill.getByRole("button", { name: "New session" })).toBeVisible();
+    await expect(pill.locator(".list .row").first()).toBeVisible();
   } finally {
     await app.close();
   }

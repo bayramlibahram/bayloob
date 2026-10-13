@@ -57,6 +57,10 @@ export const usePill = create((set, get) => ({
   collisions: {},
   waits: {}, // session id → since when it waits on a card
   diffs: {}, // session id → { files, added, deleted, untracked } of its repo
+  output: {}, // session id → its latest line (only while the list is open)
+  tokens: {}, // session id → { input, output, cacheWrite, cacheRead, total }
+  queues: {}, // session id → prompts waiting for it
+  confirmStop: null, // the session whose Stop asks for a second click
   errorNote: null, // { headline, lines, until } — a stack trace was copied
   gatesLater: [], // task gate ids put off in the pill (still in the Inbox and on the board)
   answers: {}, // question perm id → { question: [labels] }
@@ -311,6 +315,16 @@ export const usePill = create((set, get) => ({
     }
   },
 
+  /** Stopping kills the agent, so it takes a second click within a few seconds. */
+  stop(sid) {
+    if (get().confirmStop === sid) {
+      set({ confirmStop: null });
+      return get().api?.stopSession(sid);
+    }
+    set({ confirmStop: sid });
+    setTimeout(() => get().confirmStop === sid && set({ confirmStop: null }), 3000);
+  },
+
   rowNote: null, // { sid, text, until } — a short note in place of a row's latest line
   noteRow(sid, text) {
     set({ rowNote: { sid, text, until: Date.now() + 5000 } });
@@ -340,6 +354,9 @@ export function connect(api) {
   api.onCollisions?.(collisions => usePill.setState({ collisions: collisions || {} }));
   api.onBlocked?.(info => usePill.setState({ waits: info?.waits || {} }));
   api.onDiffs?.(diffs => usePill.setState({ diffs: diffs || {} }));
+  api.onOutput?.(output => usePill.setState({ output: output || {} }));
+  api.onTokens?.(tokens => usePill.setState({ tokens: tokens || {} }));
+  api.onQueues?.(queues => usePill.setState({ queues: queues || {} }));
   api.onErrorCopied?.(e => {
     usePill.setState({ errorNote: { ...e, until: Date.now() + 30_000 } });
     // it stays a while (longer while hovered)

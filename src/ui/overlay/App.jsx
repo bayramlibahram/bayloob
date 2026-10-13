@@ -1,27 +1,8 @@
 import { Card } from "./Cards";
+import { List } from "./List";
 import { Pill } from "./Pill";
-import { usePill } from "./store";
 
-/** The pill, with what comes in the next steps of the move: the cards, the agents' list, the voice prompt. */
+/** The pill: its bar, the card on view, the agents' list (the voice prompt comes in the next step). */
 export function App() {
-  const api = usePill(s => s.api);
-  return (
-    <Pill
-      card={<Card />}
-      list={
-        api ? (
-          <button type="button" className="new" data-act="new" onClick={() => api.openLauncher()}>
-            <span className="plus">
-              <i>
-                <svg viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M8 3v10M3 8h10" />
-                </svg>
-              </i>
-            </span>
-            New session
-          </button>
-        ) : null
-      }
-    />
-  );
+  return <Pill card={<Card />} list={<List />} />;
 }

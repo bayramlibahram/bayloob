@@ -40,8 +40,13 @@ beforeEach(() => {
     "onRuleAllowed",
     "onDiffs",
     "onErrorCopied",
+    "onOutput",
+    "onTokens",
+    "onQueues",
   ]) {
-    api[ch] = cb => (api[ch.slice(2).toLowerCase()] = cb);
+    // main's channel → a feed the test calls: onSessions → api.sessions(…), onMusic → api.musicFeed(…)
+    const feed = ch === "onMusic" ? "musicFeed" : ch.slice(2).toLowerCase();
+    api[ch] = cb => (api[feed] = cb);
   }
   Object.assign(api, {
     setPillRect: vi.fn(),
@@ -66,6 +71,9 @@ beforeEach(() => {
     challenge: vi.fn(async () => ({ ok: false, error: "No other agent is installed" })),
     openPrompt: vi.fn(),
     fixError: vi.fn(),
+    openAgent: vi.fn(),
+    stopSession: vi.fn(),
+    music: vi.fn(),
   });
   usePill.setState({
     sessions: [],
@@ -89,6 +97,10 @@ beforeEach(() => {
     answers: {},
     receipts: {},
     diffs: {},
+    output: {},
+    tokens: {},
+    queues: {},
+    confirmStop: null,
     reply: { sid: null, text: "", confirm: false, focused: false, error: "" },
   });
   play = vi.spyOn(sounds, "play").mockImplementation(() => true);
@@ -139,7 +151,7 @@ test("nothing running: the music in the label, else 'no sessions'; hooks missing
   render(<App />);
   act(() => api.sessions([]));
   expect(label()).toBe("Bayloob no sessions");
-  act(() => api.music({ title: "Song", artist: "Band", playing: true }));
+  act(() => api.musicFeed({ title: "Song", artist: "Band", playing: true }));
   expect(label()).toBe("♪ Song · Band");
   expect(play).toHaveBeenLastCalledWith("dance");
   act(() => api.health({ ok: false, issues: [{ kind: "not-installed" }] }));
@@ -381,7 +393,7 @@ test("a finished turn: the receipt, the next steps, a reply sent on the second E
   fireEvent.click(screen.getByRole("button", { name: "Fix the tests" }));
   const box = screen.getByRole("textbox", { name: "Reply to Claude Code" });
   expect(box.value).toBe("Fix the failing tests.");
-  expect(screen.getByRole("button", { name: /Send/ }).textContent).toBe("✓ Send");
+  expect(screen.getByRole("button", { name: "✓ Send" }).textContent).toBe("✓ Send");
   await act(async () => fireEvent.submit(box.closest("form")));
   expect(api.sendPrompt).toHaveBeenCalledWith("a", "Fix the failing tests.");
   expect(card()).toBeNull();
@@ -400,4 +412,85 @@ test("⚔ Challenge on changed code says why it can't start; a copied error offe
   fireEvent.click(screen.getByRole("button", { name: "Fix in Claude Code · shop" }));
   expect(api.fixError).toHaveBeenCalledWith("a");
   expect(card()).toBeNull();
+});
+
+// ---------- the agents' list (step 8c) ----------
+
+const rows = () => [...pill().querySelectorAll(".list .row")];
+
+test("a row: what the agent last said, tokens and age, changes, its queue, its task; a click opens it", () => {
+  render(<App />);
+  act(() => {
+    api.tasksummary([
+      {
+        id: "t1",
+        title: "Discount",
+        project: "shop",
+        stage: "Build",
+        stageNo: 2,
+        stages: 5,
+        live: 1,
+      },
+    ]);
+    api.sessions([
+      session("a", "claude", "working", { startedAt: NOW - 12 * 60_000, task: "t1" }),
+      session("b", "codex", "idle", { project: "api", role: "challenger" }),
+    ]);
+    api.output({ a: "Editing **cart.js**" });
+    api.tokens({ a: { input: 9000, output: 200, cacheWrite: 0, cacheRead: 5000, total: 9200 } });
+    api.diffs({
+      a: { files: 2, added: 42, deleted: 7, untracked: 0 },
+      b: { files: 1, added: 0, deleted: 0, untracked: 1 },
+    });
+    api.queues({ a: 2 });
+  });
+  const [a, b] = rows();
+  expect(a.querySelector(".out").textContent).toBe("Editing cart.js");
+  expect(a.querySelector(".tok").textContent).toBe("9.2k tok");
+  expect(a.querySelector(".age").textContent).toBe("12m");
+  expect(a.querySelector(".tag.diff").textContent).toBe("+42−7");
+  expect(a.querySelector(".tag.queue").textContent).toBe("2");
+  expect(a.querySelector(".tag.task").textContent).toBe("Discount");
+  expect(b.querySelector(".role").textContent).toBe("⚔ challenger");
+  expect(b.querySelector(".tag.diff").textContent).toBe("1 file");
+  fireEvent.click(a.querySelector(".name"));
+  expect(api.openAgent).toHaveBeenCalledWith("a");
+  fireEvent.click(a.querySelector(".tag.task"));
+  expect(api.openTasks).toHaveBeenCalledWith("t1");
+});
+
+test("a permission on a row: ✓ / ✗ right there (not with a hidden part); Stop takes a second click", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  render(<App />);
+  act(() =>
+    api.sessions([
+      session("a", "claude", "waiting", {
+        perm: { id: "41", tool: "Bash", detail: "npm test" },
+        stoppable: true,
+      }),
+      session("b", "codex", "waiting", { perm: { id: "42", tool: "Bash", hidden: 300 } }),
+    ])
+  );
+  const [a, b] = rows();
+  expect(a.querySelector(".out.ask").textContent).toBe("Bash · npm test");
+  fireEvent.click(a.querySelector(".icon.allow"));
+  expect(api.decide).toHaveBeenCalledWith("41", "allow");
+  expect(b.querySelector(".icon.allow").disabled).toBe(true);
+  fireEvent.click(a.querySelector(".icon.stop"));
+  expect(api.stopSession).not.toHaveBeenCalled();
+  expect(a.querySelector(".icon.stop").textContent).toBe("Stop?");
+  fireEvent.click(a.querySelector(".icon.stop"));
+  expect(api.stopSession).toHaveBeenCalledWith("a");
+});
+
+test("a terminal that can't come forward says so on its row; the music row plays, pauses, skips", async () => {
+  api.focus = vi.fn(async () => ({ ok: false, error: "No window for this terminal" }));
+  render(<App />);
+  act(() => api.sessions([session("a", "claude", "idle")]));
+  await act(async () => fireEvent.click(rows()[0].querySelector('[aria-label="Open terminal"]')));
+  expect(rows()[0].querySelector(".out.err").textContent).toBe("No window for this terminal");
+  act(() => api.musicFeed({ title: "Song", artist: "Band", app: "Firefox", playing: false }));
+  fireEvent.click(screen.getByRole("button", { name: "Play / pause" }));
+  expect(api.music).toHaveBeenCalledWith("toggle");
+  expect(pill().querySelector(".music .t").textContent).toBe("SongBand · Firefox");
 });
