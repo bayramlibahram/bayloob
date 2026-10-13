@@ -29,6 +29,7 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
 
   class Novi {
+    // base: the pack's folder ("../../assets/packs/coral"), or (state, part) → a layer's URL (a bundled page)
     constructor(el, meta, base, opts = {}) {
       if (REDUCED.matches) {
         opts = { ...opts, particles: false };
@@ -58,7 +59,7 @@
         d.innerHTML = ["body", "lid", "visor", "eyes"]
           .map(
             p =>
-              `<div class="part ${p}" style="${p === "lid" ? `transform-origin:${hx}% ${hy}%` : p === "eyes" ? `transform-origin:${ec[0]}% ${ec[1]}%` : ""}"><img src="${base}/${st}-${p}.png" alt=""></div>`
+              `<div class="part ${p}" style="${p === "lid" ? `transform-origin:${hx}% ${hy}%` : p === "eyes" ? `transform-origin:${ec[0]}% ${ec[1]}%` : ""}"><img src="${typeof base === "function" ? base(st, p) : `${base}/${st}-${p}.png`}" alt=""></div>`
           )
           .join("");
         this.rig.appendChild(d);

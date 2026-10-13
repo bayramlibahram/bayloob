@@ -89,3 +89,8 @@ class SoundPlayer {
 if (typeof module !== "undefined") {
   module.exports = { soundCue, SoundPlayer, CUE_ORDER };
 }
+// Imported by a bundled page (the React pill) its classes aren't globals: hand them over by name, always
+// (a bundler may wrap it as CommonJS, where `module` exists but nobody reads its exports)
+if (typeof window !== "undefined") {
+  window.BayloobSounds = { soundCue, SoundPlayer, CUE_ORDER };
+}

@@ -1,0 +1,2033 @@
+/* The pill's own look (moved as it was from the old page, src/renderer/overlay): its shape, the S / M / L
+   sizes, the open / full transitions and the mascot's animations. Hand-tuned, so it stays plain CSS on top of
+   theme.css — no Tailwind here (its reset would fight it). */
+:root {
+  --glass: rgba(16, 15, 21, 0.985); /* nearly solid: whatever is behind never shows through */
+  --card: rgb(var(--ink) / 0.045);
+  --accent: var(--idle);
+  --chip-h: 22px; /* every chip / tag in the pill: one height, one radius */
+  --row-pad: 6px; /* list rows, "New session" and the music row share one left edge */
+  --avatar: 34px;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html,
+body {
+  background: transparent;
+  overflow: hidden;
+  height: 100%;
+  font:
+    500 13px / 1.4 -apple-system,
+    "Segoe UI",
+    Ubuntu,
+    system-ui,
+    sans-serif;
+  color: var(--text);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+/* the pill floats just below the desktop's top bar (the window is placed there), with a little air */
+body {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 6px;
+}
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  cursor: pointer;
+  background: none;
+}
+button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Tooltips are drawn inside the pill: the window's shape is the pill, so a native one is cut off at its edge */
+.tip {
+  position: absolute;
+  z-index: 50;
+  max-width: 300px;
+  max-height: 9.6em;
+  overflow: hidden;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--surface-solid);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: pre-line;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgb(var(--shade) / calc(0.3 * var(--shade-k)));
+}
+.tip[hidden] {
+  display: none;
+}
+
+/* ---------- Pill ---------- */
+.pill {
+  position: relative;
+  width: 340px;
+  min-height: var(--bar-h, 58px);
+  background: var(--surface-solid);
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  /* Everything stays inside the pill (or within 1 px): on Linux the window's visible shape is the pill's
+     rectangle plus 2 px, so a wider shadow or halo would be cut into a hard-edged, smeary band */
+  box-shadow:
+    0 1px 0 rgb(var(--ink) / 0.06) inset,
+    0 1px 1px rgb(var(--shade) / calc(0.35 * var(--shade-k)));
+  overflow: hidden;
+  transition:
+    width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-radius 0.3s,
+    box-shadow 0.4s,
+    border-color 0.4s;
+}
+/* the state shows as light, not just text: a hairline of colour along the top edge and a soft halo
+   (static — no endless animation, so an idle overlay costs nothing) */
+.pill::before {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.pill[data-state="thinking"]::before,
+.pill[data-state="working"]::before,
+.pill[data-state="waiting"]::before,
+.pill[data-state="done"]::before {
+  opacity: 0.9;
+}
+.pill[data-state="thinking"],
+.pill[data-state="working"],
+.pill[data-state="waiting"],
+.pill[data-state="done"] {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  /* the state's glow is drawn inside the edge, not around it */
+  box-shadow:
+    0 1px 0 rgb(var(--ink) / 0.06) inset,
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    inset 0 10px 24px -14px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 1px 1px rgb(var(--shade) / calc(0.35 * var(--shade-k)));
+}
+.pill:hover .tile {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--ink) / 0.08),
+    0 5px 14px rgb(var(--shade) / calc(0.35 * var(--shade-k)));
+}
+.pill.multi {
+  width: 420px;
+} /* room for the agent stack next to the name */
+.pill.open,
+.pill.has-card,
+.pill.voicing {
+  width: 560px;
+  border-radius: 22px;
+}
+/* full view: the pill grows into a roomy panel (the window grows with it, see overlay-window.js) */
+.pill.full {
+  width: min(880px, calc(100vw - 24px));
+  border-radius: 24px;
+}
+/* open, the list shows every agent: the stacked tiles step aside so the name gets the room */
+.pill.open .count {
+  display: none;
+}
+/* open, the tools sit at the right edge and the gaps tighten a little, so the name keeps its room */
+.pill.open .bar {
+  gap: 8px;
+}
+.pill.open #voiceBtn {
+  margin-left: auto;
+}
+.pill.open #soundBtn.muted {
+  margin-left: auto;
+}
+.pill.open #soundBtn.muted ~ #voiceBtn {
+  margin-left: -6px;
+}
+/* open, mute and full view sit in the ⋯ row; a muted sound stays on the bar as a red reminder */
+.pill.open #soundBtn:not(.muted),
+.pill.open #fullBtn {
+  display: none;
+}
+.moremenu {
+  display: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 14px 8px;
+}
+.pill.open.more .moremenu {
+  display: flex;
+}
+.moremenu button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: rgb(var(--ink) / 0.07);
+  color: var(--soft);
+}
+.moremenu button:hover {
+  background: rgb(var(--ink) / 0.12);
+  color: var(--text);
+}
+.moremenu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.moremenu svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+.moremenu svg .w {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.bar {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--bar-h, 58px);
+  padding: 4px 14px 0 7px;
+}
+/* the manager mascot sits on its own tile, like an app icon docked to the bar */
+.tile {
+  flex: none;
+  width: var(--tile, 46px);
+  height: var(--tile, 46px);
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--tile, 46px) * 0.3);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+  background: linear-gradient(180deg, rgb(var(--ink) / 0.07), rgb(var(--ink) / 0.025));
+  border: 1px solid rgb(var(--ink) / 0.1);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--ink) / 0.06),
+    0 2px 8px rgb(var(--shade) / calc(0.35 * var(--shade-k)));
+}
+.label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.label b {
+  font-weight: 700;
+  font-size: var(--label, 16px);
+  letter-spacing: -0.01em;
+}
+/* Settings → Pill size: the mascot's tile, and the bar's height and name with it (L is the original) */
+.pill[data-size="s"] {
+  --tile: 28px;
+  --mascot: 24px;
+  --bar-h: 40px;
+  --label: 14px;
+}
+.pill[data-size="m"] {
+  --tile: 36px;
+  --mascot: 30px;
+  --bar-h: 48px;
+  --label: 15px;
+  --avatar: 32px;
+}
+/* smaller pill, denser list: the rows follow the bar down */
+.pill[data-size="s"] {
+  --avatar: 30px;
+}
+.pill[data-size="s"] .row {
+  min-height: 44px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.label span {
+  color: var(--muted);
+}
+/* status chip: "••• Thinking" in the state's colour; the dots pulse while the agent is busy */
+.clash {
+  margin-left: 6px;
+  font-size: 13px;
+  cursor: help;
+}
+.clash.conflict {
+  color: var(--waiting);
+}
+.clash.shared {
+  color: var(--working);
+}
+/* same family as the row tags (.tag): pill radius, state colour on its own 15 % tint */
+.status {
+  flex: none;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  height: var(--chip-h);
+  padding: 0 10px 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: color-mix(in srgb, var(--accent) 80%, var(--chip-tint));
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.status.on {
+  display: inline-flex;
+}
+.status .dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.status .dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+}
+.status.busy .dots i {
+  animation: dot 1.2s ease-in-out infinite;
+}
+.status.busy .dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.status.busy .dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: none;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+/* small bar buttons (sound, workspace panel): shown while the pill is open; the sound one also stays
+   visible while muted, so a silent Bayloob is never a mystery */
+.barbtn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: none;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--muted);
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.pill.open .barbtn,
+.barbtn.muted {
+  display: grid;
+}
+.barbtn:hover {
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text);
+}
+.barbtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: none;
+}
+.barbtn .i {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  stroke: none;
+}
+.barbtn .i .w {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.barbtn .off,
+.barbtn.muted .on {
+  display: none;
+}
+.barbtn.muted .off {
+  display: block;
+}
+.barbtn.muted {
+  color: var(--waiting);
+}
+.count + .barbtn {
+  margin-left: 2px;
+}
+/* The Workspace window is minimized to the pill: its button stays on the bar, with what waits for you */
+.barbtn.ws {
+  display: grid;
+  position: relative;
+  color: var(--brand-soft);
+}
+.barbtn.ws em {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--primary-bg);
+  color: var(--primary-fg);
+  font: 700 10px / 16px inherit;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.barbtn + .barbtn {
+  margin-left: -4px;
+} /* the bar's tools sit as one group */
+.barbtn.on {
+  color: var(--brand-soft);
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+}
+.barbtn .shrink,
+.pill.full .barbtn .grow {
+  display: none;
+}
+.pill.full .barbtn .shrink {
+  display: block;
+}
+/* the chevron opens and closes the list (hover does too) */
+.chev {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-right: -6px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--muted);
+  transition:
+    background 0.15s,
+    color 0.2s;
+}
+.chev:hover {
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text);
+}
+.chev svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.3s;
+}
+.pill.open .chev {
+  color: var(--text);
+}
+.pill.open .chev svg {
+  transform: rotate(180deg);
+}
+/* the top agent's own to-do list (TodoWrite / tasks): done / total along the bottom of the bar */
+.progress {
+  position: absolute;
+  left: 62px;
+  right: 22px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(var(--ink) / 0.07);
+  overflow: hidden;
+  display: none;
+}
+.progress.on {
+  display: block;
+}
+.progress.on.labelled {
+  right: 70px;
+}
+.plabel {
+  position: absolute;
+  right: 22px;
+  bottom: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--brand-soft);
+  font-variant-numeric: tabular-nums;
+  display: none;
+}
+.plabel.on {
+  display: block;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  width: var(--p, 0%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand), var(--brand-soft));
+  transition: width 0.5s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.label .note {
+  color: var(--brand-soft);
+}
+/* deaf: Bayloob can't hear the agents — grey mascot, warning in the label */
+/* an agent waiting on you: the mascot fades as the wait grows */
+.pill.hungry .mascot {
+  filter: saturate(0.55);
+}
+.pill.starving .mascot {
+  filter: saturate(0.2) brightness(0.8);
+}
+.card.done.r-failed {
+  border-color: color-mix(in srgb, var(--waiting) 45%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--waiting) 9%, transparent),
+    var(--card)
+  );
+}
+.card.done.r-untested {
+  border-color: color-mix(in srgb, var(--working) 40%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--working) 8%, transparent),
+    var(--card)
+  );
+}
+.row .role {
+  color: var(--waiting);
+}
+.card.perm.antibody {
+  border-color: color-mix(in srgb, var(--waiting) 55%, transparent);
+}
+/* resembling something you denied: Deny becomes the obvious button, Allow steps back */
+.card.perm.antibody .btn.deny {
+  background: var(--waiting);
+  color: #fff;
+}
+.card.perm.antibody .btn.allow {
+  background: transparent;
+  color: var(--done);
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.btn .lock {
+  width: 13px;
+  height: 13px;
+  margin: -2px 5px 0 -2px;
+  vertical-align: middle;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+.label .ruled {
+  color: var(--done);
+  cursor: pointer;
+}
+.label .ruled code {
+  font:
+    600 12px ui-monospace,
+    monospace;
+}
+.immune.warn {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--waiting);
+}
+.immune code {
+  font:
+    500 11.5px ui-monospace,
+    monospace;
+}
+.card.gate {
+  border-color: color-mix(in srgb, var(--waiting) 45%, transparent);
+}
+.card.gate .summary b {
+  color: var(--text);
+}
+.card.menu {
+  border-color: color-mix(in srgb, var(--thinking) 45%, transparent);
+}
+.card.menu .mq {
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card.menu .mopts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.card.menu .opt {
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgb(var(--ink) / 0.04);
+  color: var(--text);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card.menu .opt:hover {
+  background: rgb(var(--ink) / 0.09);
+  border-color: color-mix(in srgb, var(--thinking) 45%, transparent);
+}
+.card.menu .opt em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 11px;
+}
+.card.menu .opt:disabled {
+  opacity: 0.5;
+}
+.card.menu .hint {
+  color: var(--muted);
+}
+.card.menu .hint.err {
+  color: var(--waiting);
+}
+.card.handoff {
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+}
+.card.handoff code {
+  font:
+    600 12px ui-monospace,
+    monospace;
+}
+.card.errcopy {
+  border-color: color-mix(in srgb, var(--working) 45%, transparent);
+}
+.card.errcopy .code {
+  max-height: 3.2em;
+  overflow: hidden;
+}
+.findings {
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--waiting) 35%, transparent);
+  overflow: hidden;
+}
+.findings.none {
+  padding: 8px 12px;
+  color: var(--done);
+  border-color: color-mix(in srgb, var(--done) 35%, transparent);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.findings .fh {
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--waiting);
+  background: color-mix(in srgb, var(--waiting) 9%, transparent);
+}
+.findings .flist {
+  max-height: 168px;
+  overflow-y: auto;
+}
+.finding {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  text-align: left;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.finding:hover {
+  background: rgb(var(--ink) / 0.05);
+}
+.finding code {
+  flex: none;
+  font:
+    600 11.5px ui-monospace,
+    monospace;
+  color: var(--brand-soft);
+}
+.finding span {
+  color: var(--softer);
+  overflow-wrap: anywhere;
+}
+.reply {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 12px;
+  background: rgb(var(--ink) / 0.05);
+  border: 1px solid var(--line);
+}
+.reply:focus-within {
+  border-color: color-mix(in srgb, var(--brand) 70%, transparent);
+}
+.reply.confirm {
+  border-color: color-mix(in srgb, var(--brand) 70%, transparent);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+.reply .rtext {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  padding: 6px 0;
+  user-select: text;
+}
+.reply .rtext::placeholder {
+  color: var(--muted);
+}
+.reply .ricon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+.reply .ricon:hover {
+  background: rgb(var(--ink) / 0.08);
+  color: var(--text);
+}
+.reply .btn.rsend {
+  padding: 6px 12px;
+  background: var(--brand);
+  color: #fff;
+}
+.sugg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.sugg button {
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--softer);
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sugg button:hover {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  color: var(--text);
+}
+.rhint {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.rhint .err {
+  color: var(--waiting);
+}
+.receipt {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.receipt code {
+  font:
+    500 11.5px ui-monospace,
+    monospace;
+  color: var(--muted);
+}
+.receipt.passed {
+  color: var(--done);
+}
+.receipt.failed {
+  color: var(--waiting);
+}
+.receipt.untested {
+  color: var(--working);
+}
+.card .head .wait {
+  color: var(--waiting);
+  font-variant-numeric: tabular-nums;
+}
+.pill.deaf .mascot {
+  filter: grayscale(1) brightness(0.75);
+}
+.label .deaf-note {
+  color: var(--working);
+}
+.count {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* several agents: their Novis stacked like avatars, each ringed in its state colour */
+.stack {
+  display: flex;
+  align-items: center;
+}
+.stack .mini {
+  width: 27px;
+  height: 27px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--glass);
+  box-shadow:
+    0 0 0 1.5px var(--ring),
+    0 1px 3px rgb(var(--shade) / calc(0.4 * var(--shade-k)));
+}
+.stack .mini + .mini {
+  margin-left: -6px;
+}
+.stack .mini .thumb {
+  filter: none;
+}
+.stack em {
+  margin-left: 5px;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* ---------- Mascot (based on the Baynovix logo) ---------- */
+.mascot {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  --ring: var(--accent);
+}
+.tile .mascot {
+  width: var(--mascot, 38px);
+  height: var(--mascot, 38px);
+}
+.mascot.mini {
+  width: 26px;
+  height: 26px;
+}
+.mascot[data-s="idle"],
+.mascot[data-s="dance"] {
+  --ring: var(--brand);
+}
+.mascot svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ring) 70%, transparent))
+    drop-shadow(0 2px 3px rgb(var(--shade) / calc(0.5 * var(--shade-k))));
+  transform-origin: 50% 90%;
+}
+.mascot.mini svg {
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--ring) 60%, transparent));
+}
+.mascot svg .lid,
+.mascot svg .eye,
+.mascot svg .joy {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.mascot svg .lid {
+  transition: transform 0.3s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.mascot svg .visor-frame {
+  stroke: var(--ring);
+  transition: stroke 0.3s;
+}
+.mascot svg .eye {
+  fill: #f3eaff;
+  transition: transform 0.2s;
+}
+.mascot svg .joy {
+  opacity: 0;
+  stroke: #f3eaff;
+  transition: opacity 0.2s;
+}
+
+/* idle: one-off breaths and blinks toggled by SvgMascotView — an endless animation would keep the
+   transparent overlay redrawing every frame even when nothing happens */
+.mascot.breath svg {
+  animation: breathe 2.4s ease-in-out 1;
+}
+.mascot.blink svg .eye {
+  animation: blink-once 0.3s ease-in-out 1;
+}
+.mascot[data-s="thinking"] svg .eyes {
+  animation: scan 2.2s ease-in-out infinite;
+}
+.mascot[data-s="thinking"] svg .visor-frame {
+  animation: glow 1.2s ease-in-out infinite;
+}
+.mascot[data-s="working"] svg .lid {
+  animation: chomp 0.45s ease-in-out infinite;
+}
+.mascot[data-s="working"] svg .eye {
+  transform: scaleY(0.45);
+}
+.mascot[data-s="waiting"] svg .lid {
+  transform: translate(-2px, -7px) rotate(-6deg);
+}
+.mascot[data-s="waiting"] svg .eye {
+  transform: scale(1.15, 1.2);
+}
+.mascot[data-s="waiting"] svg {
+  animation: shake 0.4s ease-in-out infinite;
+}
+.mascot[data-s="waiting"] svg .visor-frame {
+  animation: glow 0.5s steps(2) infinite;
+}
+.mascot[data-s="done"] svg .eye,
+.mascot[data-s="dance"] svg .eye {
+  opacity: 0;
+}
+.mascot[data-s="done"] svg .joy,
+.mascot[data-s="dance"] svg .joy {
+  opacity: 1;
+}
+.mascot[data-s="done"] svg {
+  animation: joy 0.7s cubic-bezier(0.3, 1.6, 0.5, 1) 1;
+}
+/* dance: music is playing — sways, the lid bobs to the beat, notes float up */
+.mascot[data-s="dance"] svg {
+  animation: groove 0.5s ease-in-out infinite alternate;
+}
+.mascot[data-s="dance"] svg .lid {
+  animation: chomp 0.5s ease-in-out infinite;
+}
+/* raster mascot (novi.js): static idle thumbnail in the session list */
+.thumb {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--ring) 60%, transparent));
+}
+.thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.mascot .notes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+}
+.mascot[data-s="dance"] .notes {
+  display: block;
+}
+.mascot .notes i {
+  position: absolute;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--brand-soft);
+  opacity: 0;
+  text-shadow: 0 0 4px rgba(176, 73, 249, 0.8);
+  animation: float 2s ease-out infinite;
+}
+.mascot .notes i:nth-child(1) {
+  left: 26px;
+  top: 2px;
+}
+.mascot .notes i:nth-child(2) {
+  left: 30px;
+  top: 10px;
+  animation-delay: 0.7s;
+}
+.mascot .notes i:nth-child(3) {
+  left: -4px;
+  top: 6px;
+  animation-delay: 1.3s;
+}
+
+@keyframes breathe {
+  50% {
+    transform: scale(1.03, 0.97);
+  }
+}
+@keyframes blink-once {
+  50% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes scan {
+  0%,
+  100% {
+    transform: translate(-5px, 2px);
+  }
+  50% {
+    transform: translate(5px, -2px);
+  }
+}
+@keyframes glow {
+  50% {
+    stroke-opacity: 0.35;
+  }
+}
+@keyframes chomp {
+  50% {
+    transform: translate(-1px, -5px) rotate(-3deg);
+  }
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1.5px);
+  }
+  75% {
+    transform: translateX(1.5px);
+  }
+}
+@keyframes joy {
+  0% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px) scale(0.95, 1.06);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+@keyframes groove {
+  from {
+    transform: rotate(-7deg) translateY(0);
+  }
+  to {
+    transform: rotate(7deg) translateY(-2px);
+  }
+}
+@keyframes float {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px) scale(1);
+  }
+}
+
+/* ---------- Cards: permission and "done" ---------- */
+.card {
+  margin: 2px 12px 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  display: none;
+  animation: cardIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.pill.has-card .card {
+  display: block;
+}
+.card.perm {
+  border-color: color-mix(in srgb, var(--waiting) 45%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--waiting) 10%, transparent),
+    var(--card)
+  );
+}
+.card.done {
+  border-color: color-mix(in srgb, var(--done) 40%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--done) 9%, transparent), var(--card));
+}
+.card .head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.card .head b {
+  color: var(--text);
+  font-weight: 600;
+}
+.card .head .adot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-h);
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  background: color-mix(in srgb, var(--working) 15%, transparent);
+  color: var(--working);
+  margin-right: 6px;
+}
+.code {
+  font:
+    12.5px / 1.5 ui-monospace,
+    "Ubuntu Mono",
+    "DejaVu Sans Mono",
+    monospace;
+  color: var(--softer);
+  background: rgb(var(--shade) / calc(0.35 * var(--shade-k)));
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-top: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: text;
+}
+.code::-webkit-scrollbar {
+  width: 5px;
+}
+.code::-webkit-scrollbar-thumb {
+  background: rgb(var(--ink) / 0.18);
+  border-radius: 3px;
+}
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 2px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.q .qh {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.q .qh small {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--thinking) 14%, transparent);
+  color: var(--thinking);
+  font-size: 11px;
+  font-weight: 600;
+}
+.q .qh span {
+  color: var(--softer);
+}
+.opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.opt {
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.06);
+  border: 1px solid var(--line);
+  color: var(--softer);
+  font-size: 12.5px;
+  text-align: left;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+.opt:hover {
+  background: rgb(var(--ink) / 0.11);
+}
+.opt.on {
+  background: color-mix(in srgb, var(--thinking) 20%, transparent);
+  border-color: var(--thinking);
+  color: var(--text);
+}
+.opt.multi::before {
+  content: "☐ ";
+  color: var(--muted);
+}
+.opt.multi.on::before {
+  content: "☑ ";
+  color: var(--thinking);
+}
+.card.question {
+  border-color: color-mix(in srgb, var(--thinking) 45%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--thinking) 10%, transparent),
+    var(--card)
+  );
+}
+.summary {
+  color: var(--softer);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* many buttons (done card): the row wraps, a label never does */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+  justify-content: flex-end;
+}
+.actions .btn {
+  white-space: nowrap;
+}
+.btn {
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.08);
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background 0.15s,
+    transform 0.1s;
+}
+.btn:hover {
+  background: rgb(var(--ink) / 0.15);
+}
+.btn:active {
+  transform: scale(0.96);
+}
+.btn.primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+}
+.btn.primary:hover {
+  filter: brightness(1.12);
+}
+.btn.allow {
+  background: var(--done);
+  color: var(--on-done);
+}
+.btn.deny {
+  color: var(--waiting);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+.more {
+  color: var(--muted);
+  font-size: 12px;
+  margin-right: auto;
+  align-self: center;
+}
+.hint {
+  color: var(--waiting);
+  font-size: 12px;
+  margin-top: 8px;
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* ---------- Session list (opens on hover) ---------- */
+/* opens to its real height (grid rows 0fr → 1fr), so closing starts at once instead of after an
+   oversized max-height has run down; long lists scroll inside */
+.listwrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s;
+}
+.pill.open .listwrap {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+/* a hairline under the bar marks where the list starts (inset, so it stays put while the list scrolls) */
+.list {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 8px;
+}
+.pill.open .list {
+  overflow-y: auto;
+  max-height: 420px;
+  padding-top: 6px;
+  padding-bottom: 8px;
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.pill.full .list {
+  max-height: calc(100vh - 120px);
+}
+.list::-webkit-scrollbar {
+  width: 5px;
+}
+.list::-webkit-scrollbar-thumb {
+  background: rgb(var(--ink) / 0.14);
+  border-radius: 3px;
+}
+/* full view: the activity line may wrap, and recent steps show under it */
+.pill.full .row {
+  align-items: flex-start;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.pill.full .row .meta,
+.pill.full .row .acts {
+  margin-top: 6px;
+}
+.pill.full .row .name .l1 {
+  white-space: normal;
+}
+.pill.full .row .out {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.row .hist {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.row .hist i {
+  display: block;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+.row .hist i::before {
+  content: "· ";
+  color: var(--brand-soft);
+}
+.row .hist time {
+  margin-left: 6px;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+/* ---------- Voice prompt panel (local speech-to-text only) ---------- */
+.voice {
+  display: none;
+  margin: 0 12px 10px;
+  padding: 10px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgb(var(--ink) / 0.035);
+  animation: cardIn 0.22s ease;
+}
+.voice.on {
+  display: block;
+}
+.voice .vhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.voice .vdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.voice[data-s="rec"] .vdot {
+  background: var(--waiting);
+  animation: vpulse 1.4s ease-in-out infinite;
+}
+@keyframes vpulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.voice .vtarget {
+  margin-left: auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgb(var(--ink) / 0.06);
+}
+.voice .vtarget:hover {
+  color: var(--text);
+  background: rgb(var(--ink) / 0.1);
+}
+.voice .vtarget:disabled {
+  cursor: default;
+}
+.voice .vwave {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 10px 0 6px;
+  color: var(--brand-soft);
+}
+.voice[data-s="rec"] .vwave {
+  color: var(--waiting);
+}
+.voice .vline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.voice .vtime {
+  font:
+    600 13px ui-monospace,
+    "Ubuntu Mono",
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+.voice .vnote {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.voice .vnote.warn {
+  color: var(--waiting);
+}
+.voice .vtext {
+  margin: 8px 0 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.05);
+  font-size: 13px;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  display: none;
+}
+.voice .vtext.on {
+  display: block;
+}
+.voice .vbtns {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex: none;
+}
+.voice .vbtns button {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: rgb(var(--ink) / 0.07);
+}
+.voice .vbtns button:hover {
+  background: rgb(var(--ink) / 0.12);
+}
+.voice .vbtns .primary {
+  background: var(--brand);
+  color: #fff;
+}
+.voice .vbtns .primary:hover {
+  background: color-mix(in srgb, var(--brand) 85%, #fff);
+}
+.voice .vbtns button[hidden] {
+  display: none;
+}
+/* One session: avatar · project / agent / latest line · tags · actions. Rows are soft tiles (no rules
+   between them), lit on hover, so the eye reads them as items rather than a table */
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 7px 4px 7px var(--row-pad);
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+.row + .row {
+  margin-top: 2px;
+}
+.row:hover,
+.row:focus-within {
+  background: rgb(var(--ink) / 0.05);
+}
+.row[data-act="agent"] {
+  cursor: pointer;
+}
+/* the agent's mascot on a small tile (like the manager's), with its state as a dot on the corner */
+.row .avatar {
+  position: relative;
+  flex: none;
+  width: var(--avatar);
+  height: var(--avatar);
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.05);
+  border: 1px solid rgb(var(--ink) / 0.07);
+}
+.row .avatar .mascot.mini {
+  width: 26px;
+  height: 26px;
+}
+.row .avatar {
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+.row:hover .avatar,
+.row .avatar:focus-visible {
+  border-color: color-mix(in srgb, var(--c) 55%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c) 35%, transparent);
+}
+/* one agent: the bar's chip already says its state */
+.pill.solo .row .tag.st {
+  display: none;
+}
+.row .name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.row .l1 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.row .l1 b {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 650;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.row .agent {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.row .tok {
+  flex: none;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.row .tok::before,
+.row .age::before {
+  content: "·";
+  margin-right: 6px;
+}
+.row .age {
+  flex: none;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+/* waiting on you: the tool and its command, in the waiting colour */
+.row .out.err {
+  color: var(--waiting);
+}
+.row .out.ask {
+  color: var(--waiting);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11.5px;
+}
+.tag.task {
+  gap: 4px;
+  max-width: 120px;
+  cursor: pointer;
+}
+.tag.task span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag.task:hover {
+  color: var(--text);
+  background: rgb(var(--ink) / 0.12);
+}
+/* the agent's latest message, as plain text (markdown stripped); the whole of it on hover */
+.row .out {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row .meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.row .acts {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+/* stop sits last, a little apart from the harmless ones */
+.row .acts .icon.stop {
+  margin-left: 5px;
+  position: relative;
+}
+.row .acts .icon.stop::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--line);
+}
+
+/* Tags: one chip family across the list — the same height, radius and type as the bar's status chip.
+   --c (a token) colours the state ones; the rest are neutral */
+.tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--chip-h);
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--soft);
+  background: rgb(var(--ink) / 0.07);
+}
+.tag.st {
+  color: color-mix(in srgb, var(--c) 80%, var(--chip-tint));
+  background: color-mix(in srgb, var(--c) 15%, transparent);
+}
+.tag.st::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* uncommitted changes in the session's repo, and prompts queued for it */
+.tag.diff .add {
+  color: var(--done);
+}
+.tag.diff .del {
+  color: var(--waiting);
+}
+.tag.queue {
+  color: var(--thinking);
+}
+.tag svg {
+  width: 11px;
+  height: 11px;
+  fill: currentColor;
+}
+.row .clash {
+  margin: 0 2px;
+}
+
+.icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.icon:hover {
+  background: rgb(var(--ink) / 0.1);
+  color: var(--text);
+}
+.icon svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+.icon.stop:hover {
+  color: var(--waiting);
+}
+.icon.allow {
+  color: var(--done);
+}
+.icon.allow:hover {
+  background: color-mix(in srgb, var(--done) 18%, transparent);
+  color: var(--done);
+}
+.icon.deny:hover {
+  background: color-mix(in srgb, var(--waiting) 18%, transparent);
+  color: var(--waiting);
+}
+.icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.icon.stop.armed span {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.row .acts .icon.stop.armed {
+  width: auto;
+  padding: 0 8px;
+}
+.icon.stop.armed {
+  background: color-mix(in srgb, var(--waiting) 22%, transparent);
+  color: var(--waiting);
+}
+
+/* "+ New session": an outlined slot that lines up with the avatars above it */
+.new {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 4px;
+  padding: 4px 8px 4px var(--row-pad);
+  border-radius: 12px;
+  border: 1px dashed rgb(var(--ink) / 0.14);
+  color: var(--soft);
+  font-weight: 600;
+  font-size: 12.5px;
+  text-align: left;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.new:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--brand) 55%, transparent);
+  background: color-mix(in srgb, var(--brand) 7%, transparent);
+}
+.new .plus {
+  flex: none;
+  width: var(--avatar);
+  height: 28px;
+  display: grid;
+  place-items: center;
+}
+.new .plus i {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--brand-soft);
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+}
+.new .plus svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 4px 8px 4px var(--row-pad);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.empty::before {
+  content: "";
+  flex: none;
+  width: var(--avatar);
+  height: 8px;
+  background: radial-gradient(circle, var(--idle) 3px, transparent 3.5px);
+}
+
+/* Now playing: art · title over artist (each ellipsised, full text on hover) · prev / play / next */
+.music {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 4px 0 var(--row-pad);
+  border-top: 1px solid var(--line);
+}
+.music .art {
+  flex: none;
+  width: var(--avatar);
+  height: var(--avatar);
+  border-radius: 10px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  padding-bottom: 9px;
+  color: var(--primary-fg);
+  background: linear-gradient(135deg, var(--brand-soft), var(--brand));
+}
+.music .art i {
+  width: 3px;
+  height: 6px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.9;
+}
+.music .art i:nth-child(2) {
+  height: 12px;
+}
+.music .art i:nth-child(3) {
+  height: 9px;
+}
+.music .art.on i {
+  animation: eq 0.9s ease-in-out infinite alternate;
+}
+.music .art.on i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.music .art.on i:nth-child(3) {
+  animation-delay: -0.6s;
+}
+@keyframes eq {
+  from {
+    transform: scaleY(0.45);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.music .art i {
+  transform-origin: bottom;
+}
+.music .t {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.music .t b,
+.music .t span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.music .t b {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.music .t span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.music .mctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.music .icon svg {
+  width: 14px;
+  height: 14px;
+}
+.music .icon.play {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--text);
+  background: rgb(var(--ink) / 0.08);
+}
+.music .icon.play:hover {
+  background: rgb(var(--ink) / 0.14);
+}
+
+/* Agent usage (open pill only, while something runs): Claude ●●●○ 3/4 · Codex ●○ 1/2 — limits from
+   Settings → Agents. A quiet band under the bar; each adapter has its own tooltip */
+.usage {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 4px;
+  margin: 0 8px 8px;
+  padding: 5px 12px;
+  border-radius: 10px;
+  background: rgb(var(--ink) / 0.04);
+  color: var(--muted);
+  font-size: 12px;
+}
+.pill.open .usage.on {
+  display: flex;
+}
+.usage > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.usage > span + span {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.usage .an {
+  color: var(--soft);
+  font-weight: 600;
+}
+.usage b {
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.usage .ud {
+  display: inline-flex;
+  gap: 3px;
+}
+/* empty slots are a neutral track; used ones take the agent's colour, nudged toward the text colour so
+   they stay visible on white */
+.usage .ud i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(var(--ink) / 0.16);
+}
+.usage .ud i.on {
+  background: color-mix(in srgb, var(--c) 85%, var(--chip-tint));
+}
+.usage em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--working);
+}
+/* Open tasks (open pill only): one quiet line each — title · stage n/m · working · queued; a click opens it */
+.tasksum {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  margin: -4px 8px 8px;
+}
+.pill.open .tasksum.on {
+  display: flex;
+}
+.tasksum button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 12px;
+  border-radius: 10px;
+  text-align: left;
+  background: rgb(var(--ink) / 0.04);
+  color: var(--muted);
+  font-size: 12px;
+  transition: background 0.15s;
+}
+.tasksum button:hover {
+  background: rgb(var(--ink) / 0.08);
+}
+.tasksum svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: var(--cat-workflow);
+}
+.tasksum .tt {
+  flex: 1;
+  min-width: 0;
+  color: var(--soft);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tasksum .sg,
+.tasksum .n {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tasksum .n b {
+  color: var(--text);
+  font-weight: 650;
+}
+.tasksum .q {
+  color: var(--working);
+  font-weight: 600;
+}
+.tasksum .you {
+  color: var(--waiting);
+  font-weight: 650;
+}
+.tasksum .more {
+  padding: 2px 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .acts,
+  .icon,
+  .new,
+  .status.busy .dots i,
+  .music .art.on i {
+    transition: none;
+    animation: none;
+  }
+}
+/* React's root: the pill stays the body's flex child (centred under the top bar) */
+#root {
+  display: contents;
+}
+.classic,
+.classic svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
