@@ -1,7 +1,7 @@
 import { displayName } from "@/lib/agents";
 
 // The Workspace (the panel): what its sections hold, read from what main sends — sessions (agent hooks),
-// workflow tasks, the running apps — the way the old page did (src/renderer/panel). No React here: the
+// workflow tasks, the running apps — the way the old page did (removed; see git history). No React here: the
 // store, the views and the tests all read it the same way.
 
 export const SECTIONS = {
