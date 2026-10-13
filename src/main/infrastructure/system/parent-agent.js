@@ -20,8 +20,23 @@ function stat(proc, pid) {
   }
 }
 
-/** The pid of the nearest agent process above `pid`, or null. */
-function parentAgentOf(pid, proc = "/proc") {
+function environ(proc, pid) {
+  try {
+    const env = {};
+    for (const kv of fs.readFileSync(path.join(proc, String(pid), "environ"), "utf8").split("\0")) {
+      const i = kv.indexOf("=");
+      if (i > 0) {
+        env[kv.slice(0, i)] = kv.slice(i + 1);
+      }
+    }
+    return env;
+  } catch {
+    return {};
+  }
+}
+
+// The nearest agent among the process's ancestors
+function ancestor(proc, pid) {
   let cur = stat(proc, pid)?.ppid;
   for (let i = 0; cur && Number(cur) > 1 && i < MAX_DEPTH; i++) {
     const s = stat(proc, cur);
@@ -34,6 +49,25 @@ function parentAgentOf(pid, proc = "/proc") {
     cur = s.ppid;
   }
   return null;
+}
+
+// A helper started in the background is often re-parented to init, so its ancestors don't show the agent.
+// Its environment still does: Claude Code gives its commands CLAUDE_PID, Codex gives them CODEX_THREAD_ID.
+function fromEnv(proc, pid, comm) {
+  const env = environ(proc, pid);
+  const claude = env.CLAUDE_PID;
+  if (claude && claude !== String(pid) && stat(proc, claude)?.comm === "claude") {
+    return claude;
+  }
+  if (env.CODEX_THREAD_ID && comm !== "codex") {
+    return "codex"; // Codex doesn't say its pid; that there is one is enough
+  }
+  return null;
+}
+
+/** The pid of the agent that started `pid` (or "codex" when only that is known), or null. */
+function parentAgentOf(pid, proc = "/proc") {
+  return ancestor(proc, pid) || fromEnv(proc, pid, stat(proc, pid)?.comm);
 }
 
 module.exports = { parentAgentOf };
