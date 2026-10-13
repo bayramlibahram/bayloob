@@ -155,6 +155,8 @@ function Row({ s, last }) {
   const tokens = p.tokens[s.id];
   const queued = p.queues[s.id];
   const r = p.receipts[s.id];
+  // A helper another agent started (codex exec): its hooks only speak at the end, so "idle" would mislead
+  const helper = !!s.term?.parentAgent && s.state === "idle";
   const note = p.rowNote?.sid === s.id && Date.now() < p.rowNote.until ? p.rowNote.text : null;
   const out = p.output[s.id] ? plainMarkdown(p.output[s.id]) : "";
   const ask =
@@ -235,8 +237,11 @@ function Row({ s, last }) {
         <Diff id={s.id} />
         <ClashTag id={s.id} />
         {s.task && <TaskTag s={s} />}
-        <span className="tag st">
-          {cap(STATE[s.state])}
+        <span
+          className="tag st"
+          title={helper ? "Started by another agent — it sends no live status" : undefined}
+        >
+          {helper ? "Helper" : cap(STATE[s.state])}
           {s.state === "done" && r ? RECEIPT_MARK[r.status] || "" : ""}
         </span>
       </span>

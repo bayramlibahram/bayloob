@@ -460,6 +460,19 @@ test("a row: what the agent last said, tokens and age, changes, its queue, its t
   expect(api.openTasks).toHaveBeenCalledWith("t1");
 });
 
+test("a helper another agent started says Helper, not Idle; once done it says Done", () => {
+  render(<App />);
+  act(() => {
+    api.sessions([
+      session("h", "codex", "idle", { term: { pid: "40", parentAgent: "20" } }),
+      session("d", "codex", "done", { term: { pid: "41", parentAgent: "20" } }),
+    ]);
+  });
+  const [h, d] = rows();
+  expect(h.querySelector(".tag.st").textContent).toBe("Helper");
+  expect(d.querySelector(".tag.st").textContent).toBe("Done");
+});
+
 test("a permission on a row: ✓ / ✗ right there (not with a hidden part); Stop takes a second click", () => {
   vi.useFakeTimers({ toFake: ["setTimeout"] });
   render(<App />);

@@ -245,6 +245,11 @@ class AgentDiscovery {
       if (!(link(path.join(base, "fd", "0")) || "").startsWith("/dev/pts/")) {
         continue;
       }
+      // …nor its app-server / MCP server, even when started from a terminal
+      const argv = (read(path.join(base, "cmdline")) || "").split("\0");
+      if (argv.some(a => a === "app-server" || a === "mcp-server")) {
+        continue;
+      }
       const cwd = link(path.join(base, "cwd")) || "";
       const rollout = this.#openRollout(base) || this.#newestRollout(cwd);
       const meta = rollout && this.#rolloutMeta(rollout);

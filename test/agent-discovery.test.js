@@ -89,6 +89,14 @@ test("finds Claude by its session file and Codex by its rollout; skips ended, re
     });
     // Codex without a terminal (an editor extension's server) → skipped
     fx.mkproc(202, { comm: "codex", start: 1, cwd: "/w/api", fds: { 0: "socket:[1]" } });
+    // Codex's app-server started from a terminal → skipped too
+    fx.mkproc(203, {
+      comm: "codex",
+      start: 1,
+      cwd: "/w/api",
+      fds: { 0: "/dev/pts/2", 9: rollout },
+    });
+    fs.writeFileSync(path.join(fx.proc, "203", "cmdline"), "codex\0app-server\0daemon\0");
 
     const found = new AgentDiscovery({ proc: fx.proc, home: fx.home }).find();
     assert.deepEqual(
