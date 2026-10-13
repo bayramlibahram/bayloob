@@ -1,7 +1,7 @@
 // What windows may send over IPC: main checks the shape before it uses anything (src/main/ipc)
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { SettingsSave } = require("../src/main/ipc/schemas");
+const { SettingsSave, launcherRolePreset } = require("../src/main/ipc/schemas");
 const { checked } = require("../src/main/ipc/checked");
 const { DEFAULTS } = require("../src/main/config/settings");
 
@@ -45,4 +45,15 @@ test("settings:save refuses a wrong kind of value or an unknown field, naming it
   assert.match(handler(null, { ...page, rootPassword: "x" }).error, /unrecognized|rootPassword/i);
   assert.equal(handler(null, "not an object").ok, false);
   assert.deepEqual(handler(null, { music: false }), { ok: true, v: { music: false } });
+});
+
+test("open-launcher accepts a configured role as a Single agent preset, unknown roles open plain", () => {
+  const roles = { engines: { research: "gemini" }, custom: [] };
+  assert.deepEqual(launcherRolePreset(roles, "research"), {
+    agent: "gemini",
+    role: "research",
+  });
+  assert.equal(launcherRolePreset(roles, "unknown"), null);
+  assert.equal(launcherRolePreset(roles, { id: "research" }), null);
+  assert.equal(launcherRolePreset(roles), null);
 });

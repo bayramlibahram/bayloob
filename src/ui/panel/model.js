@@ -255,6 +255,81 @@ export const TASK_COLOR = {
   stopped: "var(--idle)",
 };
 
+const ROLE_STATE_RANK = { waiting: 3, working: 2, online: 1 };
+
+const roleState = session => {
+  if (session.perm || session.state === "waiting") {
+    return "waiting";
+  }
+  if (session.state === "thinking" || session.state === "working") {
+    return "working";
+  }
+  return "online";
+};
+
+// The Novi packs by hue (silver: colours with hardly any)
+const PACK_HUES = [
+  ["coral", 12],
+  ["coral", 40],
+  ["teal", 160],
+  ["teal", 188],
+  ["blue", 220],
+  ["purple", 265],
+  ["purple", 300],
+];
+
+/** The Novi pack closest to a colour ("#6aa8ff" → "blue"), so a role's mascot wears its colour. */
+export function packForColor(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+  if (!m) {
+    return null;
+  }
+  const [r, g, b] = [0, 2, 4].map(i => Number.parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  if (!max || d / max < 0.18) {
+    return "silver";
+  }
+  const h =
+    (max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + 360;
+  const dist = x => Math.min(Math.abs(x - (h % 360)), 360 - Math.abs(x - (h % 360)));
+  return PACK_HUES.reduce((best, p) => (dist(p[1]) < dist(best[1]) ? p : best))[0];
+}
+
+/** Role agents for Home: their live state and the workflow tasks in which they take part. */
+export function roleCardsOf({ roles = [], sessions = [], tasks = [] }) {
+  return roles.map(role => {
+    const live = sessions
+      .filter(s => s.persona === role.id)
+      .map(s => ({ ...s, roleState: roleState(s) }))
+      .sort(
+        (a, b) =>
+          ROLE_STATE_RANK[b.roleState] - ROLE_STATE_RANK[a.roleState] ||
+          (b.updatedAt || 0) - (a.updatedAt || 0)
+      );
+    const sessionTasks = new Set(
+      live
+        .map(taskOfSession)
+        .filter(Boolean)
+        .map(t => t.id)
+    );
+    const itsTasks = tasks.filter(
+      t => t.template?.stages?.some(stage => stage.persona === role.id) || sessionTasks.has(t.id)
+    );
+    return {
+      id: role.id,
+      name: role.name,
+      color: role.color,
+      agent: role.engine || "claude",
+      pack: packForColor(role.color),
+      status: live[0]?.roleState || "off",
+      live: live[0]?.id || null,
+      tasks: itsTasks.length,
+      active: itsTasks.filter(t => t.status === "running" || t.status === "needs-you").length,
+    };
+  });
+}
+
 const startOfDay = now => {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
@@ -275,12 +350,12 @@ export function kpisOf({ sessions = [], tasks = [], inbox = [] }, now = Date.now
   };
 }
 
-/** Finished tasks on each of the last 7 days, today last → [{ day: Date, n }]. */
-export function finishedPerDay(tasks, now = Date.now()) {
+/** Finished tasks on each of the last `days` days, today last → [{ day: Date, n }]. */
+export function finishedPerDay(tasks, now = Date.now(), days = 7) {
   const day0 = startOfDay(now);
-  return Array.from({ length: 7 }, (_, k) => {
+  return Array.from({ length: days }, (_, k) => {
     const day = new Date(day0);
-    day.setDate(day.getDate() - (6 - k));
+    day.setDate(day.getDate() - (days - 1 - k));
     const from = day.getTime();
     const to = new Date(day).setDate(day.getDate() + 1);
     const n = tasks.filter(

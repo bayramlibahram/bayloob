@@ -94,10 +94,10 @@ const watch = el => {
 };
 
 /** A small, CSS-animated Novi that pauses off screen and keeps large agent lists cheap. */
-export function MiniNovi({ agent, state = "idle", size = 28, className, style }) {
+export function MiniNovi({ agent, pack: packName, state = "idle", size = 28, className, style }) {
   const el = useRef(null);
   const visual = miniNoviState(state);
-  const pack = packOf(agent);
+  const pack = packName || packOf(agent);
   const px = typeof size === "number" ? `${size}px` : size;
   useEffect(() => watch(el.current), []);
   useEffect(() => {

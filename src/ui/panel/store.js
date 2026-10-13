@@ -374,6 +374,7 @@ export const usePanel = create((set, get) => ({
   },
 
   newSession: () => get().api?.newSession(),
+  startAsRole: roleId => get().api?.newSession(roleId),
   openSettings: () => get().api?.openSettings(),
   openWindow: () => get().api?.openWindow(get().section),
   control: action => get().api?.windowControl(action),
