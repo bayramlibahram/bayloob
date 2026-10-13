@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.1 — 2026-10-13
+
+### Fixed
+- A helper started in the background (`codex exec … &` from Claude Code) was still taken for its parent's
+  session: once re-parented to init its ancestors don't show the agent. It's now also known by its
+  environment (Claude Code's `CLAUDE_PID`, Codex's `CODEX_THREAD_ID`), so Stop hits only the helper and its
+  row goes when it ends.
+
 ## 0.15.0 — 2026-10-13
 
 ### Changed
