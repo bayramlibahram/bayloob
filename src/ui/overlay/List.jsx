@@ -1,6 +1,7 @@
+import { MiniNovi } from "@/components/mini-novi";
 import { displayName } from "@/lib/agents";
 import { plainMarkdown } from "@/lib/shared";
-import { Thumb } from "./Mascot";
+import { MASCOT_MODE, Thumb } from "./Mascot";
 import { COLORS, usePill } from "./store";
 
 // The open pill's list: a row per agent (what it last said, its tokens and age, uncommitted changes, a file
@@ -179,9 +180,18 @@ function Row({ s, last }) {
         aria-label={open}
         onClick={() => p.api?.openAgent(s.id)}
       >
-        <div className="mascot mini" data-s={s.state} style={{ "--ring": COLORS[s.state] }}>
-          <Thumb agent={s.agent} />
-        </div>
+        {MASCOT_MODE === "novi" ? (
+          <MiniNovi
+            agent={s.agent}
+            state={s.state}
+            size={26}
+            style={{ "--ring": COLORS[s.state] }}
+          />
+        ) : (
+          <div className="mascot mini" data-s={s.state} style={{ "--ring": COLORS[s.state] }}>
+            <Thumb agent={s.agent} />
+          </div>
+        )}
       </button>
       <span className="name">
         <span className="l1">

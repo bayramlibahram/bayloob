@@ -9,6 +9,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { MiniNovi } from "@/components/mini-novi";
 import { Novi } from "@/components/novi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,9 +183,12 @@ function GroupHead({ item, size }) {
   );
 }
 
-export function ItemIcon({ item, className }) {
+export function ItemIcon({ item, className, animated = false }) {
   const box = cn("grid size-9 shrink-0 place-items-center rounded-lg bg-muted", className);
   if (item.kind === "agent") {
+    if (animated) {
+      return <MiniNovi agent={item.data.agent} state={item.status} size={36} />;
+    }
     return <Novi agent={item.data.agent} className={cn("size-9", className)} />;
   }
   if (item.kind === "task") {
@@ -246,7 +250,7 @@ function Row({ item, selected }) {
         selected && "border-brand/30 bg-brand/10 hover:bg-brand/10"
       )}
     >
-      <ItemIcon item={item} />
+      <ItemIcon item={item} animated />
       <div className="flex min-w-0 flex-1 flex-col">
         <b className="truncate text-[13.5px] font-semibold" title={item.name}>
           {item.name}
