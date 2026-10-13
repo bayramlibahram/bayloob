@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.16.0 — 2026-10-13
+
+### Changed
+- **Home, reworked:** **Your agents** — a card per role agent (Research, Data, Content, Design and your own),
+  its Novi in the role's colour, its live state (working, waiting, online, off) and its tasks; the ⋮ menu or a
+  click starts it: **Start as <role>** opens New task with that role picked (or opens its running agent).
+  **Tasks overview** as a donut with the total in the middle; **Waiting for you** with Deny and Review (Allow
+  stays in the Inbox); **Productivity** over the last 7 or 30 days; glowing cards in dark, clean ones in light.
+- **A helper shows while it works:** a Codex started by another agent (`codex exec` from Claude Code) is listed
+  as soon as it runs — "Codex · helper", thinking then done — and can be stopped from the pill. It used to show
+  only once finished.
+
 ## 0.15.1 — 2026-10-13
 
 ### Fixed
