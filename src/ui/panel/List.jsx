@@ -308,7 +308,7 @@ function EmptyRows({ title, hint, action }) {
   const act = {
     clear: () => s.setQuery(""),
     newTask: s.newSession,
-    ask: () => document.getElementById("askText")?.focus(),
+    ask: () => document.querySelector('textarea[aria-label="Ask Bayloob"]')?.focus(),
     launch: s.toggleLaunch,
   };
   return (

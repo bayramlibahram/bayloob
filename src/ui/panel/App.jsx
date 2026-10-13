@@ -33,6 +33,7 @@ import { Detail } from "./Detail";
 import { Home } from "./Home";
 import { List } from "./List";
 import { formatBytes, formatWait, hookStatus, projectName, SECTIONS } from "./model";
+import { AskBar } from "./Prompts";
 import { DETAIL, NAV, SIDE, usePanel, WINDOW_MODE } from "./store";
 
 const ICON = {
@@ -123,6 +124,7 @@ export function App() {
           )}
         </main>
       </div>
+      <AskBar />
       <Footer />
     </div>
   );

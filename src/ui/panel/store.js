@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { errorText } from "@/lib/window";
 import { inboxOf, itemsOf, navFor, recentlyFinished } from "./model";
+import { connectPrompts, usePrompts } from "./prompts";
 
 // The Workspace: the popup panel and the Workspace window (?mode=window: resizable, Home, Tasks inside) run
 // the same page. main sends the state on panel:show and each change on its own channel (sessions, tasks,
@@ -363,11 +364,15 @@ export const usePanel = create((set, get) => ({
 /** Hooks the store to main's channels. */
 export function connect(api) {
   usePanel.setState({ api });
+  connectPrompts(api);
   if (!api) {
     return;
   }
   const s = () => usePanel.getState();
-  api.onShow(state => s().show(state));
+  api.onShow(state => {
+    s().show(state);
+    usePrompts.getState().loadFormats(); // Settings may have changed them since
+  });
   api.onSessions(list => s().setSessions(list));
   api.onTask(task => s().setTask(task));
   api.onUsage(usage => s().setUsage(usage));

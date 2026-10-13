@@ -15,6 +15,7 @@ import {
 window.history.replaceState(null, "", "/?mode=window");
 const { App } = await import("./App");
 const { connect, usePanel } = await import("./store");
+const { usePrompts } = await import("./prompts");
 
 const NOW = Date.now();
 const MIN = 60_000;
@@ -126,8 +127,48 @@ beforeEach(() => {
     sessionMenu: vi.fn(),
     appMenu: vi.fn(),
     close: vi.fn(),
+    sendPrompt: vi.fn(async () => ({ ok: true })),
+    queue: vi.fn(async () => []),
+    unqueue: vi.fn(async () => []),
+    continueInBayloob: vi.fn(async () => ({ ok: true })),
+    promptFormats: vi.fn(async () => ({
+      formats: [
+        { id: "adhd", name: "ADHD-friendly" },
+        { id: "concise", name: "Concise" },
+      ],
+      default: "adhd",
+      agents: {},
+    })),
+    launchOptions: vi.fn(async () => ({
+      home: "/home/u",
+      recent: [{ agent: "codex", cwd: "/home/u/work/api" }],
+      agents: {
+        claude: { name: "Claude Code", installed: true },
+        codex: { name: "Codex", installed: true },
+        gemini: { name: "Gemini CLI", installed: false },
+      },
+    })),
+    launch: vi.fn(async () => ({ ok: true })),
   };
-  usePanel.setState({ ready: false, section: "home", selected: null, finished: [], flash: "" });
+  usePanel.setState({
+    ready: false,
+    section: "home",
+    selected: null,
+    finished: [],
+    flash: "",
+    launchMode: false,
+    query: "",
+    expanded: false,
+  });
+  localStorage.clear();
+  usePrompts.setState({
+    sayFor: null,
+    picking: null,
+    askHint: null,
+    hint: null,
+    histories: {},
+    histPos: -1,
+  });
   connect(api);
 });
 afterEach(cleanup);
@@ -457,4 +498,97 @@ test("keys: ↓ moves, Enter opens the agent's terminal, Esc clears the search; 
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Launch app" })));
   await act(async () => fireEvent.click(screen.getByRole("button", { name: /GIMP/ })));
   expect(api.launchApp).toHaveBeenCalledWith("gimp");
+});
+
+// ---------- the prompt boxes (step 7c) ----------
+
+const sayBox = () => screen.getByRole("textbox", { name: "Prompt to the agent" });
+
+test("the agent's box: Enter sends it; what was typed meanwhile stays; ↑ brings it back", async () => {
+  await open({ section: "agents", select: "agent:c1" });
+  // c1 works in tmux and is busy: the prompt goes into its queue
+  const sessions = structuredClone(SESSIONS);
+  sessions[0].term = { tmux: "%1" };
+  await act(async () => api.sessions(sessions));
+  expect(screen.getByText("Queue")).toBeTruthy();
+  fireEvent.change(sayBox(), { target: { value: "Add tests too" } });
+  await act(async () => fireEvent.keyDown(sayBox(), { key: "Enter" }));
+  expect(api.sendPrompt).toHaveBeenCalledWith("agent:c1".slice(6), "Add tests too", undefined);
+  expect(sayBox().value).toBe("");
+  expect(screen.getByText(/Sent ✓/)).toBeTruthy();
+  fireEvent.keyDown(sayBox(), { key: "ArrowUp" });
+  expect(sayBox().value).toBe("Add tests too");
+  fireEvent.keyDown(sayBox(), { key: "ArrowDown" });
+  expect(sayBox().value).toBe("");
+});
+
+test("/ opens the shortcuts: ↓ and Enter put one in the box", async () => {
+  await open({ section: "agents", select: "agent:c1" });
+  fireEvent.change(sayBox(), { target: { value: "/" } });
+  const list = screen.getByRole("listbox", { name: "Prompt shortcuts" });
+  expect(within(list).getAllByRole("option")).toHaveLength(4);
+  fireEvent.keyDown(sayBox(), { key: "ArrowDown" });
+  fireEvent.keyDown(sayBox(), { key: "Enter" });
+  expect(sayBox().value).toMatch(/^Review your last change/);
+  expect(api.sendPrompt).not.toHaveBeenCalled();
+  // "/expl" finds /explain
+  fireEvent.change(sayBox(), { target: { value: "/expl" } });
+  expect(
+    within(screen.getByRole("listbox", { name: "Prompt shortcuts" })).getAllByRole("option")
+  ).toHaveLength(1);
+});
+
+test("not in tmux: Copy & paste, and Continue in Bayloob; an answer's next steps go into the box", async () => {
+  const sessions = structuredClone(SESSIONS);
+  sessions[2].suggestions = [{ label: "Commit it", prompt: "Commit the change." }];
+  render(<App />);
+  await act(async () => api.show({ sessions, tasks: [], section: "agents", select: "agent:g1" }));
+  expect(screen.getByText("Copy & paste")).toBeTruthy();
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: /Continue in Bayloob/ }))
+  );
+  expect(api.continueInBayloob).toHaveBeenCalledWith("g1");
+  fireEvent.click(screen.getByRole("button", { name: "Commit it" }));
+  expect(sayBox().value).toBe("Commit the change.");
+});
+
+test("no box while the agent waits on a permission: its card is the way", async () => {
+  await open({ section: "inbox" });
+  expect(screen.getByRole("region", { name: "Codex wants to run" })).toBeTruthy();
+  expect(screen.queryByRole("textbox", { name: "Prompt to the agent" })).toBeNull();
+});
+
+test("Ask Bayloob: Enter → the agent and folder (the last one used), Enter starts it; Esc steps back", async () => {
+  await open({ section: "home" });
+  const ask = screen.getByRole("textbox", { name: "Ask Bayloob" });
+  await act(async () => fireEvent.keyDown(ask, { key: "Enter" }));
+  expect(screen.getByText("Type what should be done first")).toBeTruthy();
+  fireEvent.change(ask, { target: { value: "Fix the login bug" } });
+  await act(async () => fireEvent.keyDown(ask, { key: "Enter" }));
+  const pick = screen.getByRole("group", { name: "Agent and folder" });
+  expect(within(pick).getByRole("button", { name: /Codex/ }).getAttribute("aria-pressed")).toBe(
+    "true"
+  );
+  expect(within(pick).getByRole("button", { name: /Gemini CLI/ }).disabled).toBe(true);
+  expect(within(pick).getByRole("textbox", { name: "Folder" }).value).toBe("~/work/api");
+  fireEvent.click(within(pick).getByRole("button", { name: /Claude Code/ }));
+  fireEvent.click(within(pick).getByRole("button", { name: /New worktree/ }));
+  await act(async () => fireEvent.keyDown(ask, { key: "Enter" }));
+  expect(api.launch).toHaveBeenCalledWith({
+    agent: "claude",
+    cwd: "~/work/api",
+    prompt: "Fix the login bug",
+    worktree: true,
+    format: undefined,
+  });
+  expect(ask.value).toBe("");
+  expect(screen.getByText("Started ✓")).toBeTruthy();
+  // Esc while picking closes the picker and keeps the text; Esc again clears it
+  fireEvent.change(ask, { target: { value: "Another one" } });
+  await act(async () => fireEvent.keyDown(ask, { key: "Enter" }));
+  fireEvent.keyDown(ask, { key: "Escape" });
+  expect(screen.queryByRole("group", { name: "Agent and folder" })).toBeNull();
+  expect(ask.value).toBe("Another one");
+  fireEvent.keyDown(ask, { key: "Escape" });
+  expect(ask.value).toBe("");
 });

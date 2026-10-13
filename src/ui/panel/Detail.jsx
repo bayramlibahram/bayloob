@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { AgentDetail } from "./Agent";
 import { ItemIcon, State } from "./List";
 import { formatBytes, KIND_NAME, projectPath } from "./model";
+import { SayBox } from "./Prompts";
 import { usePanel, WINDOW_MODE } from "./store";
 
 const HEALTH_COLOR = {
@@ -103,6 +104,8 @@ export function Detail() {
         )}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">{body}</div>
+      {/* while it waits on a permission its card is the way, not a prompt */}
+      {item.kind === "agent" && !item.data.perm && <SayBox s={item.data} />}
     </section>
   );
 }
