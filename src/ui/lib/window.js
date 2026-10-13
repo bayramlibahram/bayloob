@@ -52,3 +52,17 @@ export function watchPopups(selector) {
   watched.set(selector, false);
   return () => watched.get(selector) || !!document.querySelector(selector);
 }
+
+// After a click a button keeps no focus ring: Chromium may draw one anyway (Radix moves the focus from script,
+// and IBus sends a stray HiraganaKatakana key on every focus change, so it thinks the keyboard was used). A
+// navigation key brings the rings back. Text fields keep theirs (globals.css: html[data-pointer]).
+const NAV_KEYS = new Set(["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"]);
+export function followPointerFocus() {
+  const root = document.documentElement;
+  document.addEventListener("pointerdown", () => root.setAttribute("data-pointer", ""), true);
+  document.addEventListener(
+    "keydown",
+    e => NAV_KEYS.has(e.key) && root.removeAttribute("data-pointer"),
+    true
+  );
+}

@@ -167,3 +167,14 @@
     vertical-align: top;
   }
 }
+
+/* After a click (lib/window.js followPointerFocus): no focus ring on a button, a tab, a row — a text field keeps
+   its own, and the keyboard brings the rest back */
+html[data-pointer] :is(button, [role="tab"], [role="option"], [role="switch"], a):focus-visible {
+  outline: none;
+  --tw-ring-shadow: 0 0 #0000;
+  border-color: transparent;
+}
+html[data-pointer] [data-variant="outline"]:focus-visible {
+  border-color: var(--color-border); /* an outline button keeps its own border */
+}

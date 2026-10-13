@@ -4,6 +4,7 @@ import {
   CodeIcon,
   CpuIcon,
   DatabaseIcon,
+  FolderIcon,
   GlobeIcon,
   HouseIcon,
   InboxIcon,
@@ -13,6 +14,7 @@ import {
   Maximize2Icon,
   MinusIcon,
   PanelLeftIcon,
+  PlusIcon,
   SettingsIcon,
   SquareIcon,
   WrenchIcon,
@@ -26,9 +28,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { displayName } from "@/lib/agents";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { watchPopups } from "@/lib/window";
+import { Detail } from "./Detail";
 import { Home } from "./Home";
+import { List } from "./List";
 import { formatBytes, formatWait, hookStatus, projectName, SECTIONS } from "./model";
-import { NAV, SIDE, usePanel, WINDOW_MODE } from "./store";
+import { DETAIL, NAV, SIDE, usePanel, WINDOW_MODE } from "./store";
 
 const ICON = {
   home: LayoutDashboardIcon,
@@ -69,14 +74,7 @@ export function App() {
   const narrow = useNarrow();
 
   useEffect(() => {
-    const onKey = e => {
-      if (WINDOW_MODE && e.ctrlKey && !e.shiftKey && (e.key === "b" || e.key === "B")) {
-        e.preventDefault();
-        if (!narrow) {
-          usePanel.getState().toggleSide();
-        }
-      }
-    };
+    const onKey = e => onPanelKey(e, narrow);
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [narrow]);
@@ -104,15 +102,15 @@ export function App() {
       <Header narrow={narrow} collapsed={collapsed} />
       <Finished />
       <div
-        className={cn("grid min-h-0 flex-1", WINDOW_MODE ? "" : "h-130")}
+        className={cn("grid min-h-0 flex-1", WINDOW_MODE ? "" : "h-117.5")}
         style={{
           gridTemplateColumns: WINDOW_MODE
             ? `${collapsed ? 64 : s.layout.side}px 5px minmax(0, 1fr)`
-            : "188px minmax(0, 1fr)",
+            : "196px minmax(0, 1fr)",
         }}
       >
         <Side collapsed={collapsed} />
-        {WINDOW_MODE && <Splitter disabled={collapsed} />}
+        {WINDOW_MODE && <Splitter which="side" disabled={collapsed} />}
         <main className="flex min-h-0 min-w-0 flex-col" aria-label={SECTIONS[s.section]}>
           {!s.ready ? (
             <Loading />
@@ -121,7 +119,7 @@ export function App() {
           ) : s.section === "tasks" && WINDOW_MODE ? (
             <Embed />
           ) : (
-            <Later />
+            <Section />
           )}
         </main>
       </div>
@@ -367,9 +365,14 @@ function Side({ collapsed }) {
   );
 }
 
-/** Between the sidebar and the section: drag to resize, double-click for the default width. */
-function Splitter({ disabled }) {
+/**
+ * A splitter: between the sidebar and the section (its width), or between the list and the detail (the
+ * detail's width). Drag to resize, double-click for the default width; the width is kept.
+ */
+function Splitter({ which, disabled = false }) {
   const s = usePanel();
+  const range = which === "side" ? SIDE : DETAIL;
+  const sign = which === "side" ? 1 : -1; // the detail grows leftwards
   return (
     // biome-ignore lint/a11y/useSemanticElements: a vertical splitter, not a rule
     <div
@@ -380,19 +383,20 @@ function Splitter({ disabled }) {
         "group relative cursor-col-resize",
         disabled && "pointer-events-none cursor-default"
       )}
-      onDoubleClick={() => s.setLayout({ side: SIDE.def }, true)}
+      onDoubleClick={() => s.setLayout({ [which]: range.def }, true)}
       onPointerDown={e => {
         e.preventDefault();
         const el = e.currentTarget;
         el.setPointerCapture(e.pointerId);
         const x0 = e.clientX;
-        const w0 = s.layout.side;
-        const width = x => Math.round(Math.min(SIDE.max, Math.max(SIDE.min, w0 + x - x0)));
-        const move = ev => s.setLayout({ side: width(ev.clientX) });
+        const w0 = s.layout[which];
+        const width = x =>
+          Math.round(Math.min(range.max, Math.max(range.min, w0 + sign * (x - x0))));
+        const move = ev => s.setLayout({ [which]: width(ev.clientX) });
         const up = ev => {
           el.removeEventListener("pointermove", move);
           el.removeEventListener("pointerup", up);
-          s.setLayout({ side: width(ev.clientX) }, true);
+          s.setLayout({ [which]: width(ev.clientX) }, true);
         };
         el.addEventListener("pointermove", move);
         el.addEventListener("pointerup", up);
@@ -401,6 +405,80 @@ function Splitter({ disabled }) {
       <i className="absolute inset-y-0 left-0.5 w-px bg-border group-hover:left-px group-hover:w-0.75 group-hover:bg-brand/55" />
     </div>
   );
+}
+
+/** A section's list and the selected row's detail (Expand: the detail takes the list's place too). */
+function Section() {
+  const { layout, expanded } = usePanel();
+  if (!WINDOW_MODE) {
+    return (
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_440px]">
+        <List />
+        <Detail />
+      </div>
+    );
+  }
+  return (
+    <div
+      className="grid min-h-0 flex-1"
+      style={{
+        gridTemplateColumns: expanded
+          ? "minmax(0, 1fr)"
+          : `minmax(240px, 1fr) 5px minmax(300px, ${layout.detail}px)`,
+      }}
+    >
+      {!expanded && <List />}
+      {!expanded && <Splitter which="detail" />}
+      <Detail />
+    </div>
+  );
+}
+
+// a menu or a dialog open: Esc and the arrows are its own
+const popupOpen = watchPopups("[role=listbox][data-state=open],[role=dialog],[role=alertdialog]");
+
+/**
+ * The page's keys: ↑ ↓ through the rows and Enter for the selected one's › (anywhere but a text box);
+ * Esc leaves the search or Launch app (and closes the popup — never the window); Ctrl+B folds the sidebar;
+ * Ctrl+Shift+E expands the detail.
+ */
+function onPanelKey(e, narrow) {
+  const s = usePanel.getState();
+  if (WINDOW_MODE && e.ctrlKey && !e.shiftKey && (e.key === "b" || e.key === "B")) {
+    e.preventDefault();
+    if (!narrow) {
+      s.toggleSide();
+    }
+    return;
+  }
+  if (WINDOW_MODE && e.ctrlKey && e.shiftKey && (e.key === "e" || e.key === "E") && s.current()) {
+    e.preventDefault();
+    return s.toggleExpand();
+  }
+  if (e.defaultPrevented || popupOpen()) {
+    return;
+  }
+  const typing = e.target.closest?.("textarea, input:not([aria-label=Search]), [contenteditable]");
+  if (typing) {
+    return;
+  }
+  if (e.key === "Escape") {
+    if (s.launchMode || s.query) {
+      usePanel.setState({ launchMode: false, query: "" });
+    } else if (!WINDOW_MODE) {
+      s.api?.close();
+    }
+    return;
+  }
+  if (["home", "tasks"].includes(s.section) && (WINDOW_MODE || s.section === "home")) {
+    return; // no list on view
+  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    s.move(e.key === "ArrowDown" ? 1 : -1);
+  } else if (e.key === "Enter" && !s.launchMode && e.target.closest?.("button, a") == null) {
+    s.primary();
+  }
 }
 
 /** Tasks in the Workspace window: Tasks' own page is laid over this box (main places it at its rect). */
@@ -432,21 +510,6 @@ function Embed() {
   return <div ref={box} className="min-h-0 flex-1" data-embed />;
 }
 
-/** A section not moved yet (the next steps of the move to React). */
-function Later() {
-  const section = usePanel(s => SECTIONS[s.section]);
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-      <Novi agent="manager" className="size-12" />
-      <b>{section} comes to this window in the next step</b>
-      <p className="max-w-sm text-[13px] text-muted-foreground">
-        The list, an agent’s console and the prompt box are still in the Workspace as before
-        (without BAYLOOB_REACT=panel).
-      </p>
-    </div>
-  );
-}
-
 function Loading() {
   return (
     <div className="flex flex-col gap-3 p-6" role="status" aria-busy="true">
@@ -460,48 +523,78 @@ function Loading() {
 
 /** CPU · memory · how long agents waited on you today; a failed action's message takes their place a moment. */
 function Footer() {
-  const { stats, blocked, flash } = usePanel();
+  const s = usePanel();
+  const { stats, blocked, flash } = s;
   const sys = stats?.system || {};
+  const cur = s.launchMode ? null : s.current();
+  const folder =
+    cur?.kind !== "agent"
+      ? "Select an AI agent to open its folder"
+      : !cur.data.cwd
+        ? "This agent's folder isn't known"
+        : "Open the selected agent's folder";
   return (
-    <footer className="flex shrink-0 items-center justify-center gap-4 border-t px-4 py-2.5 text-[12.5px] text-muted-foreground">
-      {flash ? (
-        <span role="alert" className="text-foreground">
-          {flash}
-        </span>
-      ) : (
-        <>
-          <Meter
-            icon={CpuIcon}
-            label="CPU"
-            value={sys.cpu == null ? "—" : `${Math.round(sys.cpu)}%`}
-            tip={
-              sys.cpu == null
-                ? "All cores of this computer"
-                : `All cores of this computer · ${sys.coresBusy?.toFixed(1)} of ${sys.cores} cores busy`
-            }
-          />
-          <span className="h-4 w-px bg-border" />
-          <Meter
-            icon={DatabaseIcon}
-            label="Memory"
-            value={
-              sys.memTotal ? `${formatBytes(sys.memUsed)} / ${formatBytes(sys.memTotal)}` : "—"
-            }
-            tip="Memory in use on this computer, of the total"
-          />
-          {blocked?.today > 0 && (
-            <>
-              <span className="h-4 w-px bg-border" />
-              <Meter
-                icon={ClockIcon}
-                label="Agents waited"
-                value={formatWait(blocked.today)}
-                tip="Today, agents spent this long waiting on your permission and question cards (screen-locked time not counted)"
-              />
-            </>
-          )}
-        </>
-      )}
+    <footer className="flex shrink-0 items-center gap-4 border-t px-4 py-2.5 text-[12.5px] text-muted-foreground">
+      <Button
+        variant="outline"
+        size="sm"
+        aria-pressed={s.launchMode}
+        className={cn(s.launchMode && "border-brand/30 bg-brand/14")}
+        onClick={s.toggleLaunch}
+      >
+        <PlusIcon data-icon="inline-start" />
+        Launch app
+      </Button>
+      <span className="flex flex-1 items-center justify-center gap-4">
+        {flash ? (
+          <span role="alert" className="text-foreground">
+            {flash}
+          </span>
+        ) : (
+          <>
+            <Meter
+              icon={CpuIcon}
+              label="CPU"
+              value={sys.cpu == null ? "—" : `${Math.round(sys.cpu)}%`}
+              tip={
+                sys.cpu == null
+                  ? "All cores of this computer"
+                  : `All cores of this computer · ${sys.coresBusy?.toFixed(1)} of ${sys.cores} cores busy`
+              }
+            />
+            <span className="h-4 w-px bg-border" />
+            <Meter
+              icon={DatabaseIcon}
+              label="Memory"
+              value={
+                sys.memTotal ? `${formatBytes(sys.memUsed)} / ${formatBytes(sys.memTotal)}` : "—"
+              }
+              tip="Memory in use on this computer, of the total"
+            />
+            {blocked?.today > 0 && (
+              <>
+                <span className="h-4 w-px bg-border" />
+                <Meter
+                  icon={ClockIcon}
+                  label="Agents waited"
+                  value={formatWait(blocked.today)}
+                  tip="Today, agents spent this long waiting on your permission and question cards (screen-locked time not counted)"
+                />
+              </>
+            )}
+          </>
+        )}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={cur?.kind !== "agent" || !cur.data.cwd}
+        title={folder}
+        onClick={() => s.openWorkspace(cur.id)}
+      >
+        <FolderIcon data-icon="inline-start" />
+        Open folder
+      </Button>
     </footer>
   );
 }

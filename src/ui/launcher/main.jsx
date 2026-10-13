@@ -2,11 +2,12 @@ import "@/styles/globals.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { followTheme } from "@/lib/theme";
-import { followZoomKeys, guardDrops } from "@/lib/window";
+import { followPointerFocus, followZoomKeys, guardDrops } from "@/lib/window";
 import { App } from "./App";
 import { connect } from "./store";
 
 followTheme();
+followPointerFocus();
 followZoomKeys(window.launcherAPI);
 guardDrops();
 connect(window.launcherAPI);

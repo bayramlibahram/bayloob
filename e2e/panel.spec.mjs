@@ -36,3 +36,22 @@ test("the Workspace window: Home, and Tasks' own page laid over the section's bo
     await app.close();
   }
 });
+
+test("the Workspace window: the demo's agents in their list, the selected one's detail beside it", async () => {
+  const app = await launch({ BAYLOOB_REACT: "panel" });
+  try {
+    await app.evaluate(({ ipcMain }) => ipcMain.emit("panel:open-window", {}, "agents"));
+    const win = await windowWith(app, "out/renderer/panel/index.html");
+    const list = win.getByRole("listbox", { name: "Items" });
+    await expect(list.getByRole("option").first()).toBeVisible({ timeout: 10_000 });
+    const rows = list.getByRole("option");
+    await rows.nth(1).click();
+    await expect(rows.nth(1)).toHaveAttribute("aria-selected", "true");
+    const name = await rows.nth(1).locator("b").textContent();
+    await expect(win.getByRole("region", { name: `${name} — details` })).toBeVisible();
+    await win.keyboard.press("ArrowUp");
+    await expect(rows.first()).toHaveAttribute("aria-selected", "true");
+  } finally {
+    await app.close();
+  }
+});

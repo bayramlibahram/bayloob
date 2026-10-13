@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { errorText } from "@/lib/window";
 import { inboxOf, itemsOf, navFor, recentlyFinished } from "./model";
 
 // The Workspace: the popup panel and the Workspace window (?mode=window: resizable, Home, Tasks inside) run
@@ -21,6 +22,8 @@ function savedLayout() {
   }
 }
 
+const loading = new Set(); // sessions whose console is being read
+
 export const usePanel = create((set, get) => ({
   api: null,
   ready: false,
@@ -40,6 +43,17 @@ export const usePanel = create((set, get) => ({
   selected: null, // the selected row's key
   layout: { side: SIDE.def, detail: DETAIL.def, collapsed: false, ...savedLayout() },
   flash: "", // a short message in the footer (an action that failed)
+  query: "", // the list's search
+  launchMode: false, // the list shows installed apps to launch
+  launchable: null, // installed apps (null: not read yet)
+  launchFailed: null, // why they couldn't be read
+  expanded: false, // the detail takes the list's column too (Ctrl+Shift+E; not kept)
+  consoles: {}, // session id → { turns | unavailable, at }
+  toggled: {}, // console parts opened or folded: steps:<turn>, all:<turn>, step:<turn>:<n>, you:<turn>, said:<turn>
+  answers: {}, // question perm id → { question: [labels] }
+  dockerAsk: null, // { id, action } while Stop / Restart asks "really?"
+  dockerLogs: null, // { id, name, text | error } — one container's last lines
+  instAsk: null, // `${task}|${instance}` whose Stop asks "really?"
 
   show(state) {
     const sessions = state.sessions || [];
@@ -107,7 +121,193 @@ export const usePanel = create((set, get) => ({
   },
 
   go(section, selected = null) {
-    set({ section, selected });
+    set({ section, selected, launchMode: false, query: "" });
+  },
+
+  /** The visible rows of the section on view (its search applied). */
+  visible() {
+    const s = get();
+    if (s.launchMode) {
+      return [];
+    }
+    const q = s.query.trim().toLowerCase();
+    return s.items().filter(i => !q || `${i.name} ${i.subtitle}`.toLowerCase().includes(q));
+  },
+
+  /** The selected row, else the first one. */
+  current() {
+    const items = get().visible();
+    return items.find(i => i.key === get().selected) || items[0] || null;
+  },
+
+  select: key => set({ selected: key, dockerAsk: null, instAsk: null }),
+  setQuery: query => set({ query, selected: null }),
+
+  /** ↑ / ↓ through the rows, round the end. */
+  move(step) {
+    const items = get().visible();
+    if (!items.length) {
+      return;
+    }
+    const i = Math.max(
+      0,
+      items.findIndex(x => x.key === get().current()?.key)
+    );
+    get().select(items[(i + step + items.length) % items.length].key);
+  },
+
+  /** Enter or a row's ›: an agent's terminal, a task in Tasks, an app's window. */
+  primary(item = get().current()) {
+    const { api } = get();
+    if (item?.kind === "task") {
+      return api?.openTasks(item.id);
+    }
+    if (item?.kind === "agent") {
+      return api?.focus(item.id);
+    }
+    if (item?.kind === "app") {
+      return get().run(api?.focusApp(item.id));
+    }
+  },
+
+  /** A row's ⋮: main's own menu for the session or the app. */
+  rowMenu(item) {
+    const { api } = get();
+    return item.kind === "agent" ? api?.sessionMenu(item.id) : api?.appMenu(item.id);
+  },
+
+  toggleExpand: () => set(s => ({ expanded: !s.expanded })),
+
+  // ---------- Launch app: the installed apps ----------
+
+  async toggleLaunch() {
+    const on = !get().launchMode;
+    set({ launchMode: on, query: "" });
+    if (on && !get().launchable) {
+      await get().loadLaunchable();
+    }
+  },
+
+  async loadLaunchable() {
+    set({ launchFailed: null });
+    try {
+      set({ launchable: (await get().api?.launchable()) || [] });
+    } catch (err) {
+      set({ launchFailed: errorText(err) });
+    }
+  },
+
+  launchApp(app) {
+    get().note(`Launching ${app.name}…`);
+    return get().run(get().api?.launchApp(app.id));
+  },
+
+  // ---------- an agent's console ----------
+
+  /** The session's turns, read again at most every 2 s while it is on view. */
+  async loadConsole(id) {
+    const { api, consoles } = get();
+    const c = consoles[id];
+    if (!api?.console || loading.has(id) || (c && Date.now() - c.at < 2000)) {
+      return;
+    }
+    loading.add(id);
+    const r = await api.console(id).catch(() => null);
+    loading.delete(id);
+    set(s => ({ consoles: { ...s.consoles, [id]: { ...(r || {}), at: Date.now() } } }));
+  },
+
+  toggle: key => set(s => ({ toggled: { ...s.toggled, [key]: !s.toggled[key] } })),
+
+  // ---------- the Inbox's cards: the pill's decisions, the same rules ----------
+
+  decide(permId, decision, sessionId = null) {
+    get().api?.decide(permId, decision);
+    if (decision === "terminal" && sessionId) {
+      get().api?.focus(sessionId);
+    }
+  },
+
+  alwaysAllow: permId => get().api?.alwaysAllow(permId),
+
+  /** Picks an answer (multiSelect: toggles it). */
+  pick(permId, q, label) {
+    const picked = { ...(get().answers[permId] || {}) };
+    const now = picked[q.question] || [];
+    picked[q.question] = q.multiSelect
+      ? now.includes(label)
+        ? now.filter(x => x !== label)
+        : [...now, label]
+      : [label];
+    set(s => ({ answers: { ...s.answers, [permId]: picked } }));
+  },
+
+  sendAnswers(permId) {
+    const picked = get().answers[permId];
+    if (picked) {
+      get().api?.answer(permId, picked);
+      set(s => {
+        const { [permId]: _, ...rest } = s.answers;
+        return { answers: rest };
+      });
+    }
+  },
+
+  /** An option of a menu the agent shows in its terminal → { ok, error? }. */
+  answerMenu: (sessionId, index) => get().api?.answerMenu(sessionId, index),
+
+  // ---------- Docker, apps, a task's agents ----------
+
+  docker(action, id, confirmed = false) {
+    if ((action === "stop" || action === "restart") && !confirmed) {
+      return set({ dockerAsk: { id, action } });
+    }
+    set({ dockerAsk: null });
+    return get().run(get().api?.docker(action, id));
+  },
+
+  async showLogs(id, name) {
+    set({ dockerLogs: { id, name, text: null } });
+    let r;
+    try {
+      r = await get().api?.dockerLogs(id);
+    } catch (err) {
+      r = { ok: false, error: errorText(err) };
+    }
+    if (get().dockerLogs?.id !== id) {
+      return; // closed or switched meanwhile
+    }
+    set({
+      dockerLogs: r?.ok
+        ? { id, name, text: r.text }
+        : { id, name, error: r?.error || "Something went wrong" },
+    });
+  },
+
+  closeLogs: () => set({ dockerLogs: null }),
+  cancelAsk: () => set({ dockerAsk: null, instAsk: null }),
+
+  /** A task's agent: Stop asks first, in place; the engine keeps its worktree. */
+  stopInstance(taskId, instId, confirmed = false) {
+    const key = `${taskId}|${instId}`;
+    if (!confirmed) {
+      return set({ instAsk: key });
+    }
+    set({ instAsk: null });
+    return get().run(get().api?.stopInstance(taskId, instId));
+  },
+
+  focusApp: (id, windowId) => get().run(get().api?.focusApp(id, windowId)),
+  newTab: id => get().run(get().api?.newTab(id)),
+  newWindow: id => get().run(get().api?.launchApp(id)),
+  terminal: id => get().api?.focus(id),
+  openTask: id => get().api?.openTasks(id),
+  openWorkspace: id => get().api?.openWorkspace(id),
+
+  /** A message in the footer for a moment. */
+  note(text) {
+    set({ flash: text });
+    setTimeout(() => get().flash === text && set({ flash: "" }), 3500);
   },
 
   dismiss: id => set(s => ({ finished: s.finished.filter(x => x !== id) })),
@@ -119,6 +319,8 @@ export const usePanel = create((set, get) => ({
       finished: s.finished.filter(x => x !== id),
       section: ["inbox", "agents", "overview"].includes(s.section) ? s.section : "agents",
       selected: `agent:${id}`,
+      launchMode: false,
+      query: "",
     });
   },
 
@@ -144,8 +346,7 @@ export const usePanel = create((set, get) => ({
   async run(promise) {
     const r = await promise;
     if (r && r.ok === false && r.error) {
-      set({ flash: r.error });
-      setTimeout(() => get().flash === r.error && set({ flash: "" }), 3500);
+      get().note(r.error);
     }
   },
 

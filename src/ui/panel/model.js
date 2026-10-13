@@ -222,7 +222,7 @@ export function itemsOf(
   }
   const agents = byUrgency(sessions).map(agentItem);
   if (section === "agents") {
-    return agents;
+    return agentRows(agents);
   }
   const appRows = (apps || []).map(appItem);
   if (section === "overview") {
@@ -352,3 +352,115 @@ export function hookStatus(st, ago) {
     ? { label: "Connected", color: "var(--done)", tip }
     : { label: "Waiting for agents", color: "var(--working)", tip };
 }
+
+// ---------- the list: groups, what an agent does in its task, a file clash ----------
+
+/** "Builder · build-2", "Planner / reviewer · read-only" — an agent's part in its task. */
+export function taskRole(s, t) {
+  if (s.label) {
+    return s.label.split(" · ").slice(1).join(" · ") || s.label;
+  }
+  if (t.leaf === "ro") {
+    return "Planner / reviewer · read-only";
+  }
+  return /^([a-z]+)-(\d+)$/.test(t.leaf) ? `Builder · ${t.leaf}` : t.leaf;
+}
+
+/**
+ * The agents' rows one project (or task) after another, the most urgent first; under a heading the path would
+ * repeat it, so the row says what the agent is doing (or its part in a task).
+ */
+export function agentRows(items) {
+  const groups = new Map();
+  for (const i of items) {
+    const k = groupKey(i);
+    groups.set(k, [...(groups.get(k) || []), i]);
+  }
+  return [...groups.values()].flat().map(i => {
+    const t = taskOfSession(i.data);
+    const doing = i.data.activity?.title;
+    const said = doing && doing !== "Already running" ? doing : "";
+    return {
+      ...i,
+      subtitle: t
+        ? [taskRole(i.data, t), said].filter(Boolean).join(" · ")
+        : said || projectPath(i.data),
+    };
+  });
+}
+
+/** The group a row sits in: its task or folder (Agents), apps or agents (Overview), none elsewhere. */
+export function groupKey(i, section = "agents") {
+  if (section === "overview") {
+    return i.kind === "agent" ? "agents" : "apps";
+  }
+  if (section !== "agents") {
+    return null;
+  }
+  const t = taskOfSession(i.data);
+  return t ? `task:${t.id}` : i.data.cwd || i.data.project || "";
+}
+
+/** "Editing the same files as Codex (shop): cart.js…" — a clash with other agents in the same tree. */
+export function clashText(c, sessions) {
+  const others = c.with
+    .map(id => sessions.find(x => x.id === id))
+    .filter(Boolean)
+    .map(x => `${displayName(x.agent)} (${x.project})`)
+    .join(", ");
+  if (c.level !== "conflict") {
+    return `Working in the same folder as ${others}; uncommitted changes can break each other's tests`;
+  }
+  const files = c.files.map(f => f.split("/").pop());
+  return `Editing the same files as ${others}: ${files.slice(0, 3).join(", ")}${files.length > 3 ? ` +${files.length - 3}` : ""}`;
+}
+
+// ---------- the agent console ----------
+
+export const CONSOLE_TURNS = 8; // the newest turns shown
+export const STEP_TAIL = 8; // a long turn shows its last steps; the earlier ones open on request
+export const STEP_ICON = {
+  bash: "›_",
+  read: "◔",
+  edit: "✎",
+  write: "＋",
+  search: "⌕",
+  web: "◍",
+  todo: "☑",
+  agent: "⧉",
+  question: "?",
+  tool: "•",
+};
+
+/** Consecutive reads / searches fold into one row ("Read · 3 files"); everything else stays a row each. */
+export function groupSteps(steps) {
+  const out = [];
+  for (const s of steps) {
+    const prev = out[out.length - 1];
+    if (prev && (s.kind === "read" || s.kind === "search") && prev.kind === s.kind) {
+      prev.count += 1;
+      prev.details.push(s.detail);
+      prev.result = prev.result === "error" || s.result === "error" ? "error" : s.result;
+    } else {
+      out.push({ ...s, count: 1, details: [s.detail] });
+    }
+  }
+  return out;
+}
+
+/** "3.4s", "42s", "2m 5s" — nothing under a second. */
+export const secs = ms =>
+  !(ms >= 1000)
+    ? ""
+    : ms < 60000
+      ? `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`
+      : `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+
+export const clock = at =>
+  at ? new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+
+/** A message too long to show whole (it folds behind "Show more"). */
+export const isLong = (text, who) =>
+  text.length > (who === "you" ? 260 : 600) || text.split("\n").length > (who === "you" ? 4 : 8);
+
+export const KIND_NAME = KIND;

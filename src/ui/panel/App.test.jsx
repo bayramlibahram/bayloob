@@ -64,6 +64,34 @@ const TASKS = [
   task("t3", "done", { endedAt: NOW - 10 * MIN }),
 ];
 
+// What main's agent console reads from a transcript (src/main/modules/console)
+const CONSOLES = {
+  c1: {
+    turns: [
+      {
+        id: "u1",
+        prompt: "Add a discount to the cart",
+        status: "done",
+        startedAt: NOW - 20 * MIN,
+        endedAt: NOW - 19 * MIN,
+        steps: [
+          { kind: "read", title: "Read", detail: "cart.js", result: "ok" },
+          { kind: "read", title: "Read", detail: "cart.test.js", result: "ok" },
+          { kind: "edit", title: "Edit", detail: "cart.js", result: "ok", durationMs: 1200 },
+        ],
+        summary: "Added **discount()**.",
+      },
+      {
+        id: "u2",
+        prompt: "Now run the tests",
+        status: "running",
+        startedAt: NOW - MIN,
+        steps: [{ kind: "bash", title: "Bash", detail: "bun test", result: null }],
+      },
+    ],
+  },
+};
+
 let api;
 beforeEach(() => {
   api = {
@@ -82,6 +110,22 @@ beforeEach(() => {
     openSettings: vi.fn(),
     windowControl: vi.fn(),
     resize: vi.fn(),
+    console: vi.fn(async id => CONSOLES[id] || { unavailable: "no-adapter" }),
+    focus: vi.fn(async () => ({ ok: true })),
+    focusApp: vi.fn(async () => ({ ok: true })),
+    launchable: vi.fn(async () => [{ id: "gimp", name: "GIMP", category: "app" }]),
+    launchApp: vi.fn(async () => ({ ok: true })),
+    docker: vi.fn(async () => ({ ok: true })),
+    dockerLogs: vi.fn(async () => ({ ok: true, text: "listening on :8080" })),
+    answer: vi.fn(),
+    answerMenu: vi.fn(async () => ({ ok: false, error: "The agent isn’t in tmux" })),
+    alwaysAllow: vi.fn(),
+    stopInstance: vi.fn(async () => ({ ok: true })),
+    openTasks: vi.fn(),
+    openWorkspace: vi.fn(),
+    sessionMenu: vi.fn(),
+    appMenu: vi.fn(),
+    close: vi.fn(),
   };
   usePanel.setState({ ready: false, section: "home", selected: null, finished: [], flash: "" });
   connect(api);
@@ -236,4 +280,181 @@ test("the footer: CPU, memory and how long agents waited on you today", async ()
   expect(foot.textContent).toContain("37%");
   expect(foot.textContent).toContain("6.2 GB / 16.0 GB");
   expect(foot.textContent).toContain("2m 5s");
+});
+
+// ---------- the lists and the detail (step 7b) ----------
+
+test("Agents: a task's agents under the task, the row says its part; the console shows the turns", async () => {
+  const sessions = [
+    ...structuredClone(SESSIONS),
+    session("c3", "claude", "working", {
+      task: "t2",
+      project: "shop-20261011-1045-a29f-build-1",
+      activity: { title: "Edit api.js" },
+    }),
+  ];
+  render(<App />);
+  await act(async () => api.show({ sessions, tasks: structuredClone(TASKS), section: "agents" }));
+  const list = screen.getByRole("listbox", { name: "Items" });
+  expect(within(list).getByText("Task t2")).toBeTruthy();
+  expect(within(list).getByText("Builder · build-1 · Edit api.js")).toBeTruthy();
+  // the most urgent first: Codex waits for a permission
+  expect(within(list).getAllByRole("option")[0].getAttribute("aria-selected")).toBe("true");
+  fireEvent.click(within(list).getByText("Edit cart.js"));
+  const detail = await screen.findByRole("region", { name: /Claude Code — details/ });
+  expect(await within(detail).findByText("Add a discount to the cart")).toBeTruthy();
+  // the newest turn is open and running; the older one folds behind its steps
+  expect(within(detail).getByText("Working…")).toBeTruthy();
+  expect(within(detail).getByText("bun test")).toBeTruthy();
+  expect(within(detail).queryByText("cart.test.js")).toBeNull();
+  fireEvent.click(within(detail).getByRole("button", { name: /3 steps/ }));
+  // two reads fold into one row
+  expect(within(detail).getByText("2 files")).toBeTruthy();
+  expect(detail.querySelector(".md :is(b, strong)").textContent).toBe("discount()");
+});
+
+test("a permission: Allow waits for the cooling pause; Deny, Terminal and Always allow go to main", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "setInterval", "Date"] });
+  try {
+    const sessions = structuredClone(SESSIONS);
+    sessions[1].perm = {
+      id: "p-cool",
+      kind: "perm",
+      tool: "Bash",
+      detail: "rm -rf build",
+      immune: { slowDown: true, suggest: { key: "rm -rf build" } },
+    };
+    render(<App />);
+    await act(async () => api.show({ sessions, tasks: [], section: "inbox" }));
+    const card = screen.getByRole("region", { name: "Codex wants to run" });
+    const allow = within(card).getByRole("button", { name: "Allow" });
+    expect(allow.disabled).toBe(true);
+    expect(card.textContent).toMatch(/Allow unlocks in 3s/);
+    await act(async () => vi.advanceTimersByTime(3100));
+    expect(within(card).getByRole("button", { name: "Allow" }).disabled).toBe(false);
+    fireEvent.click(within(card).getByRole("button", { name: "Always allow" }));
+    expect(api.alwaysAllow).toHaveBeenCalledWith("p-cool");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a command too long to show can only be approved in the terminal", async () => {
+  const sessions = structuredClone(SESSIONS);
+  sessions[1].perm = { id: "p9", kind: "perm", tool: "Bash", detail: "curl …", hidden: 5000 };
+  render(<App />);
+  await act(async () => api.show({ sessions, tasks: [], section: "inbox" }));
+  const card = screen.getByRole("region", { name: "Codex wants to run" });
+  expect(within(card).getByRole("button", { name: "Allow" }).disabled).toBe(true);
+  expect(card.textContent).toMatch(/5000 more characters/);
+  fireEvent.click(within(card).getByRole("button", { name: "Terminal" }));
+  expect(api.decide).toHaveBeenCalledWith("p9", "terminal");
+  expect(api.focus).toHaveBeenCalledWith("x1");
+});
+
+test("a question: Send once every question has an answer; a terminal menu says why it failed", async () => {
+  const sessions = structuredClone(SESSIONS);
+  sessions[1].perm = {
+    id: "q1",
+    kind: "question",
+    questions: [
+      { question: "Which DB?", options: [{ label: "SQLite" }, { label: "Postgres" }] },
+      { question: "Extras?", multiSelect: true, options: [{ label: "Cache" }, { label: "Logs" }] },
+    ],
+  };
+  sessions[0].menu = { question: "Trust this folder?", options: ["Yes", "No"], selected: 0 };
+  render(<App />);
+  await act(async () => api.show({ sessions, tasks: [], section: "inbox" }));
+  const card = screen.getByRole("region", { name: "Codex asks you" });
+  const send = () => within(card).getByRole("button", { name: "Send answer" });
+  fireEvent.click(within(card).getByRole("button", { name: "Postgres" }));
+  expect(send().disabled).toBe(true);
+  fireEvent.click(within(card).getByRole("button", { name: "Cache" }));
+  fireEvent.click(within(card).getByRole("button", { name: "Logs" }));
+  fireEvent.click(send());
+  expect(api.answer).toHaveBeenCalledWith("q1", {
+    "Which DB?": ["Postgres"],
+    "Extras?": ["Cache", "Logs"],
+  });
+
+  fireEvent.click(screen.getByText("Asks in terminal · work / shop"));
+  const menu = screen.getByRole("region", { name: "Claude Code asks in its terminal" });
+  await act(async () => fireEvent.click(within(menu).getByRole("button", { name: "No" })));
+  expect(api.answerMenu).toHaveBeenCalledWith("c1", 1);
+  expect(within(menu).getByRole("alert").textContent).toMatch(/isn’t in tmux/);
+});
+
+test("Docker: Stop asks first, in its row; logs are read-only", async () => {
+  await open({ section: "system" });
+  await act(async () =>
+    api.workspace({
+      apps: [
+        {
+          id: "docker",
+          name: "Docker",
+          category: "system",
+          status: "running",
+          windows: [],
+          details: {
+            containers: [
+              {
+                id: "d1",
+                name: "db",
+                state: "running",
+                health: "healthy",
+                status: "Up",
+                image: "pg",
+              },
+            ],
+          },
+        },
+      ],
+      extension: true,
+    })
+  );
+  const detail = screen.getByRole("region", { name: /Docker — details/ });
+  fireEvent.click(within(detail).getByRole("button", { name: "Stop" }));
+  expect(api.docker).not.toHaveBeenCalled();
+  expect(within(detail).getByText("Really stop?")).toBeTruthy();
+  await act(async () =>
+    fireEvent.click(within(detail).getAllByRole("button", { name: "Stop" })[0])
+  );
+  expect(api.docker).toHaveBeenCalledWith("stop", "d1");
+  await act(async () => fireEvent.click(within(detail).getByRole("button", { name: "Logs" })));
+  expect(within(detail).getByText("listening on :8080")).toBeTruthy();
+});
+
+test("a task's agent: Stop asks first; the task opens in Tasks", async () => {
+  const tasks = structuredClone(TASKS);
+  tasks[0].instances = [{ id: "i1", adapter: "codex", stage: "plan", status: "running" }];
+  tasks[0].template.stages[0].id = "plan";
+  tasks[0].stages = [{ status: "running" }, { status: "pending" }];
+  render(<App />);
+  // a task at its gate waits in the Inbox: its detail says where it is and who works on it
+  await act(async () => api.show({ sessions: [], tasks, section: "inbox" }));
+  const detail = screen.getByRole("region", { name: /Task t1 — details/ });
+  expect(detail.textContent).toContain("Approve the plan");
+  fireEvent.click(within(detail).getByRole("button", { name: "Stop this agent" }));
+  expect(api.stopInstance).not.toHaveBeenCalled();
+  await act(async () => fireEvent.click(within(detail).getByRole("button", { name: "Stop it" })));
+  expect(api.stopInstance).toHaveBeenCalledWith("t1", "i1");
+  fireEvent.click(within(detail).getByRole("button", { name: "Open in Tasks" }));
+  expect(api.openTasks).toHaveBeenCalledWith("t1");
+});
+
+test("keys: ↓ moves, Enter opens the agent's terminal, Esc clears the search; Launch app lists the apps", async () => {
+  await open({ section: "agents" });
+  const sel = () => screen.getByRole("option", { selected: true }).id;
+  expect(sel()).toBe("row-agent:x1");
+  fireEvent.keyDown(document.body, { key: "ArrowDown" });
+  expect(sel()).toBe("row-agent:c1");
+  fireEvent.keyDown(document.body, { key: "Enter" });
+  expect(api.focus).toHaveBeenCalledWith("c1");
+  fireEvent.change(screen.getByRole("textbox", { name: "Search" }), { target: { value: "zzz" } });
+  expect(screen.getByText("No apps match “zzz”.")).toBeTruthy();
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  expect(usePanel.getState().query).toBe("");
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Launch app" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: /GIMP/ })));
+  expect(api.launchApp).toHaveBeenCalledWith("gimp");
 });
