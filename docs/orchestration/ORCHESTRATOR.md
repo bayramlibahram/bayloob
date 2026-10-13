@@ -1,6 +1,6 @@
 # Orchestrator agent, level 2: the orchestrator starts its own workers — security design
 
-Status: **approved design, not built yet** (backlog #28.2; decisions in §9, 2026-10-12). Level 1 (Lead + team, #28) shipped in 0.9.0: Bayloob runs a fixed
+Status: **built in 0.10.0, experimental** — not yet tried with real agents (backlog #28.2; decisions in §9, 2026-10-12; hardened in #58: no send to a working worker, two-failure cap, worker reports checked against their scope). Level 1 (Lead + team, #28) shipped in 0.9.0: Bayloob runs a fixed
 pipeline and the lead only plans, reviews and sums up. Level 2 lets the orchestrator decide *during* the task which
 workers to start, with which prompt, and what to do with their results.
 
