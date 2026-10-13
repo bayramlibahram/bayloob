@@ -8,6 +8,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { parentAgentOf } = require("./parent-agent");
 
 const TERM_ENV = {
   TMUX_PANE: "tmux",
@@ -166,6 +167,14 @@ class AgentDiscovery {
       if (key && kv.slice(i + 1)) {
         term[key] = kv.slice(i + 1);
       }
+    }
+    // Started by another agent: the terminal fields are inherited from it and point at its pane
+    const parent = parentAgentOf(pid, this.proc);
+    if (parent) {
+      for (const k of ["tmux", "kitty", "kittysock", "wez", "winid"]) {
+        delete term[k];
+      }
+      term.parentAgent = parent;
     }
     return term;
   }

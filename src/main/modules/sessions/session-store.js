@@ -5,12 +5,15 @@ const { suggestionsFrom } = require("../../../shared/suggestions");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { describeActivity } = require("./activity");
+const { parentAgentOf } = require("../../infrastructure/system/parent-agent");
 
 const STALE_MS = 15 * 60 * 1000; // drop sessions silent for 15 min
 const HISTORY_MAX = 8;
 const FILES_MAX = 200;
 const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const TERM_KEYS = ["term", "winid", "kitty", "kittysock", "wez", "tmux", "pid"];
+// Terminal fields a helper agent inherits from the agent that started it; they point at the parent's pane
+const INHERITED_KEYS = ["winid", "kitty", "kittysock", "wez", "tmux"];
 
 // The hook reports its parent PID, which is usually a short-lived `sh -c` started by the agent.
 // Resolve it to the agent process itself while that shell still exists (Linux /proc). null when it can't
@@ -64,6 +67,14 @@ class SessionStore extends EventEmitter {
       const agentPid = agentPidOf(fresh.pid) || old?.term?.agentPid;
       if (agentPid) {
         fresh.agentPid = agentPid;
+      }
+      // A helper started by another agent: its terminal is the parent's — stopping it must not stop that one
+      const parent = agentPid && parentAgentOf(agentPid);
+      if (parent) {
+        for (const k of INHERITED_KEYS) {
+          delete fresh[k];
+        }
+        fresh.parentAgent = parent;
       }
     }
     const term = Object.keys(fresh).length ? fresh : old?.term || {};
