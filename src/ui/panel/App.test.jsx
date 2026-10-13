@@ -1,13 +1,16 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { useNewTask } from "../newtask/store";
 import {
   activityOf,
   finishedPerDay,
   inboxOf,
   itemsOf,
   kpisOf,
+  packForColor,
   projectName,
   projectPath,
+  roleCardsOf,
   taskOfSession,
 } from "./model";
 
@@ -251,6 +254,81 @@ test("Home's numbers, its activity and the finished tasks per day", () => {
   expect(events.find(e => e.key === "agent:g1").name).toBe("Research Agent");
 });
 
+test("Home's role cards derive waiting, working, online and off with task counts", () => {
+  const roles = [
+    { id: "research", name: "Research", color: "#6aa8ff", engine: "claude" },
+    { id: "data", name: "Data", color: "#ffb547", engine: "codex" },
+    { id: "content", name: "Content", color: "#4fd59a", engine: "claude" },
+    { id: "design", name: "Design", color: "#b28bff", engine: "gemini" },
+  ];
+  const sessions = [
+    session("r1", "claude", "idle", { persona: "research", perm: { id: "p" } }),
+    session("d1", "codex", "thinking", { persona: "data" }),
+    session("c1", "claude", "done", { persona: "content", task: "rt4" }),
+  ];
+  const withRoles = (id, status, personas) =>
+    task(id, status, {
+      template: { stages: personas.map(persona => ({ title: persona, persona })) },
+    });
+  const tasks = [
+    withRoles("rt1", "running", ["research", "data"]),
+    withRoles("rt2", "needs-you", ["research"]),
+    withRoles("rt3", "done", ["content"]),
+    withRoles("rt4", "failed", []),
+  ];
+  expect(roleCardsOf({ roles, sessions, tasks })).toEqual([
+    expect.objectContaining({ id: "research", status: "waiting", live: "r1", tasks: 2, active: 2 }),
+    expect.objectContaining({ id: "data", status: "working", live: "d1", tasks: 1, active: 1 }),
+    expect.objectContaining({ id: "content", status: "online", live: "c1", tasks: 2, active: 0 }),
+    expect.objectContaining({ id: "design", status: "off", live: null, tasks: 0, active: 0 }),
+  ]);
+});
+
+test("a role's mascot wears the pack nearest its colour", () => {
+  expect(
+    ["#6aa8ff", "#ffb547", "#4fd59a", "#b28bff", "#8b5cff", "#9aa0a8", "#ff7a5c"].map(packForColor)
+  ).toEqual(["blue", "coral", "teal", "purple", "purple", "silver", "coral"]);
+  expect(packForColor("nope")).toBeNull();
+});
+
+test("finished tasks are bucketed across either 7 or 30 days", () => {
+  expect(finishedPerDay(TASKS, NOW, 7)).toHaveLength(7);
+  const empty = finishedPerDay([], NOW, 30);
+  const tasks = [
+    task("oldest", "done", { endedAt: empty[0].day.getTime() + MIN }),
+    task("today", "done", { endedAt: empty[29].day.getTime() + MIN }),
+    task("outside", "done", { endedAt: empty[0].day.getTime() - 1 }),
+  ];
+  const days = finishedPerDay(tasks, NOW, 30);
+  expect(days).toHaveLength(30);
+  expect(days.map(d => d.n)).toEqual([1, ...Array(28).fill(0), 1]);
+});
+
+test("a role shortcut opens a Single agent draft with that role preselected", () => {
+  useNewTask.getState().show({
+    agents: {
+      claude: { name: "Claude Code", installed: true },
+      codex: { name: "Codex", installed: true },
+    },
+    capacity: { claude: 1, codex: 1 },
+    running: { claude: 0, codex: 0 },
+    disabled: [],
+    recent: [],
+    templates: [],
+    terminals: [],
+    roles: [{ id: "research", name: "Research", engine: "codex" }],
+    preset: { agent: "codex", role: "research" },
+    prefill: "",
+    draft: null,
+    home: "/home/u",
+    hosts: [],
+  });
+  expect(useNewTask.getState().cfg).toMatchObject({
+    category: "single",
+    single: { agent: "codex", role: "research" },
+  });
+});
+
 // ---------- the window ----------
 
 test("opens on the Inbox when something waits for you; the sections show their counts", async () => {
@@ -265,9 +343,25 @@ test("opens on the Inbox when something waits for you; the sections show their c
 });
 
 test("Home: the numbers, the agents (a role agent by its name), and Deny without opening the card", async () => {
-  await open({ section: "home" });
+  await open({
+    section: "home",
+    roles: [
+      { id: "research", name: "Research Agent", color: "#5b8def", engine: "claude" },
+      { id: "design", name: "Design Agent", color: "#b28bff", engine: "claude" },
+    ],
+  });
   const main = screen.getByRole("main", { name: "Home" });
   expect(within(main).getByText("Welcome back")).toBeTruthy();
+  const roles = within(main).getByRole("region", { name: "Your agents" });
+  expect(within(roles).getByRole("button", { name: /Research Agent, Online/ })).toBeTruthy();
+  fireEvent.click(within(roles).getByRole("button", { name: /Design Agent, Offline/ }));
+  expect(api.newSession).toHaveBeenCalledWith("design");
+  const overview = within(main).getByRole("region", { name: "Tasks overview" });
+  expect(
+    within(overview).getByRole("img", {
+      name: "Running 1, Needs you 1, Done 1, Failed 0, Stopped 0",
+    })
+  ).toBeTruthy();
   const agents = within(main).getByRole("region", { name: "Agents at work" });
   expect(within(agents).getByText("Research Agent")).toBeTruthy();
   const waiting = within(main).getByRole("region", { name: "Waiting for you" });
@@ -278,7 +372,7 @@ test("Home: the numbers, the agents (a role agent by its name), and Deny without
   expect(usePanel.getState()).toMatchObject({ section: "inbox", selected: "agent:x1" });
   fireEvent.click(screen.getByRole("button", { name: /Home/ }));
   fireEvent.click(screen.getByRole("button", { name: "New task" }));
-  expect(api.newSession).toHaveBeenCalled();
+  expect(api.newSession).toHaveBeenCalledWith();
 });
 
 test("an agent that just finished: the banner, Reply selects it, ✕ dismisses it", async () => {

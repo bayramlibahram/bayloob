@@ -66,6 +66,14 @@ export const useNewTask = create((set, get) => ({
     const cfg = d
       ? { pastes: [], ...d }
       : fresh(state, { state, cfg: null }, storage.get(TERMINAL_KEY));
+    const role = !d && (state.roles || []).find(r => r.id === state.preset?.role);
+    if (role) {
+      cfg.category = "single";
+      cfg.single.role = role.id;
+      if (usable({ state }, role.engine)) {
+        cfg.single.agent = role.engine;
+      }
+    }
     set({ cfg, draftId: d?.id || null });
     if (d?.attachments?.length) {
       taskAtt.getState().restore(d.attachments);

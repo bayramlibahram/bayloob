@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld("panelAPI", {
   focus: sessionId => ipcRenderer.invoke("focus", sessionId),
   openWorkspace: sessionId => ipcRenderer.invoke("panel:open-workspace", sessionId),
   sessionMenu: sessionId => ipcRenderer.send("panel:session-menu", sessionId),
-  newSession: () => ipcRenderer.send("open-launcher"),
+  newSession: roleId => ipcRenderer.send("open-launcher", roleId),
   launchOptions: () => ipcRenderer.invoke("panel:launch-options"),
   launch: opts => ipcRenderer.invoke("launcher:launch", opts),
   // format: a response format id, 'none', or undefined for the agent's / the default (Settings)

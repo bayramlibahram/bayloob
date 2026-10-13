@@ -58,7 +58,7 @@ const { inspect, preview, inside } = require("../modules/attachments/preview");
 const PromptFormat = require("../../shared/prompt-format");
 const Roles = require("../../shared/roles");
 const { checked } = require("../ipc/checked");
-const { SettingsSave } = require("../ipc/schemas");
+const { SettingsSave, launcherRolePreset } = require("../ipc/schemas");
 const { TaskStore } = require("../modules/tasks/task-store");
 const { TemplateStore } = require("../modules/tasks/template-store");
 const { ProjectInfo, detectDev } = require("../modules/tasks/project-info");
@@ -1716,7 +1716,9 @@ class BayloobApp {
     });
     ipcMain.handle("focus", (_e, sessionId) => this.focus(session(sessionId)));
     ipcMain.on("music", (_e, action) => this.music?.control(action));
-    ipcMain.on("open-launcher", () => this.openLauncher());
+    ipcMain.on("open-launcher", (_e, roleId) =>
+      this.openLauncher(launcherRolePreset(this.settings.get("roles"), roleId))
+    );
     // "Fix this error?": into a session's prompt window, or a new session — the user still confirms
     ipcMain.on("fix-error", (_e, sessionId) => {
       const text = this.#copiedError;
