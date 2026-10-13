@@ -1,23 +1,14 @@
 import {
-  BotIcon,
   ClockIcon,
-  CodeIcon,
   CpuIcon,
   DatabaseIcon,
   FolderIcon,
-  GlobeIcon,
-  HouseIcon,
-  InboxIcon,
-  LayoutDashboardIcon,
-  LayoutGridIcon,
-  ListChecksIcon,
   Maximize2Icon,
   MinusIcon,
   PanelLeftIcon,
   PlusIcon,
   SettingsIcon,
   SquareIcon,
-  WrenchIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -31,22 +22,14 @@ import { cn } from "@/lib/utils";
 import { watchPopups } from "@/lib/window";
 import { Detail } from "./Detail";
 import { Home } from "./Home";
+import { SECTION_ICON } from "./icons";
 import { List } from "./List";
 import { formatBytes, formatWait, hookStatus, projectName, SECTIONS } from "./model";
+import { Palette } from "./Palette";
 import { AskBar } from "./Prompts";
 import { DETAIL, NAV, SIDE, usePanel, WINDOW_MODE } from "./store";
 
-const ICON = {
-  home: LayoutDashboardIcon,
-  inbox: InboxIcon,
-  agents: BotIcon,
-  tasks: ListChecksIcon,
-  overview: HouseIcon,
-  browsers: GlobeIcon,
-  ides: CodeIcon,
-  applications: LayoutGridIcon,
-  system: WrenchIcon,
-};
+const ICON = SECTION_ICON;
 const COUNT_TIP = {
   inbox: n => `${n} waiting for you`,
   agents: n => `${n} agent sessions`,
@@ -118,7 +101,12 @@ export function App() {
           ) : s.section === "home" ? (
             <Home />
           ) : s.section === "tasks" && WINDOW_MODE ? (
-            <Embed />
+            // the palette must not open under Tasks' page (a view of its own, above this one)
+            s.palette ? (
+              <div className="flex-1" />
+            ) : (
+              <Embed />
+            )
           ) : (
             <Section />
           )}
@@ -126,6 +114,10 @@ export function App() {
       </div>
       <AskBar />
       <Footer />
+      <Palette />
+      <p role="status" aria-live="polite" className="sr-only">
+        {s.said}
+      </p>
     </div>
   );
 }
@@ -446,6 +438,11 @@ const popupOpen = watchPopups("[role=listbox][data-state=open],[role=dialog],[ro
  */
 function onPanelKey(e, narrow) {
   const s = usePanel.getState();
+  // Ctrl+K anywhere, even while typing: the command palette
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    return s.setPalette(!s.palette);
+  }
   if (WINDOW_MODE && e.ctrlKey && !e.shiftKey && (e.key === "b" || e.key === "B")) {
     e.preventDefault();
     if (!narrow) {

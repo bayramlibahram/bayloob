@@ -15,7 +15,7 @@ const RESOURCES = app.isPackaged ? process.resourcesPath : path.join(ROOT, "reso
 // Windows moved to React, built by electron-vite into out/renderer/<window> (in development: served by its dev
 // server, with fast refresh). The others still load as they are from src/renderer. BAYLOOB_REACT=settings,…
 // opens a window's React version before it has moved.
-const MOVED = ["settings", "newtask", "launcher", "tasks"];
+const MOVED = ["settings", "newtask", "launcher", "tasks", "panel"];
 const REACT = new Set([
   ...MOVED,
   ...(process.env.BAYLOOB_REACT || "")

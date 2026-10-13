@@ -44,6 +44,9 @@ export const usePanel = create((set, get) => ({
   selected: null, // the selected row's key
   layout: { side: SIDE.def, detail: DETAIL.def, collapsed: false, ...savedLayout() },
   flash: "", // a short message in the footer (an action that failed)
+  palette: false, // Ctrl+K
+  said: "", // what a screen reader reads out: what's new in the Inbox
+  inboxSeen: null, // the Inbox's keys at the last update (null before the first)
   query: "", // the list's search
   launchMode: false, // the list shows installed apps to launch
   launchable: null, // installed apps (null: not read yet)
@@ -83,7 +86,9 @@ export const usePanel = create((set, get) => ({
       // opened on one row (the pill's session rows: 'agent:<id>') while it is still there
       selected:
         state.select && sessions.some(s => `agent:${s.id}` === state.select) ? state.select : null,
+      palette: false,
     });
+    get().announce();
   },
 
   setSessions(list) {
@@ -99,9 +104,26 @@ export const usePanel = create((set, get) => ({
         list.some(s => s.id === id && s.state === "done")
       ),
     });
+    get().announce();
   },
 
-  setTask: task => set(s => ({ tasks: { ...s.tasks, [task.id]: task } })),
+  setTask(task) {
+    set(s => ({ tasks: { ...s.tasks, [task.id]: task } }));
+    get().announce();
+  },
+
+  /** Something new waits for you: its name read out (the first update only takes note). */
+  announce() {
+    const items = get().items("inbox");
+    const seen = get().inboxSeen;
+    const fresh = seen ? items.filter(i => !seen.includes(i.key)) : [];
+    set({
+      inboxSeen: items.map(i => i.key),
+      ...(fresh.length ? { said: `New in the Inbox: ${fresh.map(i => i.name).join(", ")}` } : {}),
+    });
+  },
+
+  setPalette: open => set({ palette: !!open }),
   setUsage: usage => set({ usage }),
   setStats: stats => set({ stats }),
   setStatus: status => set({ status }),

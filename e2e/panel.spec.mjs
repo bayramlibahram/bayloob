@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { launch, windowWith } from "./app.mjs";
 
-// The Workspace window in React, side by side with the old page (BAYLOOB_REACT=panel), on the demo's sessions
+// The Workspace window (React) on the demo's sessions
 test("the Workspace window: Home, and Tasks' own page laid over the section's box", async () => {
-  const app = await launch({ BAYLOOB_REACT: "panel" });
+  const app = await launch();
   try {
     await app.evaluate(({ ipcMain }) => ipcMain.emit("panel:open-window", {}, "home"));
     const win = await windowWith(app, "out/renderer/panel/index.html");
@@ -38,7 +38,7 @@ test("the Workspace window: Home, and Tasks' own page laid over the section's bo
 });
 
 test("the Workspace window: the demo's agents in their list, the selected one's detail beside it", async () => {
-  const app = await launch({ BAYLOOB_REACT: "panel" });
+  const app = await launch();
   try {
     await app.evaluate(({ ipcMain }) => ipcMain.emit("panel:open-window", {}, "agents"));
     const win = await windowWith(app, "out/renderer/panel/index.html");

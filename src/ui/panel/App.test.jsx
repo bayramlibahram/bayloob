@@ -592,3 +592,46 @@ test("Ask Bayloob: Enter → the agent and folder (the last one used), Enter sta
   fireEvent.keyDown(ask, { key: "Escape" });
   expect(ask.value).toBe("");
 });
+
+// ---------- the palette and what's read out (step 7d) ----------
+
+test("Ctrl+K: every word typed must be in a command's name; Enter runs it and closes", async () => {
+  await open({ section: "home" });
+  fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+  const input = await screen.findByRole("combobox", { name: "Command palette" });
+  fireEvent.change(input, { target: { value: "codex shop" } });
+  const list = screen.getByRole("listbox", { name: "Commands" });
+  expect(
+    within(list)
+      .getAllByRole("option")
+      .map(o => o.textContent)
+  ).toEqual(["Codex · shopNeeds approval"]);
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(usePanel.getState()).toMatchObject({
+    section: "agents",
+    selected: "agent:x1",
+    palette: false,
+  });
+  // a section, by its name
+  fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+  fireEvent.change(await screen.findByRole("combobox", { name: "Command palette" }), {
+    target: { value: "zzz" },
+  });
+  expect(screen.getByText("Nothing matches")).toBeTruthy();
+});
+
+test("the palette doesn't open under Tasks' page: main is told to hide it meanwhile", async () => {
+  await open({ section: "tasks" });
+  api.embed.mockClear();
+  fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+  await screen.findByRole("combobox", { name: "Command palette" });
+  expect(api.embed).toHaveBeenLastCalledWith(null);
+});
+
+test("something new in the Inbox is read out by name", async () => {
+  await open({ section: "home" });
+  const sessions = structuredClone(SESSIONS);
+  sessions[2].perm = { id: "p7", kind: "perm", tool: "Bash" };
+  await act(async () => api.sessions(sessions));
+  expect(usePanel.getState().said).toBe("New in the Inbox: Grok");
+});
