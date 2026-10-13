@@ -460,7 +460,7 @@ test("a row: what the agent last said, tokens and age, changes, its queue, its t
   expect(api.openTasks).toHaveBeenCalledWith("t1");
 });
 
-test("a helper another agent started says Helper, not Idle; once done it says Done", () => {
+test("a helper another agent started is marked helper and says Running, not Idle; once done, Done", () => {
   render(<App />);
   act(() => {
     api.sessions([
@@ -469,7 +469,8 @@ test("a helper another agent started says Helper, not Idle; once done it says Do
     ]);
   });
   const [h, d] = rows();
-  expect(h.querySelector(".tag.st").textContent).toBe("Helper");
+  expect(h.querySelector(".tag.st").textContent).toBe("Running");
+  expect(h.querySelector(".agent").textContent).toBe("Codex · helper");
   expect(d.querySelector(".tag.st").textContent).toBe("Done");
 });
 

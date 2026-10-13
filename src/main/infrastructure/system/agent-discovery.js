@@ -241,8 +241,10 @@ class AgentDiscovery {
       if ((read(path.join(base, "comm")) || "").trim() !== "codex") {
         continue;
       }
-      // Only the terminal CLI — not an editor extension's background server
-      if (!(link(path.join(base, "fd", "0")) || "").startsWith("/dev/pts/")) {
+      // The terminal CLI, or a helper another agent started headless (`codex exec`, no terminal) — not an
+      // editor extension's background server
+      const onTerminal = (link(path.join(base, "fd", "0")) || "").startsWith("/dev/pts/");
+      if (!onTerminal && !parentAgentOf(pid, this.proc)) {
         continue;
       }
       // …nor its app-server / MCP server, even when started from a terminal
@@ -251,7 +253,8 @@ class AgentDiscovery {
         continue;
       }
       const cwd = link(path.join(base, "cwd")) || "";
-      const rollout = this.#openRollout(base) || this.#newestRollout(cwd);
+      // A headless helper only by the rollout it has open: the folder's newest could be another session's
+      const rollout = this.#openRollout(base) || (onTerminal ? this.#newestRollout(cwd) : null);
       const meta = rollout && this.#rolloutMeta(rollout);
       if (!meta?.id) {
         continue;

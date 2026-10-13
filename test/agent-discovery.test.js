@@ -240,3 +240,35 @@ test("sessions whose agent process ended are removed; unverified or managed ones
     ["claude:tmux:bl-x", "claude:u-1"]
   );
 });
+
+test("a headless Codex helper started by Claude is found by its open rollout; a headless one alone isn't", () => {
+  const fx = fixture();
+  try {
+    const rollout = fx.write(
+      ".codex/sessions/2026/10/13/rollout-2026-10-13T07-00-00-h-1.jsonl",
+      `${JSON.stringify({ type: "session_meta", payload: { id: "h-1", cwd: "/w/api", source: "exec" } })}\n${JSON.stringify({ timestamp: "2026-10-13T07:00:01.000Z", type: "event_msg", payload: { type: "task_started" } })}\n`
+    );
+    fx.mkproc(20, { comm: "claude", start: 1, cwd: "/w/api" });
+    fs.writeFileSync(path.join(fx.proc, "20", "stat"), "20 (claude) S 1 0 0");
+    fx.mkproc(301, {
+      comm: "codex",
+      start: 1,
+      cwd: "/w/api",
+      env: { CLAUDE_PID: "20", TMUX_PANE: "%17" },
+      fds: { 0: "/dev/null", 9: rollout },
+    });
+    // No agent above it and no terminal → an editor's server, skipped
+    fx.mkproc(302, { comm: "codex", start: 1, cwd: "/w/api", fds: { 0: "/dev/null", 9: rollout } });
+
+    const found = new AgentDiscovery({ proc: fx.proc, home: fx.home }).find();
+    const codex = found.filter(a => a.agent === "codex");
+    assert.deepEqual(
+      codex.map(a => [a.pid, a.sessionId, a.state]),
+      [[301, "h-1", "thinking"]]
+    );
+    assert.equal(codex[0].term.parentAgent, "20");
+    assert.equal(codex[0].term.tmux, undefined); // the parent's pane isn't its own
+  } finally {
+    fs.rmSync(fx.root, { recursive: true, force: true });
+  }
+});

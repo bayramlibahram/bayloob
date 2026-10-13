@@ -204,6 +204,14 @@ function Row({ s, last }) {
                 <span className="role">⚔ challenger</span>
               </>
             )}
+            {s.term?.parentAgent && (
+              <>
+                {" · "}
+                <span className="role" title="Started by another agent">
+                  helper
+                </span>
+              </>
+            )}
           </span>
           {tokens && (
             <span
@@ -251,7 +259,7 @@ function Row({ s, last }) {
           className="tag st"
           title={helper ? "Started by another agent — it sends no live status" : undefined}
         >
-          {helper ? "Helper" : cap(STATE[s.state])}
+          {helper ? "Running" : cap(STATE[s.state])}
           {s.state === "done" && r ? RECEIPT_MARK[r.status] || "" : ""}
         </span>
       </span>
