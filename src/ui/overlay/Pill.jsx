@@ -69,7 +69,7 @@ export function Pill({ card = null, list = null, voice = null }) {
     n > 1 && "multi",
     n === 1 && statusOn && !s.receipts[top?.id] && "solo",
     deaf && "deaf",
-    card && "has-card",
+    s.card() && "has-card",
     hunger,
   ]
     .filter(Boolean)

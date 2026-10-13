@@ -56,6 +56,11 @@ export const usePill = create((set, get) => ({
   receipts: {}, // session id → { status } of its last turn
   collisions: {},
   waits: {}, // session id → since when it waits on a card
+  diffs: {}, // session id → { files, added, deleted, untracked } of its repo
+  errorNote: null, // { headline, lines, until } — a stack trace was copied
+  gatesLater: [], // task gate ids put off in the pill (still in the Inbox and on the board)
+  answers: {}, // question perm id → { question: [labels] }
+  reply: { sid: null, text: "", confirm: false, focused: false, error: "" }, // the done card's reply box
   toast: null, // { sid, until } — the "done" card
   labelNote: null, // { html, until } — a short message in place of the label
   open: false,
@@ -87,6 +92,7 @@ export const usePill = create((set, get) => ({
       permSince,
       ...(done ? { toast: { sid: done.id, until: Date.now() + DONE_TOAST_MS } } : {}),
     });
+    get().expireToast(); // its agent moved on: the done card goes now
   },
 
   /** Every few seconds: a card left a minute without an answer gets a quiet reminder (one at a time). */
@@ -178,6 +184,139 @@ export const usePill = create((set, get) => ({
 
   toggleMore: () => set(s => ({ more: !s.more })),
 
+  // ---------- the cards ----------
+
+  /** The card on view: a permission or question first, then a task's gate, a terminal menu, a handoff, a
+   * finished turn, a copied error. */
+  card() {
+    const s = get();
+    const perms = s.sessions
+      .filter(x => x.perm)
+      .sort((a, b) => Number(a.perm.id) - Number(b.perm.id));
+    if (perms.length) {
+      return { kind: "perm", s: perms[0], queued: perms.length - 1 };
+    }
+    const gates = (s.taskGates || []).filter(g => !s.gatesLater.includes(g.gate.id));
+    if (gates.length) {
+      return { kind: "gate", gates };
+    }
+    const menu = s.sessions.find(x => x.menu);
+    if (menu) {
+      return { kind: "menu", s: menu };
+    }
+    const handoff = s.sessions.find(x => x.handoff);
+    if (handoff) {
+      return { kind: "handoff", s: handoff };
+    }
+    const done = s.toast && s.sessions.find(x => x.id === s.toast.sid);
+    if (done) {
+      return { kind: "done", s: done };
+    }
+    return s.errorNote ? { kind: "error" } : null;
+  },
+
+  /** The done card goes once its agent moves on, or after a while unless hovered or a reply is on its way. */
+  expireToast() {
+    const s = get();
+    const t = s.toast;
+    if (!t) {
+      return;
+    }
+    const stillDone = s.sessions.some(x => x.id === t.sid && x.state === "done");
+    const replying = s.reply.sid === t.sid && (s.reply.focused || s.reply.text.trim());
+    if (!stillDone || (Date.now() > t.until && !s.hovering && !replying)) {
+      set({ toast: null });
+    }
+  },
+
+  /** A decision on a card (or a row): its sound, then main. */
+  decide(permId, decision) {
+    sounds.play(decision === "terminal" ? "to-terminal" : decision);
+    get().api?.decide(permId, decision);
+  },
+
+  pick(permId, q, label) {
+    const picked = { ...(get().answers[permId] || {}) };
+    const now = picked[q.question] || [];
+    picked[q.question] = q.multiSelect
+      ? now.includes(label)
+        ? now.filter(x => x !== label)
+        : [...now, label]
+      : [label];
+    set(s => ({ answers: { ...s.answers, [permId]: picked } }));
+  },
+
+  sendAnswers(permId) {
+    const picked = get().answers[permId];
+    if (picked) {
+      sounds.play("allow");
+      get().api?.answer(permId, picked);
+      set(s => {
+        const { [permId]: _, ...rest } = s.answers;
+        return { answers: rest };
+      });
+    }
+  },
+
+  later: gateId => set(s => ({ gatesLater: [...s.gatesLater, gateId] })),
+
+  setReply: patch => set(s => ({ reply: { ...s.reply, ...patch } })),
+
+  /** The reply in the done card: Enter asks to confirm, Enter again sends it (or copies it to paste). */
+  async replySend(session) {
+    const r = get().reply;
+    const text = r.text.trim();
+    if (!text || r.sid !== session.id) {
+      return;
+    }
+    if (!r.confirm) {
+      return get().setReply({ confirm: true, error: "" });
+    }
+    const res = await get().api?.sendPrompt(r.sid, text);
+    if (res?.ok) {
+      set({
+        reply: { sid: null, text: "", confirm: false, focused: false, error: "" },
+        toast: null,
+      });
+      get().api?.keyboard(false);
+      if (res.via === "clipboard") {
+        get().flashLabel({ text: "📋 Copied · paste with Ctrl+Shift+V" });
+      }
+    } else {
+      get().setReply({ confirm: false, error: res?.error || "Could not send" });
+    }
+  },
+
+  /** One of the next steps its answer offered: into the reply box, waiting for ✓ Send (never on one click). */
+  takeSuggestion(sid, x) {
+    set({ reply: { sid, text: x.prompt, confirm: true, focused: false, error: "" } });
+  },
+
+  toastHint: hint => set(s => ({ toast: s.toast && { ...s.toast, hint } })),
+
+  /** Open the agent's terminal; the done card goes once it's in front. */
+  async focus(sid) {
+    sounds.play("open-terminal");
+    const r = get().api ? await get().api.focus(sid) : { ok: false };
+    if (r?.ok) {
+      set({ toast: null });
+    } else {
+      const why =
+        r?.error || 'Could not bring this terminal to the front (see README → "Open terminal").';
+      if (get().toast) {
+        get().toastHint(why);
+      } else {
+        get().noteRow(sid, why);
+      }
+    }
+  },
+
+  rowNote: null, // { sid, text, until } — a short note in place of a row's latest line
+  noteRow(sid, text) {
+    set({ rowNote: { sid, text, until: Date.now() + 5000 } });
+    setTimeout(() => get().rowNote?.sid === sid && set({ rowNote: null }), 5050);
+  },
+
   toggleSounds() {
     set({ feedback: !get().soundOn });
     get().api?.toggleSounds();
@@ -200,6 +339,14 @@ export function connect(api) {
   api.onReceipts?.(receipts => usePill.setState({ receipts: receipts || {} }));
   api.onCollisions?.(collisions => usePill.setState({ collisions: collisions || {} }));
   api.onBlocked?.(info => usePill.setState({ waits: info?.waits || {} }));
+  api.onDiffs?.(diffs => usePill.setState({ diffs: diffs || {} }));
+  api.onErrorCopied?.(e => {
+    usePill.setState({ errorNote: { ...e, until: Date.now() + 30_000 } });
+    // it stays a while (longer while hovered)
+    const drop = () =>
+      usePill.getState().hovering ? setTimeout(drop, 1000) : usePill.setState({ errorNote: null });
+    setTimeout(drop, 30_000);
+  });
   api.onSoundConfig?.(c => s().setSoundConfig(c));
   api.onTaskGates?.(g => s().setTaskGates(g));
   api.onWorkspace?.(ws => usePill.setState({ wsMinimized: !!ws?.minimized }));
@@ -208,4 +355,5 @@ export function connect(api) {
   );
   api.onRuleAllowed?.(r => s().flashLabel({ kind: "rule", ...r }));
   setInterval(() => s().remind(), 5000);
+  setInterval(() => s().expireToast(), 1000);
 }

@@ -1,3 +1,4 @@
+import { Card } from "./Cards";
 import { Pill } from "./Pill";
 import { usePill } from "./store";
 
@@ -6,6 +7,7 @@ export function App() {
   const api = usePill(s => s.api);
   return (
     <Pill
+      card={<Card />}
       list={
         api ? (
           <button type="button" className="new" data-act="new" onClick={() => api.openLauncher()}>

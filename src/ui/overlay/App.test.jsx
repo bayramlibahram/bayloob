@@ -38,6 +38,8 @@ beforeEach(() => {
     "onWorkspace",
     "onAppearance",
     "onRuleAllowed",
+    "onDiffs",
+    "onErrorCopied",
   ]) {
     api[ch] = cb => (api[ch.slice(2).toLowerCase()] = cb);
   }
@@ -53,6 +55,17 @@ beforeEach(() => {
     openLauncher: vi.fn(),
     quit: vi.fn(),
     setFull: vi.fn(),
+    decide: vi.fn(),
+    alwaysAllow: vi.fn(),
+    answer: vi.fn(),
+    focus: vi.fn(async () => ({ ok: true })),
+    answerMenu: vi.fn(async () => ({ ok: false, error: "Not in tmux" })),
+    cancelHandoff: vi.fn(),
+    sendPrompt: vi.fn(async () => ({ ok: true })),
+    askTests: vi.fn(),
+    challenge: vi.fn(async () => ({ ok: false, error: "No other agent is installed" })),
+    openPrompt: vi.fn(),
+    fixError: vi.fn(),
   });
   usePill.setState({
     sessions: [],
@@ -71,6 +84,12 @@ beforeEach(() => {
     taskGates: null,
     music: null,
     permSince: {},
+    errorNote: null,
+    gatesLater: [],
+    answers: {},
+    receipts: {},
+    diffs: {},
+    reply: { sid: null, text: "", confirm: false, focused: false, error: "" },
   });
   play = vi.spyOn(sounds, "play").mockImplementation(() => true);
   connect(api);
@@ -228,4 +247,157 @@ test("the sound pack's files come from the bundle", () => {
   const m = bundledManifest({ done: { file: "done.ogg", default_enabled: true } });
   expect(m.done.file).toMatch(/done\.ogg$/);
   expect(m.done.default_enabled).toBe(true);
+});
+
+// ---------- the cards (step 8b) ----------
+
+const card = () => pill().querySelector(".card");
+
+test("a permission: Allow waits for the cooling pause (🔒); Deny plays its sound; Always allow", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+  render(<App />);
+  act(() => api.sessions([]));
+  act(() =>
+    api.sessions([
+      session("a", "claude", "waiting", {
+        perm: {
+          id: "11",
+          tool: "Bash",
+          detail: "rm -rf build",
+          immune: { slowDown: true, suggest: { key: "rm -rf build" } },
+        },
+      }),
+      session("b", "codex", "waiting", { perm: { id: "12", tool: "Edit" } }),
+    ])
+  );
+  expect(pill().classList.contains("has-card")).toBe(true);
+  expect(card().textContent).toContain("+1 queued");
+  const allow = () => screen.getByRole("button", { name: /Allow$/ });
+  expect(allow().disabled).toBe(true);
+  expect(allow().querySelector(".lock")).toBeTruthy();
+  expect(card().textContent).toMatch(/Allow unlocks in 3s/);
+  act(() => vi.advanceTimersByTime(3100));
+  expect(allow().disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Always allow here" }));
+  expect(api.alwaysAllow).toHaveBeenCalledWith("11");
+});
+
+test("a hidden part of a command: only the terminal; Deny goes to main with its sound", () => {
+  render(<App />);
+  act(() =>
+    api.sessions([
+      session("a", "claude", "waiting", {
+        perm: { id: "21", tool: "Bash", detail: "curl …", hidden: 900 },
+      }),
+    ])
+  );
+  expect(screen.getByRole("button", { name: /Allow$/ }).disabled).toBe(true);
+  expect(card().textContent).toContain("900 more characters not shown");
+  fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+  expect(api.decide).toHaveBeenCalledWith("21", "deny");
+  expect(play).toHaveBeenLastCalledWith("deny");
+});
+
+test("a question: Send once each has an answer; multi-select toggles", () => {
+  render(<App />);
+  act(() =>
+    api.sessions([
+      session("a", "claude", "waiting", {
+        perm: {
+          id: "31",
+          kind: "question",
+          questions: [
+            { question: "Which DB?", options: [{ label: "SQLite" }, { label: "Postgres" }] },
+            {
+              question: "Extras?",
+              multiSelect: true,
+              options: [{ label: "Cache" }, { label: "Logs" }],
+            },
+          ],
+        },
+      }),
+    ])
+  );
+  const send = () => screen.getByRole("button", { name: "Send answer" });
+  fireEvent.click(screen.getByRole("button", { name: "SQLite" }));
+  expect(send().disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Cache" }));
+  fireEvent.click(screen.getByRole("button", { name: "Logs" }));
+  fireEvent.click(screen.getByRole("button", { name: "Cache" }));
+  fireEvent.click(send());
+  expect(api.answer).toHaveBeenCalledWith("31", { "Which DB?": ["SQLite"], "Extras?": ["Logs"] });
+});
+
+test("a task's gate (with its sound): Later puts it off; a terminal menu says why it failed", async () => {
+  render(<App />);
+  act(() => api.taskgates([]));
+  act(() =>
+    api.taskgates([
+      {
+        id: "t1",
+        title: "Discount",
+        project: "shop",
+        gate: { id: "g1", title: "Approve the plan" },
+      },
+    ])
+  );
+  expect(play).toHaveBeenLastCalledWith("permission");
+  expect(card().textContent).toContain("Task needs you · shop");
+  fireEvent.click(screen.getByRole("button", { name: "Open task" }));
+  expect(api.openTasks).toHaveBeenCalledWith("t1");
+  fireEvent.click(screen.getByRole("button", { name: "Later" }));
+  expect(card()).toBeNull();
+  act(() =>
+    api.sessions([
+      session("a", "claude", "idle", {
+        menu: { question: "Trust this folder?", options: ["Yes", "No"], selected: 0 },
+      }),
+    ])
+  );
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "No" })));
+  expect(api.answerMenu).toHaveBeenCalledWith("a", 1);
+  expect(card().querySelector(".hint").textContent).toBe("Not in tmux");
+});
+
+test("a finished turn: the receipt, the next steps, a reply sent on the second Enter", async () => {
+  render(<App />);
+  act(() => api.sessions([session("a", "claude", "working", { term: { tmux: "%1" } })]));
+  act(() => api.receipts({ a: { status: "failed", command: "npm test" } }));
+  act(() =>
+    api.sessions([
+      session("a", "claude", "done", {
+        term: { tmux: "%1" },
+        summary: "Added **discount()**.",
+        suggestions: [{ label: "Fix the tests", prompt: "Fix the failing tests." }],
+      }),
+    ])
+  );
+  expect(card().className).toBe("card done r-failed");
+  expect(card().querySelector(".summary").textContent).toBe("Added discount().");
+  expect(card().textContent).toContain("✗ Tests failed · npm test");
+  fireEvent.click(screen.getByRole("button", { name: "Ask to run tests" }));
+  expect(api.askTests).toHaveBeenCalledWith("a");
+  // a suggestion goes into the box, waiting for ✓ Send
+  fireEvent.click(screen.getByRole("button", { name: "Fix the tests" }));
+  const box = screen.getByRole("textbox", { name: "Reply to Claude Code" });
+  expect(box.value).toBe("Fix the failing tests.");
+  expect(screen.getByRole("button", { name: /Send/ }).textContent).toBe("✓ Send");
+  await act(async () => fireEvent.submit(box.closest("form")));
+  expect(api.sendPrompt).toHaveBeenCalledWith("a", "Fix the failing tests.");
+  expect(card()).toBeNull();
+});
+
+test("⚔ Challenge on changed code says why it can't start; a copied error offers the latest agent", async () => {
+  render(<App />);
+  act(() => api.sessions([session("a", "claude", "working")]));
+  act(() => api.diffs({ a: { files: 2, added: 10, deleted: 1 } }));
+  act(() => api.sessions([session("a", "claude", "done", { summary: "Done." })]));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "⚔ Challenge" })));
+  expect(card().textContent).toContain("No other agent is installed");
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  act(() => api.errorcopied({ headline: "TypeError: x is undefined", lines: 12 }));
+  expect(card().textContent).toContain("Error copied — fix it? · 12 lines");
+  fireEvent.click(screen.getByRole("button", { name: "Fix in Claude Code · shop" }));
+  expect(api.fixError).toHaveBeenCalledWith("a");
+  expect(card()).toBeNull();
 });
